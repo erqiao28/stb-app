@@ -166,7 +166,7 @@ const goChangePassword = () => {
 	/* 用户列表 */
 	.user-list {
 		position: absolute;
-		width: px2vw(500px);
+		width: px2vw(400px);
 		height: 100%;
 		display: flex;
 		flex-direction: column;
@@ -177,7 +177,7 @@ const goChangePassword = () => {
 		/* 用户每一项 */
 		.user-item {
 			color: #fff;
-			height: px2vw(200px);
+			height: px2vw(150px);
 			width: 100%;
 			border: px2vw(2px) solid #fff;
 			display: flex;
@@ -290,7 +290,7 @@ const goChangePassword = () => {
 			width: px2vw(262.5px);
 			height: px2vw(70px);
 			border-radius: px2vw(35px);
-			font-size: px2vw(35px);
+			font-size: px2vw(30px);
 			display: flex;
 			justify-content: center;
 			align-items: center;

@@ -55,10 +55,10 @@
 	}
 </script>
 
-<style>
+<style lang="scss">
 	/* 导航栏 */
 	.header {
-		height: 120rpx;
+		height: px2vw(120px);
 		width: 100%;
 		display: flex;
 		justify-content: space-between;
@@ -66,33 +66,33 @@
 		background-color: #5884f1;
 	
 		image {
-			margin: 20rpx;
-			height: 80rpx;
-			width: 80rpx;
+			margin: px2vw(20px);
+			height: px2vw(60px);
+			width: px2vw(60px);
 		}
 	
 		.title {
-			font-size: 40rpx;
+			font-size: px2vw(40px);
 			color: white;
 		}
 	}       
 	/* 输入框区域 */
 	.input-box {
 		width: 100%;
-		height: 140rpx;
+		height: px2vw(150px);
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		border-bottom: 10rpx solid #e2e2e2;
+		border-bottom: px2vw(10px) solid #e2e2e2;
 		
 		.input-text {
-			margin: 20rpx;
-			font-size: 40rpx;
+			margin: px2vw(15px);
+			font-size: px2vw(35px);
 		}
 		
 		input {
-			font-size: 40rpx;
-			width: 1000rpx;
+			font-size: px2vw(35px);
+			width: px2vw(1200px);
 		}
 	}
 </style>

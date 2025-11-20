@@ -44,32 +44,30 @@
 	}
 </script>
 
-<style scoped>
+<style scoped lang="scss">
    .main-container {
 	   height: 100vh;
 	   width: 100vw;
 	   background-color: #3556e3;
 	   
 	   .btn-box {
-		   height: 500rpx;
+		   height: px2vw(350px);
 		   width: 100%;
 		   display: flex;
 		   flex-wrap: wrap;
 		   position: absolute;
 		   bottom: 0;
-		   padding: 0 162.5rpx;
 		   
 		   button {
-			   width: 800rpx;
-			   height: 212.5rpx;
+			   width: px2vw(550px);
+			   height: px2vw(120px);
 			   background-color: white;
 			   color: #3556e3;
-			   margin: 0 53.75rpx;
-			   border-radius: 65rpx;
+			   border-radius: px2vw(50px);
 			   display: flex;
 			   justify-content: center;
 			   align-items: center;
-			   font-size: 63.75rpx
+			   font-size: px2vw(50px)
 		   }
 	   }
    }

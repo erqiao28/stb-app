@@ -189,14 +189,14 @@ const tableData = ref([
 ])
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .process-container {
 	height: 100vh;
 	width: 100vw;
 
 /* 导航栏 */
 .header {
-	height: 150rpx;
+	height: px2vw(120px);
 	width: 100%;
 	display: flex;
 	justify-content: space-between;
@@ -204,14 +204,14 @@ const tableData = ref([
 	background-color: #5884f1;
 
 	image {
-		margin-left: 42.5rpx;
-		height: 65rpx;
-		width: 65rpx;
+		margin: px2vw(20px);
+		height: px2vw(60px);
+		width: px2vw(60px);
 	}
 
 	.title {
-		margin-left: 318.75rpx;
-		font-size: 42.5rpx;
+		margin-left: px2vw(300px);
+		font-size: px2vw(35px);
 		color: white;
 	}
 
@@ -220,18 +220,18 @@ const tableData = ref([
 		align-items: center;
 
 		.btn-one {
-			height: 112.5rpx;
-			width: 225rpx;
+			height: px2vw(90px);
+			width: px2vw(170px);
 			display: flex;
 			align-items: center;
 			background-color: white;
-			margin: 21.25rpx;
-			border-radius: 21.25rpx;
+			margin: px2vw(20px);
+			border-radius: px2vw(20px);
 
 			image {
-				height: 65rpx;
-				width: 65rpx;
-				margin-right: 21.25rpx;
+				height: px2vw(50px);
+				width: px2vw(50px);
+				margin-right: px2vw(20px);
 			}
 		}
 	}
@@ -239,25 +239,25 @@ const tableData = ref([
 
 /* 按钮栏 */
 .btn-list {
-	height: 162.5rpx;
+	height: px2vw(150px);
 	width: 100%;
 	display: flex;
 	align-items: center;
 
 	.btn-item {
-		height: 125rpx;
-		margin: 21.25rpx;
-		padding: 21.25rpx 42.5rpx;
-		border-radius: 21.25rpx;
+		height: px2vw(80px);
+		margin: px2vw(10px);
+		padding: px2vw(16px) px2vw(25px);
+		border-radius: px2vw(18px);
 		color: #5884f1;
 		display: flex;
 		align-items: center;
-		border: 2.5rpx solid #5884f1;
+		border: px2vw(3px) solid #5884f1;
 
 		image {
-			height: 65rpx;
-			width: 65rpx;
-			margin-right: 32.5rpx;
+			height: px2vw(45px);
+			width: px2vw(45px);
+			margin-right: px2vw(28px);
 		}
 	}
 }
@@ -270,97 +270,97 @@ const tableData = ref([
 
 	.name {
 		display: flex;
-		margin: 21.25rpx;
+		margin: 0 px2vw(10px) px2vw(3px) px2vw(10px);
 		align-items: center;
 
 		.name-text {
-			font-size: 42.5rpx;
+			font-size: px2vw(30px);
 		}
 
 		.input-box {
-			width: 500rpx;
-			height: 106.25rpx;
-			border: 2.5rpx solid #5884f1;
-			border-radius: 21.25rpx;
+			width: px2vw(350px);
+			height: px2vw(80px);
+			border: px2vw(3px) solid #5884f1;
+			border-radius: px2vw(18px);
 			display: flex;
 			align-items: center;
-			padding: 0 42.5rpx;
-			margin-left: 21.25rpx;
+			padding: 0 px2vw(35px);
+			margin-left: px2vw(15px);
 
 			input {
-				font-size: 42.5rpx;
+				font-size: px2vw(30px);
 			}
 		}
 	}
 
 	.checkout {
 		display: flex;
-		margin: 21.25rpx;
+		margin: 0 px2vw(10px) px2vw(3px) px2vw(10px);
 		align-items: center;
 
 		.checkout-text {
-			font-size: 42.5rpx;
+			font-size: px2vw(30px);
 		}
 
 		.checkout-box {
-			width: 400rpx;
-			height: 106.25rpx;
-			border: 2.5rpx solid #5884f1;
-			border-radius: 21.25rpx;
+			width: px2vw(200px);
+			height: px2vw(80px);
+			border: px2vw(3px) solid #5884f1;
+			border-radius: px2vw(18px);
 			display: flex;
 			align-items: center;
-			padding: 0 42.5rpx;
-			margin-left: 21.25rpx;
-			font-size: 42.5rpx;
+			padding: 0 px2vw(35px);
+			margin-left: px2vw(15px);
+			font-size: px2vw(30px);
 		}
 	}
 
 	.worker {
 		display: flex;
-		margin: 21.25rpx;
+		margin: 0 px2vw(10px) px2vw(3px) px2vw(10px);
 		align-items: center;
 
 		.worker-text {
-			font-size: 42.5rpx;
+			font-size: px2vw(30px);
 		}
 
 		.input-box {
-			width: 400rpx;
-			height: 106.25rpx;
-			border: 2.5rpx solid #5884f1;
-			border-radius: 21.25rpx;
+			width: px2vw(300px);
+			height: px2vw(80px);
+			border: px2vw(3px) solid #5884f1;
+			border-radius: px2vw(18px);
 			display: flex;
 			align-items: center;
-			padding: 0 42.5rpx;
-			margin-left: 21.25rpx;
+			padding: 0 px2vw(35px);
+			margin-left: px2vw(15px);
 
 			input {
-				font-size: 42.5rpx;
+				font-size: px2vw(30px);
 			}
 		}
 	}
 
 	.code {
 		display: flex;
-		margin: 21.25rpx;
+		margin: 0 px2vw(10px) px2vw(3px) px2vw(10px);
 		align-items: center;
 
 		.code-text {
-			font-size: 42.5rpx;
+			font-size: px2vw(30px);
 		}
 
 		.input-box {
-			width: 750rpx;
-			height: 106.25rpx;
-			border: 2.5rpx solid #5884f1;
-			border-radius: 21.25rpx;
+			width: px2vw(400px);
+			height: px2vw(80px);
+			border: px2vw(3px) solid #5884f1;
+			border-radius: px2vw(18px);
 			display: flex;
 			align-items: center;
-			padding: 0 42.5rpx;
-			margin-left: 21.25rpx;
+			padding: 0 px2vw(35px);
+			margin-left: px2vw(15px);
 
 			input {
-				font-size: 42.5rpx;
+				font-size: px2vw(30px);
 			}
 		}
 	}
@@ -370,15 +370,14 @@ const tableData = ref([
 		align-items: center;
 
 		image {
-			width: 125rpx;
-			height: 125rpx;
+			width: px2vw(80px);
+			height: px2vw(80px);
 		}
 	}
 	
 }
 	/* 表格区域 */
 	.table {
-			margin-top: 16.25rpx;
 			width: 100%;
 			/* 移除 overflow-x 等属性，由 scroll-view 处理 */
 
@@ -399,62 +398,63 @@ const tableData = ref([
 				display: flex !important;
 				flex-direction: column !important;
 				width: max-content !important;
-				min-width: 6375rpx !important;
-				/* 总宽度: 13*150 + 3*200 + 3*150 = 3000px 调整为 rpx 并增大 */
+				min-width: px2vw(4000px) !important;
+				/* 总宽度: 13*200 + 3*300 + 3*200 = 4000px 调整为 rpx 并增大 */
 			}
 
 			::v-deep .table-header-row,
 			::v-deep .table-body-row,
 			::v-deep .table-gap-row {
 				display: grid !important;
-				grid-template-columns: repeat(13, 318.75rpx) 425rpx 425rpx 425rpx repeat(3, 318.75rpx) !important;
-				width: 6375rpx !important;
+				grid-template-columns: repeat(13, px2vw(200px)) px2vw(300px) px2vw(300px) px2vw(300px) repeat(3, px2vw(200px)) !important;
+				width: px2vw(4000px) !important;
 				box-sizing: border-box !important;
 			}
 
 			/* 为时间列设置更大 min-width 以匹配 */
 			::v-deep .table-header-row .table-header-cell:nth-child(n+14):nth-child(-n+16),
 			::v-deep .table-body-row .uni-table-td:nth-child(n+14):nth-child(-n+16) {
-				min-width: 425rpx !important;
+				min-width: px2vw(300px) !important;
 			}
 
 			::v-deep .table-header-row .table-header-cell,
 			::v-deep .table-body-row .uni-table-td {
-				min-width: 318.75rpx !important;
+				min-width: px2vw(200px) !important;
 				width: auto !important;
 				/* 让 grid 轨道控制宽度 */
 				box-sizing: border-box !important;
 				display: flex !important;
 				align-items: center !important;
 				justify-content: center !important;
-				font-size: 45rpx !important;
+				font-size: px2vw(35px) !important;
 				white-space: nowrap !important;
 				/* 防止文本换行 */
 			}
 
 			::v-deep .table-header-row .table-header-cell {
-				padding: 37.5rpx 25rpx !important;
-				letter-spacing: 8.75rpx !important;
+				padding: px2vw(30px) px2vw(20px) !important;
+				letter-spacing: px2vw(5px) !important;
 				font-weight: 600 !important;
 				word-wrap: break-word !important;
 				white-space: nowrap !important;
 				/* 标题不换行 */
-				font-size: 55rpx !important;
-				/* 减小标题字体 */
+				font-size: px2vw(35px) !important;
+				min-width: px2vw(250px) !important;
+				/* 增加标题单元格的最小宽度 */
 			}
 
 			::v-deep .table-body-row {
-				min-height: 162.5rpx !important;
+				min-height: px2vw(100px) !important;
 				/* 进一步减小内容行高度 */
 				align-items: center !important;
 			}
 
 			::v-deep .table-body-row .uni-table-td {
-				padding: 53.75rpx 11.25rpx !important;
+				padding: px2vw(40px) px2vw(5px) !important;
 				/* 进一步减小垂直 padding 以匹配高度 */
 				white-space: nowrap !important;
 				/* 内容不换行 */
-				font-size: 45rpx !important;
+				font-size: px2vw(35px) !important;
 				/* 内容字体保持原样 */
 			}
 		}

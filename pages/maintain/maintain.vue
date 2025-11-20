@@ -1,5 +1,12 @@
 <template>
-	<view class="process-container" @click="closeWorkshopOptions">
+	<view class="process-container">
+		<Radiobox 
+			v-model="workshop" 
+			:options="workshopOptions" 
+			title="车间" 
+			v-model:visible="showWorkshopModal"
+			@confirm="handleWorkshopConfirm" 
+		/>
 		<!-- 导航栏 -->
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="quit"></image>
@@ -33,15 +40,8 @@
 		<view class="search-box">
 			<view class="workshop">
 				<text class="label">车间</text>
-				<view class="picker-box" @click.stop="toggleWorkshopOptions">
-					<text class="picker-selected">{{ selectedWorkshopLabel }}</text>
-					<view class="picker-arrow"></view>
-					<view v-if="isWorkshopOpen" class="picker-options">
-						<view v-for="option in workshopOptions" :key="option.value" class="picker-option"
-							@click.stop="selectWorkshop(option)">
-							{{ option.text }}
-						</view>
-					</view>
+				<view class="picker-box" @click="showWorkshopModal = true">
+					<text class="picker-selected">{{ workshop }}</text>
 				</view>
 			</view>
 
@@ -86,9 +86,9 @@
 
 <script setup>
 import {
-	ref,
-	computed
+	ref
 } from 'vue'
+import Radiobox from '../../component/radiobox/radiobox.vue'
 import { useUserStore } from '../../store/user.store'
 const userStore = useUserStore()
 
@@ -115,40 +115,13 @@ const btnlist = ref([
 	}
 ])
 
-// 车间选择
-const workshopOptions = ref([{
-	text: '全部',
-	value: 'all'
-}, {
-	text: '拉伸车间',
-	value: 'stretch'
-}, {
-	text: '喷涂车间',
-	value: 'spray'
-}, {
-	text: '抛光车间',
-	value: 'polish'
-}, {
-	text: '组装车间',
-	value: 'assemble'
-}])
-const selectedWorkshop = ref(workshopOptions.value[0])
-const isWorkshopOpen = ref(false)
-
-const selectedWorkshopLabel = computed(() => selectedWorkshop.value?.text || '请选择车间')
-
-const toggleWorkshopOptions = () => {
-	isWorkshopOpen.value = !isWorkshopOpen.value
-}
-
-const selectWorkshop = (option) => {
-	selectedWorkshop.value = option
-	isWorkshopOpen.value = false
-	console.log('选中:', option.text)
-}
-
-const closeWorkshopOptions = () => {
-	isWorkshopOpen.value = false
+// 车间单选框
+const workshop = ref('全部')
+const workshopOptions = ref(['全部', '拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
+const showWorkshopModal = ref(false)
+const handleWorkshopConfirm = (value) => {
+	workshop.value = value
+	showWorkshopModal.value = false
 }
 
 // 表格数据
@@ -167,14 +140,14 @@ const quit = () => {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .process-container {
 	height: 100vh;
 	width: 100vw;
 
 	/* 导航栏 */
 	.header {
-		height: 140rpx;
+		height: px2vw(120px);
 		width: 100%;
 		display: flex;
 		justify-content: space-between;
@@ -182,9 +155,9 @@ const quit = () => {
 		background-color: #5884f1;
 
 		image {
-			margin-left: 25rpx;
-			height: 60rpx;
-			width: 60rpx;
+			margin: px2vw(20px);
+			height: px2vw(60px);
+			width: px2vw(60px);
 		}
 
 		::v-deep .workshop picker {
@@ -197,14 +170,14 @@ const quit = () => {
 		}
 
 		::v-deep .uni-picker-container .uni-picker {
-			width: min(650rpx, 90vw) !important;
+			width: min(#{px2vw(650px)}, 90vw) !important;
 			left: 50% !important;
 			transform: translateX(-50%) !important;
 		}
 
 		.title {
-			margin-left: 300rpx;
-			font-size: 40rpx;
+			margin-left: px2vw(300px);
+			font-size: px2vw(35px);
 			color: white;
 		}
 
@@ -213,18 +186,18 @@ const quit = () => {
 			align-items: center;
 
 			.btn-one {
-				height: 110rpx;
-				width: 220rpx;
+				height: px2vw(90px);
+				width: px2vw(170px);
 				display: flex;
 				align-items: center;
 				background-color: white;
-				margin: 20rpx;
-				border-radius: 20rpx;
+				margin: px2vw(20px);
+				border-radius: px2vw(20px);
 
 				image {
-					height: 60rpx;
-					width: 60rpx;
-					margin-right: 20rpx;
+					height: px2vw(50px);
+					width: px2vw(50px);
+					margin-right: px2vw(20px);
 				}
 			}
 		}
@@ -232,25 +205,25 @@ const quit = () => {
 
 	/* 按钮栏 */
 	.btn-list {
-		height: 160rpx;
+		height: px2vw(150px);
 		width: 100%;
 		display: flex;
 		align-items: center;
 
 		.btn-item {
-			height: 120rpx;
-			margin: 20rpx;
-			padding: 40rpx 80rpx;
-			border-radius: 20rpx;
+			height: px2vw(80px);
+			margin: px2vw(10px);
+			padding: px2vw(16px) px2vw(25px);
+			border-radius: px2vw(18px);
 			color: #5884f1;
 			display: flex;
 			align-items: center;
-			border: 5rpx solid #5884f1;
+			border: px2vw(3px) solid #5884f1;
 
 			image {
-				height: 60rpx;
-				width: 60rpx;
-				margin-right: 30rpx;
+				height: px2vw(45px);
+				width: px2vw(45px);
+				margin-right: px2vw(28px);
 			}
 		}
 	}
@@ -262,25 +235,25 @@ const quit = () => {
 		width: 100%;
 
 		.workshop {
-			margin: 20rpx;
+			margin: 0 px2vw(10px) px2vw(3px) px2vw(10px);
 			display: flex;
 			align-items: center;
 
 			.label {
-				margin-right: 20rpx;
-				font-size: 40rpx;
+				margin-right: px2vw(15px);
+				font-size: px2vw(30px);
 			}
 
 			.picker-box {
-				width: 800rpx;
-				height: 100rpx;
-				border: 5rpx solid #5884f1;
-				border-radius: 20rpx;
+				width: px2vw(500px);
+				height: px2vw(80px);
+				border: px2vw(3px) solid #5884f1;
+				border-radius: px2vw(18px);
 				display: flex;
 				align-items: center;
 				justify-content: center;
-				padding: 0 40rpx;
-				font-size: 40rpx;
+				padding: 0 px2vw(35px);
+				font-size: px2vw(30px);
 				box-sizing: border-box;
 				background-color: #fff;
 				position: relative;
@@ -292,67 +265,29 @@ const quit = () => {
 				text-align: center;
 				color: #333;
 			}
-
-			.picker-arrow {
-				width: 0;
-				height: 0;
-				border-left: 16rpx solid transparent;
-				border-right: 16rpx solid transparent;
-				border-top: 20rpx solid #5884f1;
-				margin-left: 24rpx;
-			}
-
-			.picker-options {
-				position: absolute;
-				top: calc(100% + 16rpx);
-				left: 0;
-				width: 100%;
-				background-color: #fff;
-				border: 5rpx solid #5884f1;
-				border-radius: 20rpx;
-				box-shadow: 0 16rpx 32rpx rgba(0, 0, 0, 0.12);
-				max-height: 320rpx;
-				overflow-y: auto;
-				z-index: 10;
-			}
-
-			.picker-option {
-				padding: 28rpx 40rpx;
-				font-size: 40rpx;
-				text-align: center;
-				color: #333;
-			}
-
-			.picker-option:not(:last-child) {
-				border-bottom: 2rpx solid #f0f0f0;
-			}
-
-			.picker-option:active {
-				background-color: #eef4ff;
-			}
 		}
 
 		.device {
 			display: flex;
-			margin: 20rpx;
+			margin: 0 px2vw(10px) px2vw(3px) px2vw(10px);
 			align-items: center;
 
 			.device-text {
-				font-size: 40rpx;
+				font-size: px2vw(30px);
 			}
 
 			.input-box {
-				width: 700rpx;
-				height: 100rpx;
-				border: 5rpx solid #5884f1;
-				border-radius: 20rpx;
+				width: px2vw(400px);
+				height: px2vw(80px);
+				border: px2vw(3px) solid #5884f1;
+				border-radius: px2vw(18px);
 				display: flex;
 				align-items: center;
-				padding: 0 40rpx;
-				margin-left: 10rpx;
+				padding: 0 px2vw(35px);
+				margin-left: px2vw(15px);
 
 				input {
-					font-size: 40rpx;
+					font-size: px2vw(30px);
 				}
 			}
 		}
@@ -362,15 +297,15 @@ const quit = () => {
 			align-items: center;
 
 			image {
-				width: 120rpx;
-				height: 120rpx;
+				width: px2vw(80px);
+				height: px2vw(80px);
 			}
 		}
 	}
 
 	/* 表格区域 */
 	.table {
-		margin-top: 16rpx;
+		margin-top: px2vw(10px);
 
 		::v-deep .uni-table {
 			display: flex;
@@ -391,26 +326,26 @@ const quit = () => {
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			font-size: 44rpx;
+			font-size: px2vw(35px);
 		}
 
 		::v-deep .table-header-row .table-header-cell {
-			padding: 36rpx 24rpx;
-			letter-spacing: 5rpx;
+			padding: px2vw(30px) px2vw(15px);
+			letter-spacing: px2vw(5px);
 			font-weight: 600;
 		}
 
 		::v-deep .table-body-row {
-			min-height: 164rpx;
+			min-height: px2vw(100px);
 			align-items: center;
 		}
 
 		::v-deep .table-body-row .uni-table-td {
-			padding: 52rpx 24rpx;
+			padding: px2vw(40px) px2vw(15px);
 		}
 
 		::v-deep .table-header-gap {
-			height: 24rpx;
+			height: px2vw(10px);
 			background-color: #f2f2f2;
 			grid-column: 1 / -1;
 		}

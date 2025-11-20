@@ -487,6 +487,21 @@ const handleAddEmployeeConfirm = (selectedIds) => {
   }
 }
 
+// 获取员工列表
+const getEmployeeList = async () => {
+  const res = await callWorkflowListAPIPaged({
+    worksheetId: 'employee',
+    filters: [{
+      "controlId": "67ac0a87d6566fd9d09a2340",
+      "dataType": 30,
+      "spliceType": 1,
+      "filterType": 2,
+      "values": [workshop.value]
+    }]
+  })
+  return res
+}
+
 // 新增：工单明细按钮处理
 const viewWorkOrderDetail = () => {
   if (!selectedProcessData.value) {
@@ -708,7 +723,7 @@ const quit = () => {
 
   /* 导航栏样式 */
   .header {
-    height: 150rpx;
+    height: px2vw(120px);
     width: 100%;
     display: flex;
     justify-content: space-between;
@@ -716,14 +731,14 @@ const quit = () => {
     background-color: #5884f1;
 
     image {
-      margin-left: 42.5rpx;
-      height: 65rpx;
-      width: 65rpx;
+      margin: px2vw(20px);
+      height: px2vw(60px);
+      width: px2vw(60px);
     }
 
     .title {
-      margin-left: 318.75rpx;
-      font-size: 42.5rpx;
+      margin-left: px2vw(300px);
+      font-size: px2vw(35px);
       color: white;
     }
 
@@ -732,18 +747,18 @@ const quit = () => {
       align-items: center;
 
       .btn-one {
-        height: 112.5rpx;
-        width: 225rpx;
+        height: px2vw(90px);
+        width: px2vw(170px);
         display: flex;
         align-items: center;
         background-color: white;
-        margin: 21.25rpx;
-        border-radius: 21.25rpx;
+        margin: px2vw(20px);
+        border-radius: px2vw(20px);
 
         image {
-          height: 65rpx;
-          width: 65rpx;
-          margin-right: 21.25rpx;
+          height: px2vw(50px);
+          width: px2vw(50px);
+          margin-right: px2vw(20px);
         }
       }
     }
@@ -751,20 +766,20 @@ const quit = () => {
 
   /* 按钮栏样式 */
   .btn-list {
-    height: 162.5rpx;
+    height: px2vw(120px);
     width: 100%;
     display: flex;
     align-items: center;
 
     .btn-item {
-      height: 125rpx;
-      width: 1031.25rpx;
-      margin: 21.25rpx;
-      padding: 21.25rpx 42.5rpx;
+      height: px2vw(80px);
+      width: px2vw(620px);
+      margin: px2vw(10px);
+      padding: px2vw(16px) px2vw(25px);
       display: flex;
       justify-content: center;
       align-items: center;
-      border-radius: 11.25rpx;
+      border-radius: px2vw(18px);
       color: #fff;
       display: flex;
       align-items: center;
@@ -775,7 +790,7 @@ const quit = () => {
   /* 搜索区域样式 */
   .search-box {
     display: flex;
-    height: 162.5rpx;
+    height: px2vw(100px);
     width: 100%;
     background-color: #fff;
 
@@ -784,19 +799,19 @@ const quit = () => {
       align-items: center;
 
       .input-box {
-        width: 2350rpx;
-        height: 106.25rpx;
-        margin-right: 21.25rpx;
-        border: 2.5rpx solid #5884f1;
-        border-radius: 21.25rpx;
+        width: px2vw(1200px);
+        height: px2vw(80px);
+        margin-right: px2vw(10px);
+        border: px2vw(3px) solid #5884f1;
+        border-radius: px2vw(18px);
         display: flex;
         align-items: center;
-        padding: 0 42.5rpx;
-        margin-left: 21.25rpx;
+        padding: 0 px2vw(35px);
+        margin-left: px2vw(10px);
 
         input {
           width: 100%;
-          font-size: 42.5rpx;
+          font-size: px2vw(30px);
         }
       }
     }
@@ -806,20 +821,21 @@ const quit = () => {
       align-items: center;
 
       image {
-        width: 125rpx;
-        height: 125rpx;
+        width: px2vw(80px);
+        height: px2vw(80px);
       }
     }
 
     .assemble,
     .selectDocument {
-      height: 106.25rpx;
-      margin: 21.25rpx 11.25rpx 21.25rpx 21.25rpx;
-      padding: 21.25rpx 42.5rpx;
+      width: px2vw(280px);
+      height: px2vw(80px);
+      margin: px2vw(10px);
+      padding: px2vw(16px) px2vw(25px);
       display: flex;
       justify-content: center;
       align-items: center;
-      border-radius: 11.25rpx;
+      border-radius: px2vw(18px);
       color: #fff;
       display: flex;
       align-items: center;
@@ -836,9 +852,9 @@ const quit = () => {
     .orderItem {
       width: 98%;
       background-color: #fff;
-      border-radius: 20rpx;
-      margin: 20rpx;
-      padding: 20rpx;
+      border-radius: px2vw(18px);
+      margin: px2vw(10px);
+      padding: px2vw(15px);
       display: flex;
 
       .goodsInfo {
@@ -854,44 +870,44 @@ const quit = () => {
 
           .orderGoods {
             display: flex;
-            margin: 0 40rpx;
+            margin: 0 px2vw(20px);
             align-items: center;
           }
 
           .order-label {
-            width: 200rpx;
-            font-size: 40rpx;
+            width: px2vw(120px);
+            font-size: px2vw(30px);
             color: #5884f1;
-            border: 1.25rpx solid #5884f1;
-            padding: 10rpx 0;
+            border: px2vw(2px) solid #5884f1;
+            padding: px2vw(8px) 0;
             display: flex;
             justify-content: center;
             align-items: center;
-            border-radius: 8.75rpx;
-            margin-right: 10rpx;
+            border-radius: px2vw(8px);
+            margin-right: px2vw(8px);
           }
 
           .order-number {
-            height: 85rpx;
-            padding: 11.25rpx 0;
-            border-radius: 8.75rpx;
+            height: px2vw(60px);
+            padding: px2vw(8px) 0;
+            border-radius: px2vw(8px);
             display: flex;
             justify-content: center;
             align-items: center;
-            margin-left: 11.25rpx;
+            margin-left: px2vw(8px);
             background: white;
           }
 
           .buttons {
             display: flex;
-            gap: 21.25rpx;
+            gap: px2vw(10px);
 
             button {
-              width: 212.5rpx;
+              width: px2vw(150px);
               padding: 0;
-              font-size: 33.75rpx;
-              border-radius: 8.75rpx;
-              border: 1.25rpx solid #5884f1;
+              font-size: px2vw(28px);
+              border-radius: px2vw(8px);
+              border: px2vw(2px) solid #5884f1;
               color: #5884f1;
               background: white;
               display: flex;
@@ -910,19 +926,19 @@ const quit = () => {
           display: flex;
           width: 100%;
           justify-content: space-between;
-          margin-top: 21.25rpx;
+          margin-top: px2vw(10px);
 
           .orderItem,
           .orderCount,
           .name {
             display: flex;
             align-items: center;
-            margin: 21.25rpx 42.5rpx;
+            margin: px2vw(10px) px2vw(20px);
             flex: 1;
-            min-width: 425rpx;
+            min-width: px2vw(200px);
 
             view:first-child {
-              width: 162.5rpx;
+              width: px2vw(100px);
             }
           }
         }
@@ -931,8 +947,8 @@ const quit = () => {
           width: 100%;
           display: flex;
           justify-content: center;
-          margin-top: 42.5rpx;
-          padding: 0 42.5rpx;
+          margin-top: px2vw(20px);
+          padding: 0 px2vw(20px);
         }
 
         .processes-container {
@@ -941,7 +957,7 @@ const quit = () => {
           justify-content: flex-start;
           width: 100%;
           flex-wrap: wrap;
-          gap: 21.25rpx;
+          gap: px2vw(10px);
         }
 
         .process-wrapper {
@@ -958,8 +974,8 @@ const quit = () => {
         }
 
         .progress-circle {
-          width: 162.5rpx;
-          height: 162.5rpx;
+          width: px2vw(120px);
+          height: px2vw(120px);
           border-radius: 50%;
           background: conic-gradient(#4CAF50 0%, #4CAF50 var(--percent), #E0E0E0 var(--percent), #E0E0E0 100%);
           display: flex;
@@ -977,34 +993,34 @@ const quit = () => {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 25rpx;
+          font-size: px2vw(20px);
           top: 10%;
           left: 10%;
         }
 
         .progress-text {
-          font-size: 28.75rpx;
+          font-size: px2vw(24px);
           font-weight: bold;
           color: #333;
           text-align: center;
         }
 
         .process-name {
-          margin-top: 16.25rpx;
-          font-size: 28.75rpx;
+          margin-top: px2vw(10px);
+          font-size: px2vw(24px);
           color: #555;
           text-align: center;
-          max-width: 212.5rpx;
+          max-width: px2vw(150px);
           word-break: break-word;
         }
 
         .connector {
-          width: 42.5rpx;
-          height: 5rpx;
+          width: px2vw(30px);
+          height: px2vw(3px);
           background-color: #ccc;
-          margin: 0 11.25rpx 0 21.25rpx;
+          margin: 0 px2vw(8px) 0 px2vw(10px);
           position: relative;
-          top: -21.25rpx;
+          top: px2vw(-10px);
         }
       }
     }
@@ -1026,11 +1042,11 @@ const quit = () => {
 
   .process-content {
     background: white;
-    border-radius: 20rpx;
+    border-radius: px2vw(18px);
     width: 90%;
-    width: 2200rpx;
-    height: 1200rpx;
-    box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.3);
+    width: px2vw(1400px);
+    height: px2vw(700px);
+    box-shadow: 0 px2vw(5px) px2vw(15px) rgba(0, 0, 0, 0.3);
     display: flex;
     flex-direction: column;
 
@@ -1038,37 +1054,32 @@ const quit = () => {
       display: flex;
       justify-content: center;
       align-items: center;
-      padding: 30rpx 40rpx;
-      border-bottom: 2rpx solid #eee;
-      font-size: 40rpx;
+      padding: px2vw(30px) px2vw(40px);
+      border-bottom: px2vw(2px) solid #eee;
+      font-size: px2vw(35px);
       color: #333;
     }
   }
 }
 
-
-
-
-
 .modal-title {
   font-weight: bold;
-  font-size: 40rpx;
+  font-size: px2vw(35px);
   color: #333;
 }
 
 /* 模态主体样式 */
 .modal-body {
   flex: 0 0 auto;
-  padding: 20rpx 20rpx 10rpx 20rpx;
+  padding: px2vw(20px) px2vw(20px) px2vw(10px) px2vw(20px);
   display: flex;
   flex-direction: column;
-  gap: 10rpx;
-  /* 控制所有子元素间距，包括表格与输入行 */
+  gap: px2vw(10px);
 }
 
 .row-group {
   display: flex;
-  gap: 20rpx;
+  gap: px2vw(10px);
   width: 100%;
 
   &.single .form-group.full {
@@ -1081,7 +1092,7 @@ const quit = () => {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  gap: 20rpx;
+  gap: px2vw(10px);
   flex: 1;
 
   &.full {
@@ -1094,32 +1105,32 @@ const quit = () => {
     justify-content: space-between;
   }
 
-  @media (max-width: 750rpx) {
+  @media (max-width: #{px2vw(750px)}) {
     flex-direction: column;
     align-items: flex-start;
-    gap: 10rpx;
+    gap: px2vw(5px);
     justify-content: flex-start;
   }
 
   .label {
-    font-size: 32rpx;
+    font-size: px2vw(30px);
     color: #666;
     font-weight: bold;
-    width: 150rpx;
+    width: px2vw(120px);
     white-space: nowrap;
     flex-shrink: 0;
     text-align: left;
   }
 
   .value {
-    width: 800rpx;
-    font-size: 32rpx;
+    width: px2vw(400px);
+    font-size: px2vw(30px);
     color: #333;
-    padding: 10rpx 15rpx;
+    padding: px2vw(8px) px2vw(12px);
     background: #f9f9f9;
-    border-radius: 5rpx;
-    border: 1rpx solid #eee;
-    min-height: 60rpx;
+    border-radius: px2vw(5px);
+    border: px2vw(1px) solid #eee;
+    min-height: px2vw(50px);
     display: flex;
     align-items: center;
     box-sizing: border-box;
@@ -1127,14 +1138,14 @@ const quit = () => {
 
   .input-field {
     flex: none;
-    width: 800rpx;
+    width: px2vw(400px);
     flex-shrink: 0;
-    height: 80rpx;
-    padding: 10rpx 15rpx;
-    border: 1rpx solid #eee;
-    border-radius: 5rpx;
+    height: px2vw(60px);
+    padding: px2vw(8px) px2vw(12px);
+    border: px2vw(1px) solid #eee;
+    border-radius: px2vw(5px);
     background: #f9f9f9;
-    font-size: 32rpx;
+    font-size: px2vw(30px);
     box-sizing: border-box;
   }
 }
@@ -1142,17 +1153,17 @@ const quit = () => {
 .modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 20rpx;
-  padding: 30rpx 40rpx;
-  border-top: 2rpx solid #eee;
+  gap: px2vw(10px);
+  padding: px2vw(30px) px2vw(40px);
+  border-top: px2vw(2px) solid #eee;
   flex-shrink: 0;
 
   .btn-cancel,
   .btn-confirm {
-    width: 300rpx;
-    height: 80rpx;
-    border-radius: 10rpx;
-    font-size: 32rpx;
+    width: px2vw(150px);
+    height: px2vw(70px);
+    border-radius: px2vw(18px);
+    font-size: px2vw(30px);
     border: none;
     cursor: pointer;
   }
@@ -1172,7 +1183,7 @@ const quit = () => {
 
 /* 员工选择表格样式 */
 .employee-section {
-  margin-top: 10rpx;
+  margin-top: px2vw(10px);
   flex: 1;
   overflow-y: auto;
 
@@ -1180,44 +1191,44 @@ const quit = () => {
     display: flex;
     background-color: #f5f5f5;
     font-weight: bold;
-    padding: 20rpx;
-    border-bottom: 2rpx solid #eee;
+    padding: px2vw(15px);
+    border-bottom: px2vw(2px) solid #eee;
     align-items: center;
 
     .col {
-      font-size: 32rpx;
-      padding: 0 20rpx;
+      font-size: px2vw(30px);
+      padding: 0 px2vw(15px);
       text-align: left;
 
       &.selected {
-        width: 150rpx;
+        width: px2vw(120px);
         text-align: center;
         flex-shrink: 0;
-        padding: 0 15rpx;
+        padding: 0 px2vw(12px);
       }
 
       &.name {
         flex: 2;
-        padding-left: 30rpx;
+        padding-left: px2vw(20px);
       }
 
       &.hours {
         flex: 1;
         text-align: right;
-        padding-right: 20rpx;
+        padding-right: px2vw(15px);
       }
     }
   }
 
   .employee-table {
-    max-height: 400rpx;
+    max-height: px2vw(250px);
     overflow-y: auto;
 
     .table-row {
       display: flex;
       align-items: center;
-      padding: 20rpx;
-      border-bottom: 1rpx solid #eee;
+      padding: px2vw(15px);
+      border-bottom: px2vw(1px) solid #eee;
       cursor: pointer;
 
       &:hover {
@@ -1225,30 +1236,30 @@ const quit = () => {
       }
 
       .col {
-        font-size: 32rpx;
-        padding: 0 20rpx;
+        font-size: px2vw(30px);
+        padding: 0 px2vw(15px);
         text-align: left;
         display: flex;
         align-items: center;
 
         &.selected {
-          width: 150rpx;
+          width: px2vw(120px);
           text-align: center;
           flex-shrink: 0;
           justify-content: center;
-          padding: 0 15rpx;
+          padding: 0 px2vw(12px);
         }
 
         &.name {
           flex: 2;
-          padding-left: 30rpx;
+          padding-left: px2vw(20px);
         }
 
         &.hours {
           flex: 1;
           text-align: right;
           justify-content: flex-end;
-          padding-right: 20rpx;
+          padding-right: px2vw(15px);
         }
       }
     }

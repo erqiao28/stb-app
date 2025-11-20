@@ -127,7 +127,8 @@ const onRadioChange = (e) => {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
+/* 模态框遮罩层 */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -141,102 +142,111 @@ const onRadioChange = (e) => {
   z-index: 9999;
 }
 
+/* 模态框内容 */
 .modal-content {
   background: white;
-  border-radius: 10rpx;
-  width: 2500rpx;
-  height: 1200rpx;
+  border-radius: px2vw(10px);
+  width: px2vw(1400px);
+  height: px2vw(700px);
   overflow-y: auto;
-  box-shadow: 0 5rpx 25rpx rgba(0, 0, 0, 0.15);
+  box-shadow: 0 px2vw(5px) px2vw(25px) rgba(0, 0, 0, 0.15);
   display: flex;
   flex-direction: column;
 }
 
+/* 模态框头部 */
 .modal-header {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 50rpx;
-  border-bottom: 1.25rpx solid #eee;
+  padding: px2vw(30px);
+  border-bottom: px2vw(1.25px) solid #eee;
   flex-shrink: 0;
 }
 
+/* 模态框标题 */
 .modal-title {
   margin: 0;
-  font-size: 50rpx;
+  font-size: px2vw(35px);
   text-align: center;
 }
 
+/* 模态框主体 */
 .modal-body {
   flex: 1;
-  padding: 50rpx;
+  padding: px2vw(30px);
   display: flex;
   flex-direction: column;
 }
 
+/* 搜索区域 */
 .search-section {
   display: flex;
-  gap: 12.5rpx;
-  margin-bottom: 50rpx;
+  gap: px2vw(10px);
+  margin-bottom: px2vw(30px);
   flex-shrink: 0;
 }
 
+/* 搜索输入框 */
 .search-input {
   flex: 1;
-  padding: 25rpx 25rpx;  /* 减小垂直padding，避免挤压 */
-  border-bottom: 1.25rpx solid #ddd;
+  padding: px2vw(20px) px2vw(20px);
+  border-bottom: px2vw(1.25px) solid #ddd;
   border-left: none;
   border-top: none;
   border-right: none;
   border-radius: 0;
-  font-size: 50rpx;  /* 稍减小字体，避免过大 */
+  font-size: px2vw(30px);
   pointer-events: auto;
   position: relative;
   z-index: 10000;
-  height: 125rpx;  /* 固定高度 */
-  line-height: 1.2;  /* 正常行高，确保文本可见 */
-  background: white;  /* 明确背景 */
-  box-sizing: border-box;  /* 包含padding */
+  height: px2vw(80px);
+  line-height: 1.2;
+  background: white;
+  box-sizing: border-box;
 }
 
+/* 搜索按钮 */
 .search-btn {
-  height: 90rpx;
-  width: 200rpx;
+  height: px2vw(70px);
+  width: px2vw(150px);
   display: flex;
   align-items: center;
   justify-content: center;
   background-color: #007bff;
   color: white;
   border: none;
-  border-radius: 5rpx;
+  border-radius: px2vw(5px);
   cursor: pointer;
-  font-size: 50rpx;
+  font-size: px2vw(30px);
 }
 
 .search-btn:hover {
   background-color: #0056b3;
 }
 
+/* 单选组 */
 .radio-group {
   display: flex;
   flex-direction: column;
-  gap: 30rpx;
-  max-height: calc(625rpx - 250rpx);  /* 调整以适应高度 */
+  gap: px2vw(20px);
+  max-height: calc(#{px2vw(700px)} - #{px2vw(200px)});
   overflow-y: auto;
 }
 
+/* 单选标签 */
 .radio-label {
   display: flex;
   align-items: center;
   cursor: pointer;
-  padding: 30rpx 20rpx; /* 增加垂直 padding 以提高高度 */
-  border-bottom: 1.25rpx solid #ddd;
+  padding: px2vw(20px) px2vw(10px);
+  border-bottom: px2vw(1.25px) solid #ddd;
   border-radius: 0;
 }
 
 .radio-label text {
-  font-size: 50rpx; /* 增大选项名字体大小 */
-  margin-left: 10rpx;
+  font-size: px2vw(30px);
+  margin-left: px2vw(10px);
 }
 
 .radio-label:hover {
@@ -244,28 +254,30 @@ const onRadioChange = (e) => {
 }
 
 .radio-label input[type="radio"] {
-  margin-right: 20rpx;
+  margin-right: px2vw(10px);
 }
 
+/* 模态框底部 */
 .modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 12.5rpx;
-  padding: 50rpx;
-  border-top: 1.25rpx solid #eee;
+  gap: px2vw(10px);
+  padding: px2vw(30px);
+  border-top: px2vw(1.25px) solid #eee;
   flex-shrink: 0;
 }
 
+/* 按钮 */
 .btn-cancel, .btn-confirm {
-  height: 100rpx;
-  width: 200rpx;
+  height: px2vw(70px);
+  width: px2vw(150px);
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1.25rpx solid #ddd;
-  border-radius: 5rpx;
+  border: px2vw(1.25px) solid #ddd;
+  border-radius: px2vw(5px);
   cursor: pointer;
-  font-size: 50rpx;
+  font-size: px2vw(30px);
 }
 
 .btn-cancel {
