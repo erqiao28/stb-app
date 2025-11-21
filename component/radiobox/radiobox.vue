@@ -139,17 +139,17 @@ const onRadioChange = (e) => {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 9999;
+  z-index: 1000;
 }
 
 /* 模态框内容 */
 .modal-content {
   background: white;
-  border-radius: px2vw(10px);
+  border-radius: px2vw(18px);
   width: px2vw(1400px);
   height: px2vw(700px);
   overflow-y: auto;
-  box-shadow: 0 px2vw(5px) px2vw(25px) rgba(0, 0, 0, 0.15);
+  box-shadow: 0 px2vw(5px) px2vw(15px) rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
 }
@@ -159,22 +159,24 @@ const onRadioChange = (e) => {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: px2vw(30px);
-  border-bottom: px2vw(1.25px) solid #eee;
+  padding: px2vw(30px) px2vw(40px);
+  border-bottom: px2vw(2px) solid #eee;
   flex-shrink: 0;
 }
 
 /* 模态框标题 */
 .modal-title {
   margin: 0;
+  font-weight: bold;
   font-size: px2vw(35px);
+  color: #333;
   text-align: center;
 }
 
 /* 模态框主体 */
 .modal-body {
   flex: 1;
-  padding: px2vw(30px);
+  padding: px2vw(20px) px2vw(20px) px2vw(10px) px2vw(20px);
   display: flex;
   flex-direction: column;
 }
@@ -213,10 +215,10 @@ const onRadioChange = (e) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #007bff;
+  background-color: #5884f1;
   color: white;
   border: none;
-  border-radius: px2vw(5px);
+  border-radius: px2vw(18px);
   cursor: pointer;
   font-size: px2vw(30px);
 }
@@ -262,33 +264,32 @@ const onRadioChange = (e) => {
   display: flex;
   justify-content: flex-end;
   gap: px2vw(10px);
-  padding: px2vw(30px);
-  border-top: px2vw(1.25px) solid #eee;
+  padding: px2vw(30px) px2vw(40px);
+  border-top: px2vw(2px) solid #eee;
   flex-shrink: 0;
 }
 
 /* 按钮 */
 .btn-cancel, .btn-confirm {
+  width: px2vw(200px);
   height: px2vw(70px);
-  width: px2vw(150px);
   display: flex;
   align-items: center;
   justify-content: center;
-  border: px2vw(1.25px) solid #ddd;
-  border-radius: px2vw(5px);
+  border: none;
+  border-radius: px2vw(18px);
   cursor: pointer;
   font-size: px2vw(30px);
 }
 
 .btn-cancel {
-  background-color: white;
-  color: #333;
+  background: #f5f5f5;
+  color: #666;
 }
 
 .btn-confirm {
-  background-color: #007bff;
+  background: #5884f1;
   color: white;
-  border-color: #007bff;
 }
 
 .btn-confirm:hover {

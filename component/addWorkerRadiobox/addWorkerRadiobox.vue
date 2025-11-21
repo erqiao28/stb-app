@@ -112,7 +112,7 @@ const onCheckboxChange = (e) => {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -128,11 +128,11 @@ const onCheckboxChange = (e) => {
 
 .modal-content {
   background: white;
-  border-radius: 10rpx;
-  width: 2500rpx;
-  height: 1200rpx;
+  border-radius: px2vw(18px);
+  width: px2vw(1400px);
+  height: px2vw(700px);
   overflow-y: auto;
-  box-shadow: 0 5rpx 25rpx rgba(0, 0, 0, 0.15);
+  box-shadow: 0 px2vw(5px) px2vw(15px) rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
 }
@@ -141,20 +141,22 @@ const onCheckboxChange = (e) => {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 50rpx;
-  border-bottom: 1.25rpx solid #eee;
+  padding: px2vw(30px) px2vw(40px);
+  border-bottom: px2vw(2px) solid #eee;
   flex-shrink: 0;
 }
 
 .modal-title {
   margin: 0;
-  font-size: 50rpx;
+  font-weight: bold;
+  font-size: px2vw(35px);
+  color: #333;
   text-align: center;
 }
 
 .modal-body {
   flex: 1;
-  padding: 50rpx;
+  padding: px2vw(20px) px2vw(20px) px2vw(10px) px2vw(20px);
   display: flex;
   flex-direction: column;
 }
@@ -162,8 +164,8 @@ const onCheckboxChange = (e) => {
 .checkbox-group {
   display: flex;
   flex-direction: column;
-  gap: 30rpx;
-  max-height: calc(625rpx - 250rpx);
+  gap: px2vw(20px);
+  max-height: calc(#{px2vw(700px)} - #{px2vw(200px)});
   overflow-y: auto;
 }
 
@@ -171,14 +173,14 @@ const onCheckboxChange = (e) => {
   display: flex;
   align-items: center;
   cursor: pointer;
-  padding: 30rpx 20rpx;
-  border-bottom: 1.25rpx solid #ddd;
+  padding: px2vw(15px);
+  border-bottom: px2vw(1px) solid #eee;
   border-radius: 0;
 }
 
 .checkbox-label text {
-  font-size: 50rpx;
-  margin-left: 10rpx;
+  font-size: px2vw(30px);
+  margin-left: px2vw(10px);
 }
 
 .checkbox-label:hover {
@@ -186,28 +188,28 @@ const onCheckboxChange = (e) => {
 }
 
 .checkbox-label checkbox {
-  margin-right: 20rpx;
+  margin-right: px2vw(10px);
 }
 
 .modal-footer {
   display: flex;
-  justify-content: space-evenly;
-  gap: 20rpx;
-  padding: 50rpx;
-  border-top: 1.25rpx solid #eee;
+  justify-content: flex-end;
+  gap: px2vw(10px);
+  padding: px2vw(30px) px2vw(40px);
+  border-top: px2vw(2px) solid #eee;
   flex-shrink: 0;
 }
 
 .btn-cancel, .btn-confirm, .btn-clear {
-  height: 100rpx;
-  width: 300rpx;
+  width: px2vw(200px);
+  height: px2vw(70px);
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1.25rpx solid #ddd;
-  border-radius: 5rpx;
+  border: none;
+  border-radius: px2vw(18px);
   cursor: pointer;
-  font-size: 50rpx;
+  font-size: px2vw(30px);
   user-select: none;
   -webkit-user-select: none;
   pointer-events: auto;
@@ -215,14 +217,13 @@ const onCheckboxChange = (e) => {
 }
 
 .btn-cancel {
-  background-color: white;
-  color: #333;
+  background: #f5f5f5;
+  color: #666;
 }
 
 .btn-clear {
-  background-color: #f5f5f5;
+  background: #f5f5f5;
   color: #666;
-  border-color: #ddd;
 }
 
 .btn-clear:hover {
@@ -230,9 +231,8 @@ const onCheckboxChange = (e) => {
 }
 
 .btn-confirm {
-  background-color: #007bff;
+  background: #5884f1;
   color: white;
-  border-color: #007bff;
 }
 
 .btn-confirm:hover {
