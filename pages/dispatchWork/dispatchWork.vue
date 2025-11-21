@@ -894,6 +894,7 @@ const quit = () => {
             display: flex;
             justify-content: center;
             align-items: center;
+            font-size: px2vw(25px);
             margin-left: px2vw(8px);
             background: white;
           }
@@ -931,15 +932,10 @@ const quit = () => {
           .orderItem,
           .orderCount,
           .name {
+            font-size: px2vw(25px);
             display: flex;
             align-items: center;
-            margin: px2vw(10px) px2vw(20px);
-            flex: 1;
-            min-width: px2vw(200px);
-
-            view:first-child {
-              width: px2vw(100px);
-            }
+            width: px2vw(400px);
           }
         }
 
@@ -993,13 +989,13 @@ const quit = () => {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: px2vw(20px);
+          font-size: px2vw(12px);
           top: 10%;
           left: 10%;
         }
 
         .progress-text {
-          font-size: px2vw(24px);
+          font-size: px2vw(20px);
           font-weight: bold;
           color: #333;
           text-align: center;
@@ -1160,7 +1156,7 @@ const quit = () => {
 
   .btn-cancel,
   .btn-confirm {
-    width: px2vw(150px);
+    width: px2vw(200px);
     height: px2vw(70px);
     border-radius: px2vw(18px);
     font-size: px2vw(30px);
