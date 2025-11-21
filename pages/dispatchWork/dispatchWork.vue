@@ -89,7 +89,7 @@
         <view class="modal-footer">
           <button class="btn-cancel" @click="closeProcessModal">取消</button>
           <button class="btn-confirm" @click="addEmployee">添加员工</button>
-          <button class="btn-confirm" @click="viewWorkOrderDetail">工单明细</button>
+          <button class="btn-confirm" @click="goOrderDetail">工单明细</button>
           <button class="btn-confirm" @click="confirmProcessDispatch">确认派工</button>
         </view>
       </view>
@@ -503,15 +503,10 @@ const getEmployeeList = async () => {
 }
 
 // 新增：工单明细按钮处理
-const viewWorkOrderDetail = () => {
-  if (!selectedProcessData.value) {
-    uni.showToast({ title: '无工单数据', icon: 'none' })
-    return
-  }
-  // TODO: 实现查看工单明细，例如打开详情模态或跳转页面
-  // 示例：uni.navigateTo({ url: `/pages/workOrderDetail/workOrderDetail?orderCode=${selectedProcessData.value.item.orderCode}` })
-  uni.showToast({ title: `查看工单明细: ${selectedProcessData.value.item.orderCode}`, icon: 'none' })
-  console.log('工单明细:', selectedProcessData.value)
+const goOrderDetail = () => {
+  uni.navigateTo({
+    url: '/pages/orderDetail/orderDetail'
+  })
 }
 
 // 关闭工序模态
