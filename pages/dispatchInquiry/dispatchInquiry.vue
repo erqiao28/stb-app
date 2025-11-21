@@ -30,14 +30,14 @@ const quit = () => {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .dispatchInquiry-container {
 	height: 100vh;
 	width: 100vw;
 
 	/* 导航栏 */
 	.header {
-		height: 140rpx;
+		height: px2vw(120px);
 		width: 100%;
 		display: flex;
 		justify-content: space-between;
@@ -45,14 +45,14 @@ const quit = () => {
 		background-color: #5884f1;
 
 		image {
-			margin-left: 25rpx;
-			height: 60rpx;
-			width: 60rpx;
+			margin-left: px2vw(20px);
+			height: px2vw(60px);
+			width: px2vw(60px);
 		}
 
 		.title {
-			margin-left: 300rpx;
-			font-size: 40rpx;
+			margin-left: px2vw(300px);
+			font-size: px2vw(35px);
 			color: white;
 		}
 
@@ -61,18 +61,19 @@ const quit = () => {
 			align-items: center;
 
 			.btn-one {
-				height: 110rpx;
-				width: 220rpx;
+				height: px2vw(90px);
+				width: px2vw(170px);
 				display: flex;
 				align-items: center;
 				background-color: white;
-				margin: 20rpx;
-				border-radius: 20rpx;
+				margin: px2vw(20px);
+				border-radius: px2vw(18px);
+				font-size: px2vw(30px);
 
 				image {
-					height: 60rpx;
-					width: 60rpx;
-					margin-right: 20rpx;
+					height: px2vw(50px);
+					width: px2vw(50px);
+					margin-right: px2vw(20px);
 				}
 			}
 		}

@@ -31,10 +31,10 @@
 					</view>
 					<!-- 加载更多提示 -->
 					<view v-if="loading && tableData.length > 0" class="loading-row">
-						<view style="text-align: center; grid-column: 1 / -1; font-size: 28rpx; color: #999999; padding: 20rpx 0; font-weight: 400;">加载中...</view>
+						<view class="loading-text">加载中...</view>
 					</view>
 					<view v-if="!hasMore && tableData.length > 0" class="no-more-row">
-						<view style="text-align: center; grid-column: 1 / -1; font-size: 28rpx; color: #999999; padding: 20rpx 0; font-weight: 400;">没有更多数据了</view>
+						<view class="loading-text">没有更多数据了</view>
 					</view>
 				</view>
 			</scroll-view>
@@ -212,7 +212,7 @@ const quit = () => {
 }
 </script>
 
-<style>
+<style scoped lang="scss">
 .addProcess-container {
 	width: 100vw;
 	height: 100vh;
@@ -223,7 +223,7 @@ const quit = () => {
 }
 
 .header {
-	height: 150rpx;
+	height: px2vw(120px);
 	width: 100%;
 	display: flex;
 	justify-content: space-between;
@@ -232,50 +232,50 @@ const quit = () => {
 	flex-shrink: 0;
 
 	image {
-		margin-left: 42.5rpx;
-		height: 65rpx;
-		width: 65rpx;
+		margin-left: px2vw(20px);
+		height: px2vw(60px);
+		width: px2vw(60px);
 	}
 
 	.title {
-		font-size: 40rpx;
+		font-size: px2vw(35px);
 		color: white;
 	}
 
 	.save {
-		font-size: 40rpx;
+		font-size: px2vw(35px);
 		color: white;
-		margin-right: 60rpx;
+		margin-right: px2vw(50px);
 	}
 }
 
 .search-box {
 	display: flex;
 	align-items: center;
-	margin: 20rpx;
+	margin: px2vw(15px);
 	background-color: #fff;
-	border-radius: 20rpx;
-	padding: 0 20rpx;
-	height: 80rpx;
+	border-radius: px2vw(18px);
+	padding: 0 px2vw(15px);
+	height: px2vw(80px);
 	flex-shrink: 0;
 
 	input {
 		width: 100%;
-		height: 80rpx;
+		height: px2vw(80px);
 		border: none;
 		outline: none;
-		font-size: 40rpx;
+		font-size: px2vw(30px);
 	}
 
 	image {
-		width: 80rpx;
-		height: 80rpx;
+		width: px2vw(80px);
+		height: px2vw(80px);
 	}
 }
 
 .table {
-	margin: 20rpx;
-	margin-top: 10rpx;
+	margin: px2vw(15px);
+	margin-top: px2vw(10px);
 	flex: 1;
 	overflow: hidden;
 }
@@ -303,17 +303,19 @@ const quit = () => {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	padding: 36rpx 24rpx;
+	padding: px2vw(30px) px2vw(20px);
+	font-size: px2vw(30px);
 }
 
 ::v-deep .table-header-row {
-	min-height: 120rpx;
+	min-height: px2vw(100px);
 	align-items: center;
 	background-color: #b0b0b0 !important;
+	font-weight: bold;
 }
 
 ::v-deep .table-body-row {
-	min-height: 120rpx;
+	min-height: px2vw(100px);
 	align-items: center;
 }
 
@@ -328,7 +330,16 @@ const quit = () => {
 ::v-deep .loading-row,
 ::v-deep .no-more-row {
 	background-color: #f5f5f5 !important;
-	min-height: 80rpx;
+	min-height: px2vw(80px);
+}
+
+.loading-text {
+	text-align: center;
+	grid-column: 1 / -1;
+	font-size: px2vw(25px);
+	color: #999999;
+	padding: px2vw(15px) 0;
+	font-weight: 400;
 }
 
 ::v-deep .table-body-row.selected {

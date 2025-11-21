@@ -1,5 +1,8 @@
 <template>
-	<view class="process-container" @click="closeDropdowns">
+	<view class="process-container">
+		<!-- 文件类别单选模态框 -->
+		<Radiobox v-model="selectedFiletype" :options="filetypeOptions" title="文件类别" v-model:visible="showFiletypeModal"
+			@confirm="handleFiletypeConfirm" />
 		<!-- 导航栏 -->
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="quit"></image>
@@ -22,15 +25,8 @@
 		<view class="search-box">
 			<view class="filetype">
 				<text class="label">文件类别</text>
-				<view class="picker-box" @click.stop="toggleFiletype">
+				<view class="picker-box" @click="showFiletypeModal = true">
 					<text class="picker-selected">{{ selectedFiletypeLabel }}</text>
-					<view class="picker-arrow"></view>
-					<view v-if="isFiletypeOpen" class="picker-options">
-						<view v-for="option in filetype" :key="option.value" class="picker-option"
-							@click.stop="selectFiletype(option)">
-							{{ option.text }}
-						</view>
-					</view>
 				</view>
 			</view>
 			<view class="filename">
@@ -66,12 +62,12 @@
 				</uni-tr>
 				<view class="table-header-gap"></view>
 				<uni-tr v-for="item in tableData" class="table-body-row">
-					<uni-td align="center">{{ item.code }}</uni-td>
-					<uni-td align="center">{{ item.filename }}</uni-td>
-					<uni-td align="center">{{ item.filetype }}</uni-td>
-					<uni-td align="center">{{ item.name }}</uni-td>
-					<uni-td align="center">{{ item.operator }}</uni-td>
-					<uni-td align="center">{{ item.operate }}</uni-td>
+					<uni-td align="center" class="table-data-cell">{{ item.code }}</uni-td>
+					<uni-td align="center" class="table-data-cell">{{ item.filename }}</uni-td>
+					<uni-td align="center" class="table-data-cell">{{ item.filetype }}</uni-td>
+					<uni-td align="center" class="table-data-cell">{{ item.name }}</uni-td>
+					<uni-td align="center" class="table-data-cell">{{ item.operator }}</uni-td>
+					<uni-td align="center" class="table-data-cell">{{ item.operate }}</uni-td>
 				</uni-tr>
 			</uni-table>
 		</view>
@@ -83,37 +79,19 @@ import {
 	ref,
 	computed
 } from 'vue'
+import Radiobox from "../../component/radiobox/radiobox.vue";
 
-// 检验选择
-const filetype = ref([{
-	text: '全部',
-	value: 'all'
-}, {
-	text: '文件类别一',
-	value: 'type1'
-}, {
-	text: '文件类别二',
-	value: 'type2'
-}, {
-	text: '文件类别三',
-	value: 'type3'
-}, {
-	text: '文件类别四',
-	value: 'type4'
-}])
-const selectedFiletype = ref(filetype.value[0])
-const isFiletypeOpen = ref(false)
-const selectedFiletypeLabel = computed(() => selectedFiletype.value?.text || '请选择养护类型')
-const toggleFiletype = () => {
-	isFiletypeOpen.value = !isFiletypeOpen.value
-}
-const selectFiletype = (option) => {
-	selectedFiletype.value = option
-	isFiletypeOpen.value = false
-	console.log('选中:', option.text)
-}
-const closeDropdowns = () => {
-	isFiletypeOpen.value = false
+// 文件类别选项（字符串数组格式）
+const filetypeOptions = ref(['全部', '文件类别一', '文件类别二', '文件类别三', '文件类别四'])
+const selectedFiletype = ref('全部')
+const showFiletypeModal = ref(false)
+
+const selectedFiletypeLabel = computed(() => selectedFiletype.value || '请选择文件类别')
+
+const handleFiletypeConfirm = (value) => {
+	selectedFiletype.value = value
+	showFiletypeModal.value = false
+	console.log('选中:', value)
 }
 
 // 表格数据
@@ -132,7 +110,7 @@ const quit = () => {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .process-container {
 	height: 100vh;
 	width: 100vw;
@@ -140,7 +118,7 @@ const quit = () => {
 
 	/* 导航栏 */
 	.header {
-		height: 140rpx;
+		height: px2vw(120px);
 		width: 100%;
 		display: flex;
 		justify-content: space-between;
@@ -148,14 +126,14 @@ const quit = () => {
 		background-color: #5884f1;
 
 		image {
-			margin-left: 25rpx;
-			height: 60rpx;
-			width: 60rpx;
+			margin-left: px2vw(20px);
+			height: px2vw(60px);
+			width: px2vw(60px);
 		}
 
 		.title {
-			margin-left: 300rpx;
-			font-size: 40rpx;
+			margin-left: px2vw(300px);
+			font-size: px2vw(35px);
 			color: white;
 		}
 
@@ -164,18 +142,19 @@ const quit = () => {
 			align-items: center;
 
 			.btn-one {
-				height: 110rpx;
-				width: 220rpx;
+				height: px2vw(90px);
+				width: px2vw(170px);
 				display: flex;
 				align-items: center;
 				background-color: white;
-				margin: 20rpx;
-				border-radius: 20rpx;
+				margin: px2vw(20px);
+				border-radius: px2vw(18px);
+				font-size: px2vw(30px);
 
 				image {
-						height: 60rpx;
-					width: 60rpx;
-					margin-right: 20rpx;
+					height: px2vw(50px);
+					width: px2vw(50px);
+					margin-right: px2vw(20px);
 				}
 			}
 		}
@@ -189,28 +168,27 @@ const quit = () => {
 		width: 100%;
 
 		.filetype {
-			margin: 20rpx;
+			margin: px2vw(15px);
 			display: flex;
 			align-items: center;
 
 			.label {
-				margin-right: 20rpx;
-				font-size: 40rpx;
+				margin-right: px2vw(15px);
+				font-size: px2vw(30px);
 			}
 
 			.picker-box {
-				width: 800rpx;
-				height: 100rpx;
-				border: 2.5rpx solid #5884f1;
-				border-radius: 20rpx;
+				width: px2vw(340px);
+				height: px2vw(80px);
+				border: px2vw(3px) solid #5884f1;
+				border-radius: px2vw(18px);
 				display: flex;
 				align-items: center;
 				justify-content: center;
-				padding: 0 40rpx;
-				font-size: 40rpx;
+				padding: 0 px2vw(30px);
+				font-size: px2vw(30px);
 				box-sizing: border-box;
 				background-color: #fff;
-				position: relative;
 				cursor: pointer;
 			}
 
@@ -219,116 +197,77 @@ const quit = () => {
 				text-align: center;
 				color: #333;
 			}
-
-			.picker-arrow {
-				width: 0;
-				height: 0;
-				border-left: 16rpx solid transparent;
-				border-right: 16rpx solid transparent;
-				border-top: 20rpx solid #5884f1;
-				margin-left: 24rpx;
-			}
-
-			.picker-options {
-				position: absolute;
-				top: calc(100% + 16rpx);
-				left: 0;
-				width: 100%;
-				background-color: #fff;
-				border: 2.5rpx solid #5884f1;
-				border-radius: 20rpx;
-				box-shadow: 0 10rpx 20rpx rgba(0, 0, 0, 0.12);
-				max-height: 320rpx;
-				overflow-y: auto;
-				z-index: 10;
-			}
-
-			.picker-option {
-				padding: 28rpx 40rpx;
-				font-size: 40rpx;
-				text-align: center;
-				color: #333;
-			}
-
-			.picker-option:not(:last-child) {
-				border-bottom: 2rpx solid #f0f0f0;
-			}
-
-			.picker-option:active {
-				background-color: #eef4ff;
-			}
 		}
 
 		.filename {
 			display: flex;
-			margin: 20rpx;
+			margin: px2vw(15px);
 			align-items: center;
 
 			.filename-text {
-				font-size: 40rpx;
+				font-size: px2vw(30px);
 			}
 
 			.input-box {
-				width: 700rpx;
-				height: 100rpx;
-				border: 2.5rpx solid #5884f1;
-				border-radius: 20rpx;
+				width: px2vw(500px);
+				height: px2vw(80px);
+				border: px2vw(3px) solid #5884f1;
+				border-radius: px2vw(18px);
 				display: flex;
 				align-items: center;
-				padding: 0 40rpx;
-				margin-left: 10rpx;
+				padding: 0 px2vw(30px);
+				margin-left: px2vw(10px);
 
 				input {
-					font-size: 40rpx;
+					font-size: px2vw(30px);
 				}
 			}
 		}
 
 		.name {
 			display: flex;
-			margin: 20rpx;
+			margin: px2vw(15px);
 			align-items: center;
 
 			.name-text {
-				font-size: 40rpx;
+				font-size: px2vw(30px);
 			}
 
 			.input-box {
-				width: 700rpx;
-				height: 100rpx;
-				border: 2.5rpx solid #5884f1;
-				border-radius: 20rpx;
+				width: px2vw(500px);
+				height: px2vw(80px);
+				border: px2vw(3px) solid #5884f1;
+				border-radius: px2vw(18px);
 				display: flex;
 				align-items: center;
-				padding: 0 40rpx;
-				margin-left: 10rpx;
+				padding: 0 px2vw(30px);
+				margin-left: px2vw(10px);
 
 				input {
-					font-size: 40rpx;
+					font-size: px2vw(30px);
 				}
 			}
 		}
 
 		.searchbtn {
-			height: 100rpx;
-			width: 220rpx;
-			margin: 20rpx;
-			padding: 20rpx 40rpx;
+			height: px2vw(80px);
+			width: px2vw(150px);
+			margin: px2vw(15px);
+			padding: px2vw(15px) px2vw(30px);
 			display: flex;
 			justify-content: center;
 			align-items: center;
-			border-radius: 20rpx;
+			border-radius: px2vw(18px);
 			color: #fff;
-			display: flex;
-			align-items: center;
 			background-color: #5884f1;
+			font-size: px2vw(30px);
 		}
 	}
 
 	/* 表格区域 */
 	.table {
-		margin-top: 10rpx;
-		height: calc(100vh - 160rpx);
+		margin-top: px2vw(10px);
+		height: calc(100vh - #{px2vw(130px)});
 		overflow: auto;
 
 		::v-deep .uni-table {
@@ -344,21 +283,32 @@ const quit = () => {
 			width: 100%;
 		}
 
-		::v-deep .table-header-row .table-header-cell,
-		::v-deep .table-body-row .uni-table-td {
+		::v-deep .table-header-row .table-header-cell {
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			padding: 36rpx 24rpx;
+			padding: px2vw(30px) px2vw(20px);
+			font-size: px2vw(30px);
+		}
+
+		::v-deep .table-body-row .uni-table-td,
+		::v-deep .table-body-row uni-td,
+		::v-deep .table-data-cell {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: px2vw(30px) px2vw(20px);
+			font-size: px2vw(25px) !important;
 		}
 
 		::v-deep .table-header-row {
-			min-height: 120rpx;
+			min-height: px2vw(100px);
 			align-items: center;
+			font-weight: bold;
 		}
 
 		::v-deep .table-body-row {
-			min-height: 120rpx;
+			min-height: px2vw(100px);
 			align-items: center;
 		}
 

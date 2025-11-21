@@ -207,7 +207,7 @@ const selectOrder = (orderCode) => {
 
 </script>
 
-<style>
+<style scoped lang="scss">
 /* 更新容器和列表样式，实现内部滚动 */
 
 .selectBills-container {
@@ -220,7 +220,7 @@ const selectOrder = (orderCode) => {
 
 
 	.header {
-		height: 140rpx;
+		height: px2vw(120px);
 		width: 100%;
 		display: flex;
 		justify-content: space-between;
@@ -230,14 +230,14 @@ const selectOrder = (orderCode) => {
 		/* 防止压缩 */
 
 		image {
-			margin-left: 25rpx;
-			height: 60rpx;
-			width: 60rpx;
+			margin-left: px2vw(20px);
+			height: px2vw(60px);
+			width: px2vw(60px);
 		}
 
 		.title {
-			margin-right: 100rpx;
-			font-size: 40rpx;
+			margin-right: px2vw(80px);
+			font-size: px2vw(35px);
 			color: white;
 		}
 	}
@@ -247,120 +247,121 @@ const selectOrder = (orderCode) => {
 		align-items: center;
 		width: 100%;
 		background-color: #fff;
-		height: 150rpx;
-		padding: 20rpx;
-		margin: 10rpx 10rpx;	
-		border-radius: 20rpx;
+		height: px2vw(100px);
+		padding: px2vw(15px);
+		margin: px2vw(10px) px2vw(10px);	
+		border-radius: px2vw(18px);
 
 		.salesOrder {
 			display: flex;
-			margin: 20rpx;
+			margin: px2vw(15px);
 			align-items: center;
 
 			.salesOrder-text {
-				font-size: 40rpx;
+				font-size: px2vw(25px);
 			}
 
 			.input-box {
-				width: 500rpx;
-				height: 100rpx;
-				border: 2.5rpx solid #5884f1;
-				border-radius: 20rpx;
+				width: px2vw(280px);
+				height: px2vw(80px);
+				border: px2vw(2px) solid #5884f1;
+				border-radius: px2vw(18px);
 				display: flex;
 				align-items: center;
-				padding: 0 40rpx;
-				margin-left: 12.5rpx;
+				padding: 0 px2vw(30px);
+				margin-left: px2vw(10px);
 
 				input {
-					font-size: 40rpx;
+					font-size: px2vw(25px);
 				}
 			}
 		}
 
 		.batch {
 			display: flex;
-			margin: 20rpx;
+			margin: px2vw(15px);
 			align-items: center;
 
 			.batch-text {
-				font-size: 40rpx;
+				font-size: px2vw(25px);
 			}
 
 			.input-box {
-				width: 500rpx;
-				height: 100rpx;
-				border: 2.5rpx solid #5884f1;
-				border-radius: 20rpx;
+				width: px2vw(300px);
+				height: px2vw(80px);
+				border: px2vw(2px) solid #5884f1;
+				border-radius: px2vw(18px);
 				display: flex;
 				align-items: center;
-				padding: 0 40rpx;
-				margin-left: 10rpx;
+				padding: 0 px2vw(30px);
+				margin-left: px2vw(10px);
 
 				input {
-					font-size: 40rpx;
+					font-size: px2vw(25px);
 				}
 			}
 		}
 
 		.productionOrder {
 			display: flex;
-			margin: 20rpx;
+			margin: px2vw(15px);
 			align-items: center;
 
 			.productionOrder-text {
-				font-size: 40rpx;
+				font-size: px2vw(25px);
 			}
 
 			.input-box {
-				width: 500rpx;
-				height: 100rpx;
-				border: 2.5rpx solid #5884f1;
-				border-radius: 12.5rpx;
+				width: px2vw(300px);
+				height: px2vw(80px);
+				border: px2vw(2px) solid #5884f1;
+				border-radius: px2vw(18px);
 				display: flex;
 				align-items: center;
-				padding: 0 40rpx;
-				margin-left: 10rpx;
+				padding: 0 px2vw(30px);
+				margin-left: px2vw(10px);
 
 				input {
-					font-size: 40rpx;
+					font-size: px2vw(25px);
 				}
 			}
 		}
 
 		.orderItem {
 			display: flex;
-			margin: 20rpx;
+			margin: px2vw(15px);
 			align-items: center;
 
 			.orderItem-text {
-				font-size: 40rpx;
+				font-size: px2vw(25px);
 			}
 
 			.input-box {
-				width: 400rpx;
-				height: 100rpx;
-				border: 2.5rpx solid #5884f1;
-				border-radius: 20rpx;
+				width: px2vw(300px);
+				height: px2vw(80px);
+				border: px2vw(2px) solid #5884f1;
+				border-radius: px2vw(18px);
 				display: flex;
 				align-items: center;
-				padding: 0 40rpx;
-				margin-left: 10rpx;
+				padding: 0 px2vw(30px);
+				margin-left: px2vw(10px);
 
 				input {
-					font-size: 40rpx;
+					font-size: px2vw(25px);
 				}
 			}
 		}
 
 		.searchbtn {
-			width: 220rpx;
-			height: 100rpx;
+			width: px2vw(120px);
+			height: px2vw(60px);
 			background-color: #5884f1;
 			color: white;
-			border-radius: 20rpx;
+			border-radius: px2vw(18px);
 			display: flex;
 			align-items: center;
 			justify-content: center;
+			font-size: px2vw(25px);
 		}
 	}
 
@@ -376,9 +377,9 @@ const selectOrder = (orderCode) => {
 		.orderItem {
 			width: 98%;
 			background-color: #fff;
-			border-radius: 20rpx;
-			margin: 20rpx;
-			padding: 20rpx;
+			border-radius: px2vw(18px);
+			margin: px2vw(15px);
+			padding: px2vw(15px);
 			display: flex;
 
 			.goodsInfo {
@@ -394,17 +395,20 @@ const selectOrder = (orderCode) => {
 
 					.orderGoods {
 						display: flex;
-						margin: 0 40rpx;
+						margin: 0 px2vw(30px);
+						font-size: px2vw(25px);
 					}
 
 					.orderCount {
 						display: flex;
-						margin: 0 40rpx;
+						margin: 0 px2vw(30px);
+						font-size: px2vw(25px);
 					}
 
 					.name {
 						display: flex;
-						margin: 0 40rpx;
+						margin: 0 px2vw(30px);
+						font-size: px2vw(25px);
 					}
 				}
 
@@ -414,12 +418,13 @@ const selectOrder = (orderCode) => {
 					justify-content: space-between;
 
 					.model {
-						width: 1000rpx;
+						width: px2vw(800px);
 						display: flex;
-						margin: 40rpx;
+						margin: px2vw(30px);
+						font-size: px2vw(25px);
 
 						.model-text {
-							width: 160rpx;
+							width: px2vw(120px);
 							white-space: nowrap;
 						}
 
@@ -430,7 +435,8 @@ const selectOrder = (orderCode) => {
 
 					.completedProcess {
 						display: flex;
-						margin: 40rpx;
+						margin: px2vw(30px);
+						font-size: px2vw(25px);
 					}
 				}
 
@@ -438,8 +444,8 @@ const selectOrder = (orderCode) => {
 					width: 100%;
 					display: flex;
 					justify-content: center;
-					margin-top: 42.5rpx;
-					padding: 0 42.5rpx;
+					margin-top: px2vw(20px);
+					padding: 0 px2vw(20px);
 				}
 
 				/* 更新进程相关CSS样式，使排列更紧凑 */
@@ -451,7 +457,7 @@ const selectOrder = (orderCode) => {
 					/* 从左往右紧凑排列 */
 					width: 100%;
 					flex-wrap: wrap;
-					gap: 21.25rpx;
+					gap: px2vw(10px);
 					/* 使用gap控制间距 */
 				}
 
@@ -473,8 +479,8 @@ const selectOrder = (orderCode) => {
 				/* 更新进程CSS：增大圆圈并调整横线位置 */
 
 				.progress-circle {
-					width: 162.5rpx;
-					height: 162.5rpx;
+					width: px2vw(120px);
+					height: px2vw(120px);
 					border-radius: 50%;
 					background: conic-gradient(#4CAF50 0%, #4CAF50 var(--percent), #E0E0E0 var(--percent), #E0E0E0 100%);
 					display: flex;
@@ -492,14 +498,14 @@ const selectOrder = (orderCode) => {
 					display: flex;
 					align-items: center;
 					justify-content: center;
-					font-size: 25rpx;
+					font-size: px2vw(20px);
 					/* 增大字体适应大圆 */
 					top: 10%;
 					left: 10%;
 				}
 
 				.progress-text {
-					font-size: 28.75rpx;
+					font-size: px2vw(20px);
 					/* 增大文本 */
 					font-weight: bold;
 					color: #333;
@@ -507,22 +513,22 @@ const selectOrder = (orderCode) => {
 				}
 
 				.process-name {
-					margin-top: 16.25rpx;
+					margin-top: px2vw(10px);
 					/* 略增名称间距适应大圆 */
-					font-size: 28.75rpx;
+					font-size: px2vw(24px);
 					color: #555;
 					text-align: center;
-					max-width: 212.5rpx;
+					max-width: px2vw(150px);
 					word-break: break-word;
 				}
 
 				.connector {
-					width: 42.5rpx;
-					height: 5rpx;
+					width: px2vw(30px);
+					height: px2vw(3px);
 					background-color: #ccc;
-					margin: 0 11.25rpx 0 21.25rpx;
+					margin: 0 px2vw(8px) 0 px2vw(10px);
 					position: relative;
-					top: -21.25rpx;
+					top: px2vw(-10px);
 					/* 往上移20px，靠近圆圈底部 */
 				}
 			}
