@@ -264,7 +264,7 @@ const selectOrder = (orderCode) => {
 			.input-box {
 				width: px2vw(280px);
 				height: px2vw(80px);
-				border: px2vw(2px) solid #5884f1;
+				border: px2vw(3px) solid #5884f1;
 				border-radius: px2vw(18px);
 				display: flex;
 				align-items: center;
@@ -289,7 +289,7 @@ const selectOrder = (orderCode) => {
 			.input-box {
 				width: px2vw(300px);
 				height: px2vw(80px);
-				border: px2vw(2px) solid #5884f1;
+				border: px2vw(3px) solid #5884f1;
 				border-radius: px2vw(18px);
 				display: flex;
 				align-items: center;
@@ -314,7 +314,7 @@ const selectOrder = (orderCode) => {
 			.input-box {
 				width: px2vw(300px);
 				height: px2vw(80px);
-				border: px2vw(2px) solid #5884f1;
+				border: px2vw(3px) solid #5884f1;
 				border-radius: px2vw(18px);
 				display: flex;
 				align-items: center;
@@ -339,7 +339,7 @@ const selectOrder = (orderCode) => {
 			.input-box {
 				width: px2vw(300px);
 				height: px2vw(80px);
-				border: px2vw(2px) solid #5884f1;
+				border: px2vw(3px) solid #5884f1;
 				border-radius: px2vw(18px);
 				display: flex;
 				align-items: center;

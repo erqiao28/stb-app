@@ -1,19 +1,9 @@
 <template>
-	<view class="process-container">
-		<Radiobox 
-			v-model="conserve" 
-			:options="conserveOptions" 
-			title="养护类型" 
-			v-model:visible="showConserveModal"
-			@confirm="handleConserveConfirm" 
-		/>
-		<Radiobox 
-			v-model="workshop" 
-			:options="workshopOptions" 
-			title="车间" 
-			v-model:visible="showWorkshopModal"
-			@confirm="handleWorkshopConfirm" 
-		/>
+	<view class="device-container">
+		<Radiobox v-model="conserve" :options="conserveOptions" title="养护类型" v-model:visible="showConserveModal"
+			@confirm="handleConserveConfirm" />
+		<Radiobox v-model="workshop" :options="workshopOptions" title="车间" v-model:visible="showWorkshopModal"
+			@confirm="handleWorkshopConfirm" />
 		<!-- 导航栏 -->
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="quit"></image>
@@ -195,7 +185,7 @@ const tableData = ref([{
 // 获取设备列表数据
 const getDeviceList = async () => {
 	const filters = []
-	
+
 	// 如果养护类型不是"全部"，添加过滤条件
 	if (conserve.value && conserve.value !== '全部') {
 		filters.push({
@@ -206,7 +196,7 @@ const getDeviceList = async () => {
 			"values": [conserve.value]
 		})
 	}
-	
+
 	// 如果车间不是"全部"，添加过滤条件
 	if (workshop.value && workshop.value !== '全部') {
 		filters.push({
@@ -217,7 +207,7 @@ const getDeviceList = async () => {
 			"values": [workshop.value]
 		})
 	}
-	
+
 	// 如果设备编码输入框有值，添加过滤条件
 	if (device.value && device.value.trim() !== '') {
 		filters.push({
@@ -228,7 +218,7 @@ const getDeviceList = async () => {
 			"values": [device.value.trim()]
 		})
 	}
-	
+
 	const res = await callWorkflowListAPIPaged({
 		worksheetId: 'shebeidangan',
 		filters: filters
@@ -272,18 +262,22 @@ const quit = () => {
 </script>
 
 <style scoped lang="scss">
-.process-container {
+.device-container {
 	height: 100vh;
 	width: 100vw;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
 
 	/* 导航栏 */
 	.header {
-		height: px2vw(120px);
+		height: px2vw(100px);
 		width: 100%;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
 		background-color: #5884f1;
+		flex-shrink: 0;
 
 		image {
 			margin: px2vw(20px);
@@ -303,13 +297,14 @@ const quit = () => {
 		align-items: center;
 
 		.btn-one {
-			height: px2vw(90px);
+			height: px2vw(80px);
 			width: px2vw(170px);
 			display: flex;
 			align-items: center;
 			background-color: white;
 			margin: px2vw(20px);
 			border-radius: px2vw(20px);
+			font-size: px2vw(25px);
 
 			image {
 				height: px2vw(50px);
@@ -325,11 +320,8 @@ const quit = () => {
 		width: 100%;
 		display: flex;
 		align-items: center;
-		padding: px2vw(10px) 0;
-		margin-top: px2vw(10px);
 
 		.btn-item {
-			height: px2vw(80px);
 			margin: px2vw(10px);
 			padding: px2vw(16px) px2vw(25px);
 			border-radius: px2vw(18px);
@@ -337,6 +329,7 @@ const quit = () => {
 			display: flex;
 			align-items: center;
 			border: px2vw(3px) solid #5884f1;
+			font-size: px2vw(25px);
 
 			image {
 				height: px2vw(45px);
@@ -351,7 +344,7 @@ const quit = () => {
 		display: flex;
 		flex-wrap: wrap;
 		width: 100%;
-		margin-top: px2vw(10px);
+		flex-shrink: 0;
 
 		.conserve {
 			margin: 0 px2vw(10px) px2vw(3px) px2vw(10px);
@@ -429,7 +422,7 @@ const quit = () => {
 			}
 
 			.input-box {
-				width: px2vw(400px);
+				width: px2vw(480px);
 				height: px2vw(80px);
 				border: px2vw(3px) solid #5884f1;
 				border-radius: px2vw(18px);
@@ -458,6 +451,10 @@ const quit = () => {
 	/* 表格区域 */
 	.table {
 		margin-top: px2vw(10px);
+		flex: 1;
+		overflow-y: auto;
+		overflow-x: hidden;
+		min-height: 0;
 
 		::v-deep .uni-table {
 			display: flex;
@@ -478,7 +475,7 @@ const quit = () => {
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			font-size: px2vw(30px);
+			font-size: px2vw(29px);
 		}
 
 		::v-deep .table-header-row .table-header-cell {

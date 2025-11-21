@@ -118,7 +118,7 @@ const quit = () => {
 
 	/* 导航栏 */
 	.header {
-		height: px2vw(120px);
+		height: px2vw(100px);
 		width: 100%;
 		display: flex;
 		justify-content: space-between;
@@ -142,14 +142,14 @@ const quit = () => {
 			align-items: center;
 
 			.btn-one {
-				height: px2vw(90px);
+				height: px2vw(80px);
 				width: px2vw(170px);
 				display: flex;
 				align-items: center;
 				background-color: white;
 				margin: px2vw(20px);
 				border-radius: px2vw(18px);
-				font-size: px2vw(30px);
+				font-size: px2vw(25px);
 
 				image {
 					height: px2vw(50px);

@@ -138,7 +138,7 @@
 
 /* 导航栏 */
 .header {
-	height: px2vw(120px);
+	height: px2vw(100px);
 	width: 100%;
 	display: flex;
 	justify-content: space-between;
@@ -163,13 +163,14 @@
 	align-items: center;
 
 	.btn-one {
-		height: px2vw(90px);
+		height: px2vw(80px);
 		width: px2vw(170px);
 		display: flex;
 		align-items: center;
 		background-color: white;
 		margin: px2vw(20px);
 		border-radius: px2vw(20px);
+		font-size: px2vw(25px);
 
 		image {
 			height: px2vw(50px);
@@ -181,13 +182,12 @@
 
 /* 按钮栏 */
 .btn-list {
-	height: px2vw(150px);
+	height: px2vw(100px);
 	width: 100%;
 	display: flex;
 	align-items: center;
 
 	.btn-item {
-		height: px2vw(80px);
 		margin: px2vw(10px);
 		padding: px2vw(16px) px2vw(25px);
 		border-radius: px2vw(18px);
@@ -195,6 +195,7 @@
 		display: flex;
 		align-items: center;
 		border: px2vw(3px) solid #5884f1;
+		font-size: px2vw(25px);
 
 		image {
 			height: px2vw(45px);
@@ -253,7 +254,7 @@
 		}
 	
 		.input-box {
-			width: px2vw(400px);
+			width: px2vw(430px);
 			height: px2vw(80px);
 			border: px2vw(3px) solid #5884f1;
 			border-radius: px2vw(18px);
@@ -278,7 +279,7 @@
 		}
 
 		.input-box {
-			width: px2vw(400px);
+			width: px2vw(520px);
 			height: px2vw(80px);
 			border: px2vw(3px) solid #5884f1;
 			border-radius: px2vw(18px);

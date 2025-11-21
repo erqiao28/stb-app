@@ -340,13 +340,13 @@ const selectedEmployeesForAdd = ref([])  // 选中的员工ID数组
 const allEmployeesOptions = ref([])  // 所有员工选项（用于添加员工模态框）
 const allEmployeesMap = ref({})  // 所有员工的完整信息映射（id -> employee对象）
 
-// 加载员工列表
+// 加载员工列表（仅用于添加员工模态框的可选项，不更新工序派工模态框的employeeList）
 const loadEmployees = async () => {
   try {
     const res = await callWorkflowListAPIPaged({
-      worksheetId: 'employee',  // 假设员工worksheetId，根据实际调整
+      worksheetId: 'ygxx',  // 假设员工worksheetId，根据实际调整
       filters: [{
-        "controlId": "67ac0a87d6566fd9d09a2340",  // 车间过滤
+        "controlId": "66bb042e3f78a8b841f22d72",  // 车间过滤
         "dataType": 30,
         "spliceType": 1,
         "filterType": 2,
@@ -355,13 +355,13 @@ const loadEmployees = async () => {
     })
     if (res.data && res.data.length > 0) {
       const mappedEmployees = res.data.map(item => ({
-        id: item['employeeIdControlId'] || '',  // 假设ID字段
-        name: item['nameControlId'] || '',  // 姓名字段
-        unrecordedHours: item['hoursControlId'] || 0  // 已派未记时数量字段，替换实际controlId
+        id: item['6695ddd72503723eec1aa785'] || '',  // 假设ID字段
+        name: item['6695dc2a2503723eec1aa766'] || '',  // 姓名字段
+        unrecordedHours: item['692022a90c1b215c94b55656'] || 0  // 已派未记时数量字段，替换实际controlId
       })).filter(emp => emp.id)
       
-      employeeList.value = mappedEmployees
-      // 同时设置所有员工选项（用于添加员工模态框）
+      // 只更新添加员工模态框的选项，不更新工序派工模态框的employeeList
+      // employeeList 应该初始为空，只有通过"添加员工"按钮添加的员工才会显示
       allEmployeesOptions.value = mappedEmployees.map(emp => ({
         label: emp.name,
         value: emp.id
@@ -391,7 +391,8 @@ const openProcessModal = (item, process) => {
     mold: ''
   }
   selectedEmployee.value = ''  // 重置选中员工
-  loadEmployees()  // 加载员工列表
+  employeeList.value = []  // 清空员工列表，只有通过"添加员工"按钮添加的员工才会显示
+  loadEmployees()  // 加载员工选项（用于添加员工模态框），不更新employeeList
   showProcessModal.value = true
 }
 
@@ -444,13 +445,15 @@ const confirmProcessDispatch = () => {
 }
 
 // 新增：添加员工按钮处理
-const addEmployee = () => {
-  // 先打开模态框
+const addEmployee = async () => {
+  // 确保员工数据已加载
+  if (allEmployeesOptions.value.length === 0) {
+    await loadEmployees()
+  }
+  // 重置选中的员工
+  selectedEmployeesForAdd.value = []
+  // 打开模态框
   showAddEmployeeModal.value = true
-  // 延迟重置选中的员工，避免触发不必要的更新
-  setTimeout(() => {
-    selectedEmployeesForAdd.value = []
-  }, 0)
 }
 
 // 处理添加员工模态框关闭
@@ -459,10 +462,15 @@ const handleAddEmployeeModalClose = (value) => {
 }
 
 // 处理添加员工确认
-const handleAddEmployeeConfirm = (selectedIds) => {
+const handleAddEmployeeConfirm = async (selectedIds) => {
   if (!selectedIds || selectedIds.length === 0) {
     uni.showToast({ title: '请至少选择一个员工', icon: 'none' })
     return
+  }
+  
+  // 确保员工数据已加载
+  if (Object.keys(allEmployeesMap.value).length === 0) {
+    await loadEmployees()
   }
   
   let addedCount = 0
@@ -479,30 +487,29 @@ const handleAddEmployeeConfirm = (selectedIds) => {
           unrecordedHours: fullEmployee.unrecordedHours || 0
         })
         addedCount++
+      } else {
+        // 如果映射中没有，尝试从 allEmployeesOptions 中查找
+        const option = allEmployeesOptions.value.find(opt => opt.value === id)
+        if (option) {
+          employeeList.value.push({
+            id: option.value,
+            name: option.label,
+            unrecordedHours: 0
+          })
+          addedCount++
+        }
       }
     }
   })
+  
+  // 关闭模态框
+  showAddEmployeeModal.value = false
   
   if (addedCount > 0) {
     uni.showToast({ title: `已添加 ${addedCount} 名员工`, icon: 'success' })
   } else {
     uni.showToast({ title: '所选员工已存在', icon: 'none' })
   }
-}
-
-// 获取员工列表
-const getEmployeeList = async () => {
-  const res = await callWorkflowListAPIPaged({
-    worksheetId: 'employee',
-    filters: [{
-      "controlId": "67ac0a87d6566fd9d09a2340",
-      "dataType": 30,
-      "spliceType": 1,
-      "filterType": 2,
-      "values": [workshop.value]
-    }]
-  })
-  return res
 }
 
 // 新增：工单明细按钮处理
@@ -518,6 +525,9 @@ const closeProcessModal = () => {
   processDispatchData.value = { employee: '', quantity: 1, time: 1, machine: '', mold: '' }  // 改为time:1
   machine.value = null
   mold.value = null
+  // 清空员工表格数据
+  employeeList.value = []
+  selectedEmployee.value = ''
 }
 
 const getProcessRaw = async (searchVal = '') => {
@@ -766,7 +776,7 @@ const quit = () => {
 
   /* 导航栏样式 */
   .header {
-    height: px2vw(120px);
+    height: px2vw(100px);
     width: 100%;
     display: flex;
     justify-content: space-between;
@@ -790,12 +800,13 @@ const quit = () => {
       align-items: center;
 
       .btn-one {
-        height: px2vw(90px);
+        height: px2vw(80px);
         width: px2vw(170px);
         display: flex;
         align-items: center;
         background-color: white;
         margin: px2vw(20px);
+        font-size: px2vw(25px);
         border-radius: px2vw(20px);
 
         image {
@@ -827,6 +838,7 @@ const quit = () => {
       display: flex;
       align-items: center;
       background-color: #2755f1;
+      font-size: px2vw(25px);
     }
   }
 
@@ -883,6 +895,7 @@ const quit = () => {
       display: flex;
       align-items: center;
       background-color: #2755f1;
+      font-size: px2vw(25px);
     }
   }
 

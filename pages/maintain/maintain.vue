@@ -147,7 +147,7 @@ const quit = () => {
 
 	/* 导航栏 */
 	.header {
-		height: px2vw(120px);
+		height: px2vw(100px);
 		width: 100%;
 		display: flex;
 		justify-content: space-between;
@@ -158,21 +158,6 @@ const quit = () => {
 			margin: px2vw(20px);
 			height: px2vw(60px);
 			width: px2vw(60px);
-		}
-
-		::v-deep .workshop picker {
-			width: 100%;
-		}
-
-		::v-deep .uni-picker-container {
-			display: flex !important;
-			justify-content: center;
-		}
-
-		::v-deep .uni-picker-container .uni-picker {
-			width: min(#{px2vw(650px)}, 90vw) !important;
-			left: 50% !important;
-			transform: translateX(-50%) !important;
 		}
 
 		.title {
@@ -186,13 +171,14 @@ const quit = () => {
 			align-items: center;
 
 			.btn-one {
-				height: px2vw(90px);
+				height: px2vw(80px);
 				width: px2vw(170px);
 				display: flex;
 				align-items: center;
 				background-color: white;
 				margin: px2vw(20px);
 				border-radius: px2vw(20px);
+				font-size: px2vw(25px);
 
 				image {
 					height: px2vw(50px);
@@ -205,28 +191,28 @@ const quit = () => {
 
 	/* 按钮栏 */
 	.btn-list {
-		height: px2vw(150px);
-		width: 100%;
+	height: px2vw(100px);
+	width: 100%;
+	display: flex;
+	align-items: center;
+
+	.btn-item {
+		margin: px2vw(10px);
+		padding: px2vw(16px) px2vw(25px);
+		border-radius: px2vw(18px);
+		color: #5884f1;
 		display: flex;
 		align-items: center;
+		border: px2vw(3px) solid #5884f1;
+		font-size: px2vw(25px);
 
-		.btn-item {
-			height: px2vw(80px);
-			margin: px2vw(10px);
-			padding: px2vw(16px) px2vw(25px);
-			border-radius: px2vw(18px);
-			color: #5884f1;
-			display: flex;
-			align-items: center;
-			border: px2vw(3px) solid #5884f1;
-
-			image {
-				height: px2vw(45px);
-				width: px2vw(45px);
-				margin-right: px2vw(28px);
-			}
+		image {
+			height: px2vw(45px);
+			width: px2vw(45px);
+			margin-right: px2vw(28px);
 		}
 	}
+}
 
 	/* 搜索区域 */
 	.search-box {
@@ -245,7 +231,7 @@ const quit = () => {
 			}
 
 			.picker-box {
-				width: px2vw(500px);
+				width: px2vw(750px);
 				height: px2vw(80px);
 				border: px2vw(3px) solid #5884f1;
 				border-radius: px2vw(18px);
@@ -277,7 +263,7 @@ const quit = () => {
 			}
 
 			.input-box {
-				width: px2vw(400px);
+				width: px2vw(890px);
 				height: px2vw(80px);
 				border: px2vw(3px) solid #5884f1;
 				border-radius: px2vw(18px);

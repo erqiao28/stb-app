@@ -24,16 +24,24 @@
 			</view>
 		</view>
 		<!-- 按钮栏 -->
-		<view class="btn-list">
-			<view v-for="item in btnlist">
-				<view class="btn-item">
-					<image :src="item.btnicon" mode=""></image>
-					<view class="btn-text">
-						{{ item.btnname }}
+		<scroll-view 
+			scroll-x="true" 
+			show-scrollbar="false" 
+			enable-flex="true"
+			class="btn-list"
+			:enable-passive="true"
+			:scroll-with-animation="false">
+			<view class="btn-list-inner">
+				<view v-for="item in btnlist" :key="item.btnname" class="btn-item-wrapper">
+					<view class="btn-item">
+						<image :src="item.btnicon" mode=""></image>
+						<view class="btn-text">
+							{{ item.btnname }}
+						</view>
 					</view>
 				</view>
 			</view>
-		</view>
+		</scroll-view>
 		<!-- 搜索区域 -->
 		<view class="search-box">
 			<view class="name">
@@ -196,7 +204,7 @@ const tableData = ref([
 
 /* 导航栏 */
 .header {
-	height: px2vw(120px);
+	height: px2vw(100px);
 	width: 100%;
 	display: flex;
 	justify-content: space-between;
@@ -220,13 +228,14 @@ const tableData = ref([
 		align-items: center;
 
 		.btn-one {
-			height: px2vw(90px);
+			height: px2vw(80px);
 			width: px2vw(170px);
 			display: flex;
 			align-items: center;
 			background-color: white;
 			margin: px2vw(20px);
 			border-radius: px2vw(20px);
+			font-size: px2vw(25px);
 
 			image {
 				height: px2vw(50px);
@@ -239,10 +248,26 @@ const tableData = ref([
 
 /* 按钮栏 */
 .btn-list {
-	height: px2vw(150px);
+	height: px2vw(120px);
 	width: 100%;
-	display: flex;
-	align-items: center;
+	white-space: nowrap;
+	/* scroll-view 会自动处理滚动，不需要 overflow 属性 */
+	-webkit-overflow-scrolling: touch;
+	touch-action: pan-x;
+
+	.btn-list-inner {
+		display: inline-flex;
+		align-items: center;
+		height: 100%;
+		white-space: nowrap;
+		min-width: max-content;
+	}
+
+	.btn-item-wrapper {
+		display: inline-block;
+		vertical-align: middle;
+		flex-shrink: 0;
+	}
 
 	.btn-item {
 		height: px2vw(80px);
@@ -250,14 +275,20 @@ const tableData = ref([
 		padding: px2vw(16px) px2vw(25px);
 		border-radius: px2vw(18px);
 		color: #5884f1;
-		display: flex;
+		display: inline-flex;
 		align-items: center;
 		border: px2vw(3px) solid #5884f1;
+		font-size: px2vw(25px);
+		white-space: nowrap;
+		flex-shrink: 0;
+		width: auto;
+		touch-action: manipulation;
 
 		image {
 			height: px2vw(45px);
 			width: px2vw(45px);
 			margin-right: px2vw(28px);
+			flex-shrink: 0;
 		}
 	}
 }
@@ -350,7 +381,7 @@ const tableData = ref([
 		}
 
 		.input-box {
-			width: px2vw(400px);
+			width: px2vw(420px);
 			height: px2vw(80px);
 			border: px2vw(3px) solid #5884f1;
 			border-radius: px2vw(18px);

@@ -223,7 +223,7 @@ const quit = () => {
 }
 
 .header {
-	height: px2vw(120px);
+	height: px2vw(100px);
 	width: 100%;
 	display: flex;
 	justify-content: space-between;
