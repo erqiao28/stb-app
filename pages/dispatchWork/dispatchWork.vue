@@ -98,11 +98,11 @@
     <view class="header">
       <image src="/static/left-arrow.svg" @click="quit"></image>
       <view class="title">
-        派工( {{ userStore.loginName }} )
+        派工( {{ userStore?.loginName || '' }} )
       </view>
 
       <view class="btn-box">
-        <view class="btn-one" @click="userStore.logout()">
+        <view class="btn-one" @click="userStore?.logout()">
           <image src="/static/Quit.svg"></image>
           <text>切换</text>
         </view>
@@ -148,8 +148,8 @@
     </view>
 
     <!-- 单据列表 -->
-    <view class="orderList">
-      <view class="orderItem" v-for="item in billsList">
+    <view class="orderList" :key="listKey">
+      <view class="orderItem" v-for="item in billsList" :key="item.orderCode">
         <view class="goodsInfo">
           <view class="goodsInfo-up">
             <view class="orderGoods">
@@ -176,9 +176,9 @@
               <view>{{ item.name }}</view>
             </view>
           </view>
-          <view class="processes-section" v-if="item.processes && item.processes.length > 0">
-            <view class="processes-container">
-              <view v-for="(process, index) in item.processes" :key="index" class="process-wrapper">
+          <view class="processes-section" v-if="item.processes && item.processes.length > 0" :key="`processes-${item.orderCode}-${listKey}`">
+            <view class="processes-container" :key="`container-${item.orderCode}-${listKey}`">
+              <view v-for="(process, index) in item.processes" :key="`${item.orderCode}-${process.processName}-${index}-${listKey}`" class="process-wrapper">
                 <view class="process-item">
                   <view class="progress-circle"
                     :style="{ '--percent': Math.round((process.finishCount / process.needCount) * 100) + '%' }"
@@ -206,7 +206,9 @@
 import {
   ref,
   computed,
-  watch
+  watch,
+  onMounted,
+  nextTick
 } from 'vue'
 import Radiobox from "../../component/radiobox/radiobox.vue";
 import MachineRadiobox from "../../component/machineRadiobox/machineRadiobox.vue";
@@ -315,6 +317,7 @@ const getMoldList = async () => {
 const searchValue = ref('')  // 搜索输入值
 const billsList = ref([])  // 单据列表
 const processList = ref([])  // 工序列表
+const listKey = ref(0)  // 用于强制重新渲染的key
 
 
 // 新增：工序模态状态
@@ -566,43 +569,61 @@ const getBillsListRaw = async (searchVal = '') => {
 }
 
 const search = async () => {
+  console.log('search 函数被调用，searchValue:', searchValue.value)
   if (!searchValue.value || !searchValue.value.trim()) {
     billsList.value = []
     processList.value = []
     return
   }
+  console.log('search 开始请求数据')
   const [billsRes, processRes] = await Promise.all([getBillsListRaw(searchValue.value), getProcessRaw(searchValue.value)])
 
-  processList.value = processRes.data.map(item => {
-    return {
-      processName: item['656ffd1bba5ef3863bf3ec1e'],
-      needCount: item['68099ac75d6fc47331574e82'],
-      finishCount: item['669b71152503723eec1b52d7'],
-      processOrder: item['6593b07ae97eb866a50eeba1']
-    }
-  })
-  console.log('ProcessList:', processList.value)  // 调试工序列表
+  // 使用新数组确保 Vue 检测到变化
+  const newProcessList = processRes.data.map(item => ({
+    processName: item['656ffd1bba5ef3863bf3ec1e'],
+    needCount: item['68099ac75d6fc47331574e82'],
+    finishCount: item['669b71152503723eec1b52d7'],
+    processOrder: item['6593b07ae97eb866a50eeba1']
+  }))
+  // 直接赋值新数组，确保引用完全改变
+  processList.value = newProcessList.map(item => ({ ...item }))
+  console.log('search 获取到的工序列表:', processList.value.length, '条')
 
   if (billsRes.data.length === 0) {
     billsList.value = []
     return
   }
 
-  billsList.value = billsRes.data.map(item => {
+  const newBillsList = billsRes.data.map(item => {
     const orderGoods = item['691c47ee1c02c451c72a81c5']  // 新订单物品 ID
     const orderCode = item['655e1cbbbd2094b316347f92']  // 订单编码 (旧 ID)
+    // 使用最新的 processList.value 来过滤工序
     const processes = processList.value.filter(p => p.processOrder === orderCode)  // 关联基于 orderCode (旧 ID)
-    console.log('Processes for order:', orderCode, processes)  // 调试关联工序
     return {
       orderGoods,
       orderCount: item['681b0b53b139204fd264c5fd'],
       name: item['691c247e1c02c451c72a6169'],
       completedProcess: processes.length > 0 ? `${processes.filter(p => p.finishCount === p.needCount).length}/${processes.length}` : '0',
       productCode: item['691d6336535b29cbd5c6c0ca'],
-      processes,
+      processes: processes.map(p => ({ ...p })),  // 深拷贝每个process对象
       orderCode
     }
   })
+  // 完全重新创建数组和对象，确保所有引用都是新的
+  billsList.value = []
+  await nextTick()
+  billsList.value = newBillsList.map(item => ({
+    ...item,
+    processes: item.processes.map(p => ({ ...p }))
+  }))
+  // 更新key强制重新渲染
+  listKey.value = Date.now()
+  await nextTick()
+  console.log('search 获取到的单据列表:', billsList.value.length, '条')
+  console.log('search 完成，数据已更新')
+  console.log('billsList 第一个项的 processes 数量:', billsList.value[0]?.processes?.length)
+  console.log('billsList 第一个项的 processes:', JSON.stringify(billsList.value[0]?.processes))
+  console.log('listKey 已更新为:', listKey.value)
 }
 
 // 添加工序
@@ -613,10 +634,24 @@ const addProcess = async (item) => {
 }
 
 // 刷新全部数据
-const loadAllData = async () => {
-  console.log('刷新全部数据...')
-  await search() // 刷新单据列表
-  await getProcessRaw(searchValue.value) // 刷新工序列表
+const loadAllData = async (retryCount = 0) => {
+  console.log('loadAllData 被调用，searchValue:', searchValue.value, 'retryCount:', retryCount)
+  if (!searchValue.value || !searchValue.value.trim()) {
+    billsList.value = []
+    processList.value = []
+    return
+  }
+  console.log('loadAllData 开始刷新数据')
+  await search() // search 函数内部已经同时获取了单据列表和工序列表
+  console.log('loadAllData 刷新完成')
+  
+  // 如果数据可能不完整，可以重试一次（最多重试1次）
+  if (retryCount === 0) {
+    setTimeout(async () => {
+      console.log('loadAllData 延迟重试获取数据')
+      await search()
+    }, 1000)  // 1秒后再次获取，确保数据已同步
+  }
 }
 
 // 在 script setup 中添加 computed
@@ -649,19 +684,17 @@ const validateTime = (e) => {
   }
 }
 
-onShow(() => {
-  console.log('onShow 触发，返回刷新')
-  loadAllData()  // 总是加载全部最新数据
+// 页面挂载时注册事件监听器（只注册一次）
+onLoad(() => {
+  // 监听选择单据事件
   uni.$on('selectOrder', (order) => {
     searchValue.value = order
-    search()
   })
-  // 新增：监听添加工序事件
+  // 监听添加工序事件（保留事件监听，但刷新由 onShow 处理）
   uni.$on('processAdded', (data) => {
-    console.log('收到 processAdded 事件:', data)
-    loadAllData()  // 刷新全部，包含新工序
+    // 事件已接收，刷新由 onShow 处理
   })
-  // 新增：监听清空派工数据事件
+  // 监听清空派工数据事件
   uni.$on('clearDispatchData', () => {
     searchValue.value = ''
     billsList.value = []
@@ -669,9 +702,24 @@ onShow(() => {
   })
 })
 
+// 页面显示时刷新数据（从其他页面返回时）
+onShow(() => {
+  console.log('onShow 触发，searchValue:', searchValue.value)
+  // 每次显示页面时，如果有搜索值则刷新数据
+  if (searchValue.value && searchValue.value.trim()) {
+    console.log('onShow 触发刷新数据')
+    // 延迟一下，确保后端数据已同步
+    setTimeout(() => {
+      loadAllData(0)  // 传入retryCount=0，会触发一次延迟重试
+    }, 500)  // 延迟500ms再获取数据
+  } else {
+    console.log('onShow 触发，但 searchValue 为空，不刷新')
+  }
+})
+
 onUnload(() => {
   uni.$off('selectOrder')  // 清理事件监听
-  uni.$off('processAdded')  // 新增：清理事件监听
+  uni.$off('processAdded')  // 清理事件监听
   uni.$off('clearDispatchData')  // 清理清空事件监听
 })
 
