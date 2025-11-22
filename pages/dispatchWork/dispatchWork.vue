@@ -49,8 +49,8 @@
             </view>
             <view class="form-group">
               <text class="label">本次派工时数：</text>
-              <input v-model.number="processDispatchData.time" type="number" placeholder="请输入时数" min="0.1"
-                class="input-field" @input="validateTime" />
+              <input v-model.number="processDispatchData.time" type="number" placeholder="请输入时数" 
+                class="input-field" disabled />
             </view>
           </view>
           <!-- 新增：机台和模具选择行 -->
@@ -76,15 +76,15 @@
             <view class="col name">姓名</view>
             <view class="col hours">已派未记时数量</view>
           </view>
-          <radio-group v-model="selectedEmployee" class="employee-table">
+          <checkbox-group @change="onEmployeeCheckboxChange" class="employee-table">
             <label v-for="emp in employeeList" :key="emp.id" class="table-row">
               <view class="col selected">
-                <radio :value="emp.id" />
+                <checkbox :value="emp.id" :checked="isEmployeeSelected(emp.id)" />
               </view>
               <view class="col name">{{ emp.name }}</view>
               <view class="col hours">{{ emp.unrecordedHours }} 时</view>
             </label>
-          </radio-group>
+          </checkbox-group>
         </view>
         <view class="modal-footer">
           <button class="btn-cancel" @click="closeProcessModal">取消</button>
@@ -210,6 +210,7 @@ import {
   onMounted,
   nextTick
 } from 'vue'
+import http from '../../utils/request'
 import Radiobox from "../../component/radiobox/radiobox.vue";
 import MachineRadiobox from "../../component/machineRadiobox/machineRadiobox.vue";
 import AddWorkerRadiobox from "../../component/addWorkerRadiobox/addWorkerRadiobox.vue";
@@ -332,7 +333,7 @@ const processDispatchData = ref({
 })
 
 const employeeList = ref([])  // 员工列表
-const selectedEmployee = ref('')  // 选中员工ID
+const selectedEmployee = ref([])  // 选中员工ID数组（多选）
 
 // 添加员工模态框相关状态
 const showAddEmployeeModal = ref(false)
@@ -344,9 +345,9 @@ const allEmployeesMap = ref({})  // 所有员工的完整信息映射（id -> em
 const loadEmployees = async () => {
   try {
     const res = await callWorkflowListAPIPaged({
-      worksheetId: 'ygxx',  // 假设员工worksheetId，根据实际调整
+      worksheetId: 'yggs',  // 假设员工worksheetId，根据实际调整
       filters: [{
-        "controlId": "66bb042e3f78a8b841f22d72",  // 车间过滤
+        "controlId": "6921131b21066a9f124f5cec",  // 车间过滤
         "dataType": 30,
         "spliceType": 1,
         "filterType": 2,
@@ -355,9 +356,9 @@ const loadEmployees = async () => {
     })
     if (res.data && res.data.length > 0) {
       const mappedEmployees = res.data.map(item => ({
-        id: item['6695ddd72503723eec1aa785'] || '',  // 假设ID字段
-        name: item['6695dc2a2503723eec1aa766'] || '',  // 姓名字段
-        unrecordedHours: item['692022a90c1b215c94b55656'] || 0  // 已派未记时数量字段，替换实际controlId
+        id: item['692113fb21066a9f124f5fe2'] || '',  // 假设ID字段
+        name: item['692112b021066a9f124f5ca0'] || '',  // 姓名字段
+        unrecordedHours: item['6921135b21066a9f124f5f79'] || 0  // 已派未记时数量字段，替换实际controlId
       })).filter(emp => emp.id)
       
       // 只更新添加员工模态框的选项，不更新工序派工模态框的employeeList
@@ -386,18 +387,18 @@ const openProcessModal = (item, process) => {
   processDispatchData.value = {
     employee: '',
     quantity: 1,
-    time: 1,  // 改为1
+    time: process?.worktime || 0,  // 从工序数据中获取工时
     machine: '',
     mold: ''
   }
-  selectedEmployee.value = ''  // 重置选中员工
+  selectedEmployee.value = []  // 重置选中员工数组
   employeeList.value = []  // 清空员工列表，只有通过"添加员工"按钮添加的员工才会显示
   loadEmployees()  // 加载员工选项（用于添加员工模态框），不更新employeeList
   showProcessModal.value = true
 }
 
 // 确认派工，添加员工验证和dispatchData
-const confirmProcessDispatch = () => {
+const confirmProcessDispatch = async () => {
   if (!processDispatchData.value.quantity || processDispatchData.value.quantity <= 0) {
     uni.showToast({ title: '请填写有效的派工数量 (>0)', icon: 'none' })
     return
@@ -414,34 +415,47 @@ const confirmProcessDispatch = () => {
     uni.showToast({ title: '请选择模具', icon: 'none' })
     return
   }
-  if (!selectedEmployee.value) {
-    uni.showToast({ title: '请选择员工', icon: 'none' })
+  if (!selectedEmployee.value || selectedEmployee.value.length === 0) {
+    uni.showToast({ title: '请至少选择一个员工', icon: 'none' })
     return
   }
 
-  processDispatchData.value.employee = employeeList.value.find(emp => emp.id === selectedEmployee.value)?.name || ''  // 设置员工名称
+  // 获取所有选中员工的完整数据
+  const selectedEmployees = employeeList.value.filter(emp => selectedEmployee.value.includes(emp.id))
+  
+  // 获取所有选中员工的名称（多个员工用顿号分隔）
+  const selectedEmployeeNames = selectedEmployees.map(emp => emp.name).join('、')
+  processDispatchData.value.employee = selectedEmployeeNames  // 设置员工名称（多个用顿号分隔）
 
-  // 单独创建工序派工模态框的8个核心数据对象
+  // 单独创建工序派工模态框的核心数据对象
   const dispatchData = {
+    productCode: selectedProcessData.value?.item?.productCode || '',  // 生产编码
     orderCode: selectedProcessData.value?.item?.orderCode || '',  // 订单编号
     processName: selectedProcessData.value?.process?.processName || '',  // 工序
     finishCount: selectedProcessData.value?.process?.finishCount || 0,  // 已派工数量
     needCount: selectedProcessData.value?.process?.needCount || 0,  // 待派工数量
     quantity: processDispatchData.value.quantity,  // 本次派工数量
     time: processDispatchData.value.time,  // 本次派工时数
-    employee: processDispatchData.value.employee,  // 员工（新增）
+    employee: processDispatchData.value.employee,  // 员工名称（多个用顿号分隔）
+    employees: selectedEmployees,  // 选中的员工完整数据数组
     machine: machine.value?.name || '',  // 机台（名称）
-    mold: mold.value?.name || ''  // 模具（名称）
+    mold: mold.value?.name || '', // 模具（名称）
+    workshop: workshop.value || '' // 车间
   }
 
-  // 打印9个核心数据（添加员工）
+  // 打印所有数据（包括选中的员工数据）
   console.log('工序派工模态框的数据:', dispatchData)
+  console.log('选中的员工数据:', selectedEmployees)
 
-  // TODO: 调用 API 保存派工，例如 uni.request({ url: '/api/process-dispatch', data: dispatchData })
-  uni.showToast({ title: '派工成功' })
-  showProcessModal.value = false
-  // 刷新列表以更新工序进度
-  search()
+  const res = await http.post('/api/workflow/hooks/NjkyMTJlNzdhOWE4ZGM2YmMxZjczYzlk', dispatchData)
+  if (res.status === 1) {
+    uni.showToast({ title: '派工成功' })
+    showProcessModal.value = false
+    // 刷新列表以更新工序进度
+    search()
+  } else {
+    uni.showToast({ title: res.message })
+  }
 }
 
 // 新增：添加员工按钮处理
@@ -474,6 +488,8 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
   }
   
   let addedCount = 0
+  let firstAddedId = null  // 记录第一个添加的员工ID
+  
   // 将选中的员工添加到员工列表中（如果不存在）
   selectedIds.forEach(id => {
     const exists = employeeList.value.find(emp => emp.id === id)
@@ -486,6 +502,9 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
           name: fullEmployee.name,
           unrecordedHours: fullEmployee.unrecordedHours || 0
         })
+        if (addedCount === 0) {
+          firstAddedId = fullEmployee.id  // 记录第一个添加的员工ID
+        }
         addedCount++
       } else {
         // 如果映射中没有，尝试从 allEmployeesOptions 中查找
@@ -496,6 +515,9 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
             name: option.label,
             unrecordedHours: 0
           })
+          if (addedCount === 0) {
+            firstAddedId = option.value  // 记录第一个添加的员工ID
+          }
           addedCount++
         }
       }
@@ -505,11 +527,28 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
   // 关闭模态框
   showAddEmployeeModal.value = false
   
+  // 将选中的员工ID添加到选中数组中（如果还没有被选中）
+  selectedIds.forEach(id => {
+    if (!selectedEmployee.value.includes(id)) {
+      selectedEmployee.value.push(id)
+    }
+  })
+  
   if (addedCount > 0) {
     uni.showToast({ title: `已添加 ${addedCount} 名员工`, icon: 'success' })
   } else {
     uni.showToast({ title: '所选员工已存在', icon: 'none' })
   }
+}
+
+// 检查员工是否被选中
+const isEmployeeSelected = (employeeId) => {
+  return selectedEmployee.value.includes(employeeId)
+}
+
+// 处理员工checkbox变化事件
+const onEmployeeCheckboxChange = (e) => {
+  selectedEmployee.value = e.detail.value || []
 }
 
 // 新增：工单明细按钮处理
@@ -527,7 +566,7 @@ const closeProcessModal = () => {
   mold.value = null
   // 清空员工表格数据
   employeeList.value = []
-  selectedEmployee.value = ''
+  selectedEmployee.value = []
 }
 
 const getProcessRaw = async (searchVal = '') => {
@@ -593,7 +632,8 @@ const search = async () => {
     processName: item['656ffd1bba5ef3863bf3ec1e'],
     needCount: item['68099ac75d6fc47331574e82'],
     finishCount: item['669b71152503723eec1b52d7'],
-    processOrder: item['6593b07ae97eb866a50eeba1']
+    processOrder: item['6593b07ae97eb866a50eeba1'],
+    worktime: item['69211dac21066a9f124f62df']
   }))
   // 直接赋值新数组，确保引用完全改变
   processList.value = newProcessList.map(item => ({ ...item }))
@@ -680,19 +720,7 @@ watch(() => processDispatchData.value.quantity, (newVal) => {
   }
 })
 
-watch(() => processDispatchData.value.time, (newVal) => {
-  if (newVal <= 0) {
-    uni.showToast({ title: '时数必须大于0', icon: 'none' })
-    processDispatchData.value.time = 1
-  }
-})
-
-const validateTime = (e) => {
-  const value = parseFloat(e.detail.value) || 0
-  if (value <= 0) {
-    processDispatchData.value.time = 1
-  }
-}
+// 时数从工序数据中获取，不需要 watch 监听
 
 // 页面挂载时注册事件监听器（只注册一次）
 onLoad(() => {
