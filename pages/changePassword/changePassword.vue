@@ -111,38 +111,39 @@
 	}
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .changePassword-conainer {
 	background-color: #3556e3;
 	width: 100vw;
 	height: 100vh;
 	display: flex;
+	box-sizing: border-box;
 
 	.middle-container {
-		width: 2000rpx;
-		height: 300rpx;
-		margin: 450rpx 0 0 520rpx;
+		width: px2vw(1000px);
+		height: px2vw(300px);
+		margin: px2vw(400px) 0 0 px2vw(500px);
 
 		.input-box {
-			width: 2000rpx;
-			height: 150rpx;
-			border: 4rpx solid #fff;
-			border-radius: 75rpx;
-			margin: 18.75rpx 0;
+			width: px2vw(1000px);
+			height: px2vw(150px);
+			border: px2vw(4px) solid #fff;
+			border-radius: px2vw(75px);
+			margin: px2vw(20px) 0;
 			display: flex;
 			align-items: center;
-			padding: 0 37.5rpx;
+			padding: 0 px2vw(40px);
 
 			image {
-				height: 50rpx;
-				width: 50rpx;
+				height: px2vw(50px);
+				width: px2vw(50px);
 			}
 
 			input {
-				margin: 0 25rpx;
-				font-size: 50rpx;
+				margin: 0 px2vw(25px);
+				font-size: px2vw(50px);
 				color: white;
-				width: 2000rpx;
+				width: px2vw(850px);
 			}
 
 			input::-webkit-input-placeholder {
@@ -167,36 +168,37 @@
 		}
 
 		button {
-			width: 2000rpx;
-			height: 130rpx;
-			border: 2.5rpx solid #fff;
-			border-radius: 62.5rpx;
-			margin: 18.75rpx 0;
+			width: px2vw(1000px);
+			height: px2vw(130px);
+			border: px2vw(3px) solid #fff;
+			border-radius: px2vw(65px);
+			margin: px2vw(20px) 0;
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			font-size: 50rpx;
+			font-size: px2vw(50px);
 			color: #3556e3;
+			background-color: #e0e0e0;
 		}
 	}
 
 	.return-btn {
 		position: absolute;
 		background-color: white;
-		border-radius: 25rpx;
-		top: 25rpx;
-		right: 25rpx;
-		height: 100rpx;
-		width: 300rpx;
+		border-radius: px2vw(25px);
+		top: px2vw(25px);
+		right: px2vw(25px);
+		height: px2vw(100px);
+		width: px2vw(300px);
 		display: flex;
 		align-items: center;
-		padding: 0 12.5rpx;
-		font-size: 40rpx;
+		padding: 0 px2vw(15px);
+		font-size: px2vw(40px);
 
 		image {
-			height: 100rpx;
-			width: 70rpx;
-			margin: 0 20rpx;
+			height: px2vw(100px);
+			width: px2vw(70px);
+			margin: 0 px2vw(20px);
 		}
 	}
 }
