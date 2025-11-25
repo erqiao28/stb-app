@@ -1,5 +1,5 @@
 <template>
-	<view class="device-container">
+	<view class="device-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<Radiobox v-model="conserve" :options="conserveOptions" title="养护类型" v-model:visible="showConserveModal"
 			@confirm="handleConserveConfirm" />
 		<Radiobox v-model="workshop" :options="workshopOptions" title="车间" v-model:visible="showWorkshopModal"
@@ -98,8 +98,9 @@ import {
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import Radiobox from '../../component/radiobox/radiobox.vue'
 import { useUserStore } from '../../store/user.store'
+import { useStatusBar } from '../../composables/useStatusBar'
 const userStore = useUserStore()
-
+const { statusBarHeight } = useStatusBar()
 // 按钮功能映射
 const buttonFunctions = {
 	refresh: () => {

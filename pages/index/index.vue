@@ -1,5 +1,5 @@
 <template>
-	<view class="content-container">
+	<view class="content-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<!-- 用户列表 -->
 		<view class="user-list" v-if="isUserlist">
 			<view class="user-item" v-for="item in userStore.userlist">
@@ -58,6 +58,10 @@ import http, {
 import {
 	useUserStore
 } from '../../store/user.store'
+import { useStatusBar } from '../../composables/useStatusBar'
+
+// 使用状态栏高度
+const { statusBarHeight } = useStatusBar()
 
 onLoad(() => {
 	if (userStore.rememberPassword === true) {
@@ -162,6 +166,7 @@ const goChangePassword = () => {
 	width: 100vw;
 	background-color: #3556e3;
 	display: flex;
+	box-sizing: border-box;
 
 	/* 用户列表 */
 	.user-list {

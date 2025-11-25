@@ -1,5 +1,5 @@
 <template>
-  <view class="process-container" @click="closeWorkshopOptions">
+  <view class="process-container" @click="closeWorkshopOptions" :style="{ paddingTop: statusBarHeight + 'px' }">
     <!-- 车间选择单选模态框 -->
     <Radiobox v-model="workshop" :options="workshopOptions" title="车间" v-model:visible="showWorkshopModal"
       @confirm="handleWorkshopConfirm" />
@@ -215,10 +215,11 @@ import Radiobox from "../../component/radiobox/radiobox.vue";
 import MachineRadiobox from "../../component/machineRadiobox/machineRadiobox.vue";
 import AddWorkerRadiobox from "../../component/addWorkerRadiobox/addWorkerRadiobox.vue";
 import { useUserStore } from '../../store/user.store'
+import { useStatusBar } from '../../composables/useStatusBar'
 import { onLoad, onUnload, onShow } from '@dcloudio/uni-app'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 const userStore = useUserStore()
-
+const { statusBarHeight } = useStatusBar()
 // 添加函数定义
 const closeWorkshopOptions = () => {
   // 空函数，防止warn（如果不需要，可移除模板@click）

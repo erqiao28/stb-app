@@ -1,5 +1,5 @@
 <template>
-	<view class="process-container">
+	<view class="process-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<!-- 文件类别单选模态框 -->
 		<Radiobox v-model="selectedFiletype" :options="filetypeOptions" title="文件类别" v-model:visible="showFiletypeModal"
 			@confirm="handleFiletypeConfirm" />
@@ -80,7 +80,8 @@ import {
 	computed
 } from 'vue'
 import Radiobox from "../../component/radiobox/radiobox.vue";
-
+import { useStatusBar } from '../../composables/useStatusBar'
+const { statusBarHeight } = useStatusBar()
 // 文件类别选项（字符串数组格式）
 const filetypeOptions = ref(['全部', '文件类别一', '文件类别二', '文件类别三', '文件类别四'])
 const selectedFiletype = ref('全部')

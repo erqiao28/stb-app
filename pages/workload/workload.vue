@@ -1,5 +1,5 @@
 <template>
-	<view class="dispatchInquiry-container">
+	<view class="dispatchInquiry-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<!-- 导航栏 -->
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="quit"></image>
@@ -41,6 +41,8 @@ import {
 	ref,
 	computed
 } from 'vue'
+import { useStatusBar } from '../../composables/useStatusBar'
+const { statusBarHeight } = useStatusBar()
 // 表格数据
 const tableData = ref([{
 	staff: '江桥',

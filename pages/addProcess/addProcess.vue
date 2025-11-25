@@ -1,5 +1,5 @@
 <template>
-	<view class="addProcess-container">
+	<view class="addProcess-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<!-- 导航栏 -->
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="quit"></image>
@@ -49,14 +49,11 @@ import {
 	onPullDownRefresh,
 	onReachBottom
 } from '@dcloudio/uni-app'
-import { useUserStore } from '../../store/user.store';
 import { callWorkflowListAPIPaged } from '../../utils/workflow';
 import http from '../../utils/request.js'
 import { showToast } from '../../utils/request.js'
-// 移除 uni-ui 导入，避免依赖错误
-// import { UniTable, UniTr, UniTh, UniTd } from '@dcloudio/uni-ui'
-const userStore = useUserStore()
-
+import { useStatusBar } from '../../composables/useStatusBar'
+const { statusBarHeight } = useStatusBar()
 const orderData = ref({
 	ordercode: '',
 	productcode: '',

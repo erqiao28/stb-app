@@ -1,5 +1,5 @@
 <template>
-	<view class="orderDetail-container">
+	<view class="orderDetail-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<!-- 导航栏 -->
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="quit"></image>
@@ -61,8 +61,9 @@
 <script setup>
 import { ref } from 'vue'
 import { useUserStore } from '../../store/user.store'
+import { useStatusBar } from '../../composables/useStatusBar'
 const userStore = useUserStore()
-
+const { statusBarHeight } = useStatusBar()
 const orderList = ref([
 	{
 		name: '18奶锅',

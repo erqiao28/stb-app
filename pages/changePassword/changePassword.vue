@@ -1,5 +1,5 @@
 <template>
-	<view class="changePassword-conainer">
+	<view class="changePassword-conainer" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<view class="middle-container">
 			<view class="input-box">
 				<image src="/static/user.svg" mode=""></image>
@@ -41,8 +41,9 @@
 	import {
 		useUserStore
 	} from '../../store/user.store'
+	import { useStatusBar } from '../../composables/useStatusBar'
 	const userStore = useUserStore()
-
+	const { statusBarHeight } = useStatusBar()
 	onLoad(() => {
 		formdata.value.username = userStore.loginInfo.username
 	})

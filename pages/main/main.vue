@@ -1,5 +1,5 @@
 <template>
-	<view class="main-container">
+	<view class="main-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<view class="btn-box">
 			<button @click="goProcess">工序检验</button>
 			<button @click="goFinish">完工</button>
@@ -12,6 +12,8 @@
 </template>
 
 <script setup>
+import { useStatusBar } from '../../composables/useStatusBar'
+const { statusBarHeight } = useStatusBar()
 	const goProcess = () => {
 		uni.navigateTo({
 			url: '/pages/process/process'

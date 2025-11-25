@@ -1,5 +1,5 @@
 <template>
-	<view class="selectBills-container">
+	<view class="selectBills-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<!-- 导航栏 -->
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="quit"></image>
@@ -99,6 +99,8 @@ import { onLoad } from '@dcloudio/uni-app'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import http from '../../utils/request'
 import { ref } from 'vue'
+import { useStatusBar } from '../../composables/useStatusBar'
+const { statusBarHeight } = useStatusBar()
 const workshop = ref('')
 const billsList = ref([])  // 单据列表
 const processList = ref([])  // 工序列表

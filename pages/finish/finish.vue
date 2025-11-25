@@ -1,5 +1,5 @@
 <template>
-	<view class="process-container">
+	<view class="process-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<Radiobox v-model="workshop" :options="workshopOptions" title="车间" v-model:visible="showWorkshopModal"
 			@confirm="handleWorkshopConfirm" />
 		<Radiobox v-model="checkout" :options="checkoutOptions" title="需检验" v-model:visible="showCheckoutModal"
@@ -107,8 +107,9 @@ import {
 } from 'vue'
 import Radiobox from '../../component/radiobox/radiobox.vue'
 import { useUserStore } from '../../store/user.store'
+import { useStatusBar } from '../../composables/useStatusBar'
 const userStore = useUserStore()
-
+const { statusBarHeight } = useStatusBar()
 const btnlist = ref([
 	{
 		btnname: '完工检',

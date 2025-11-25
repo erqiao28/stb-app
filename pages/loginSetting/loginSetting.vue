@@ -1,5 +1,5 @@
 <template>
-	<view class="loginSetting-container">
+	<view class="loginSetting-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<!-- 导航栏 -->
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="quit"></image>
@@ -30,8 +30,9 @@
 		onLoad
 	} from '@dcloudio/uni-app'
 	import { useUserStore } from '../../store/user.store';
+	import { useStatusBar } from '../../composables/useStatusBar'
 	const userStore = useUserStore()
-	
+	const { statusBarHeight } = useStatusBar()
 	onLoad(() => {
 		serverSite.value = userStore.serverSite
 		account.value = userStore.account
