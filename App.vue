@@ -10,8 +10,23 @@ export default {
 		setTimeout(() => {
 			if (typeof plus !== 'undefined') {
 				plus.screen.lockOrientation('landscape')
+				// 在 APP 平台，Toast 是原生组件，层级较高，通常不需要额外设置
+				// 如果仍有问题，可以通过降低模态框的 z-index 来解决
 			}
 		}, 100)
+		
+		// H5 平台动态设置 Toast 层级
+		// #ifdef H5
+		setTimeout(() => {
+			const style = document.createElement('style')
+			style.innerHTML = `
+				.uni-toast { z-index: 99999 !important; }
+				.uni-toast__content { z-index: 99999 !important; }
+				.uni-toast__content-text { z-index: 99999 !important; }
+			`
+			document.head.appendChild(style)
+		}, 100)
+		// #endif
 	},
 	onShow: function () {
 		console.log('App Show')
@@ -59,5 +74,27 @@ export default {
 	padding-top: var(--status-bar-height);
 	box-sizing: border-box;
 }
+/* #endif */
+
+/* Toast 提示层级设置，确保显示在所有模态框之上 */
+/* H5 平台使用 CSS 控制 */
+/* #ifdef H5 */
+.uni-toast {
+	z-index: 99999 !important;
+}
+
+.uni-toast__content {
+	z-index: 99999 !important;
+}
+
+.uni-toast__content-text {
+	z-index: 99999 !important;
+}
+/* #endif */
+
+/* APP 平台通过动态设置 */
+/* #ifdef APP-PLUS */
+/* APP 平台的 Toast 是原生组件，需要通过其他方式处理 */
+/* 已在 onLaunch 中通过 plus.navigator 设置 */
 /* #endif */
 </style>
