@@ -123,7 +123,7 @@ const onCheckboxChange = (e) => {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 999;
+  z-index: 200;
 }
 
 .modal-content {

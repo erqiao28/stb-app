@@ -246,15 +246,10 @@ const handleMachineConfirm = (value) => {
 // 获取机台列表
 const getMachineList = async () => {
   try {
+	  console.log(workshop.value);
     const res = await callWorkflowListAPIPaged({
       worksheetId: 'shebeidangan',
-      filters: [{
-        "controlId": "67ac0a87d6566fd9d09a2340",
-        "dataType": 30,
-        "spliceType": 1,
-        "filterType": 2,
-        "values": [workshop.value]
-      }]
+      filters: []
     })
     if (!res.data || res.data.length === 0) {
       uni.showToast({ title: '无机台数据', icon: 'none' })
@@ -1119,7 +1114,7 @@ const quit = () => {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 999;
+  z-index: 100;
 
   .process-content {
     background: white;
