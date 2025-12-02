@@ -189,10 +189,11 @@ const onRadioChange = (e) => {
   border-radius: px2vw(18px);
   width: px2vw(1400px);
   height: px2vw(700px);
-  overflow-y: auto;
   box-shadow: 0 px2vw(5px) px2vw(15px) rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
+  position: relative;
+  overflow: hidden;
 }
 
 .modal-header {
@@ -214,9 +215,12 @@ const onRadioChange = (e) => {
 
 .modal-body {
   flex: 1;
-  padding: px2vw(20px) px2vw(20px) px2vw(10px) px2vw(20px);
+  padding: px2vw(20px) px2vw(20px) px2vw(100px) px2vw(20px);
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
 }
 
 .search-section {
@@ -266,8 +270,9 @@ const onRadioChange = (e) => {
   display: flex;
   flex-direction: column;
   gap: px2vw(20px);
-  max-height: calc(#{px2vw(700px)} - #{px2vw(200px)});
+  flex: 1;
   overflow-y: auto;
+  min-height: 0;
 }
 
 .radio-header {
@@ -329,12 +334,18 @@ const onRadioChange = (e) => {
 }
 
 .modal-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
   display: flex;
   justify-content: flex-end;
   gap: px2vw(10px);
-  padding: px2vw(30px) px2vw(40px);
+  padding: px2vw(20px) px2vw(20px);
   border-top: px2vw(2px) solid #eee;
   flex-shrink: 0;
+  background: white;
+  z-index: 10;
 }
 
 .btn-cancel, .btn-confirm {
