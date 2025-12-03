@@ -269,7 +269,7 @@ const onRadioChange = (e) => {
 .radio-group {
   display: flex;
   flex-direction: column;
-  gap: px2vw(20px);
+  gap: px2vw(10px);
   flex: 1;
   overflow-y: auto;
   min-height: 0;
@@ -278,7 +278,7 @@ const onRadioChange = (e) => {
 .radio-header {
   display: flex;
   align-items: center;
-  padding: px2vw(15px);
+  padding: px2vw(10px);
   border-bottom: px2vw(2px) solid #ddd;
   background-color: #f5f5f5;
   font-weight: bold;
@@ -315,7 +315,7 @@ const onRadioChange = (e) => {
   display: flex;
   align-items: center;
   cursor: pointer;
-  padding: px2vw(15px);
+  padding: px2vw(10px);
   border-bottom: px2vw(1px) solid #eee;
   border-radius: 0;
 }
