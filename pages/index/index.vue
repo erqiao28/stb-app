@@ -34,7 +34,7 @@
 			<button class="login-setting" @click="goLoginSetting()">
 				<image src="/static/setting.svg"></image>登录设置
 			</button>
-			<button class="check-update">
+			<button class="check-update" @click="checkUpdate()">
 				<image src="/static/update.svg"></image>检查更新
 			</button>
 			<button class="change-password" @click="goChangePassword()">
@@ -59,7 +59,7 @@ import {
 	useUserStore
 } from '../../store/user.store'
 import { useStatusBar } from '../../composables/useStatusBar'
-
+import { callWorkflowListAPIPaged } from '../../utils/workflow'
 // 使用状态栏高度
 const { statusBarHeight } = useStatusBar()
 
@@ -73,6 +73,210 @@ onLoad(() => {
 onShow(() => {
 	uni.$emit('clearDispatchData')  // 清空派工数据
 })
+
+// 检查更新
+const checkUpdate = async () => {
+	try {
+		// 显示检查中提示
+		uni.showLoading({
+			title: '检查更新中...',
+			mask: true
+		})
+
+		// 1. 获取更新信息
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: 'rjzyb',
+			filters: []
+		})
+
+		// 2. 检查数据是否存在
+		if (!res.data || res.data.length === 0) {
+			uni.hideLoading()
+			showToast('暂无更新信息')
+			return
+		}
+
+		// 3. 提取文件数据数组
+		let fileList = res.data[0]['692feb5aee6bb1f6871490de']
+		
+		// 调试信息
+		console.log('fileList 原始数据:', fileList)
+		console.log('fileList 类型:', typeof fileList)
+		console.log('是否为数组:', Array.isArray(fileList))
+		
+		// 如果 fileList 是字符串，尝试解析为 JSON
+		if (typeof fileList === 'string') {
+			try {
+				fileList = JSON.parse(fileList)
+				console.log('解析后的 fileList:', fileList)
+				console.log('解析后是否为数组:', Array.isArray(fileList))
+				console.log('解析后长度:', fileList ? fileList.length : 'null')
+			} catch (e) {
+				console.error('解析 fileList 失败:', e)
+				uni.hideLoading()
+				showToast('更新数据格式错误')
+				return
+			}
+		}
+		
+		// 检查 fileList 是否为有效数组
+		if (!fileList) {
+			console.log('fileList 为空，返回')
+			uni.hideLoading()
+			showToast('暂无更新文件')
+			return
+		}
+		
+		// 如果不是数组，尝试转换为数组
+		if (!Array.isArray(fileList)) {
+			console.log('fileList 不是数组，尝试转换')
+			// 如果是对象，尝试包装成数组
+			if (typeof fileList === 'object') {
+				fileList = [fileList]
+				console.log('已转换为数组:', fileList)
+			} else {
+				uni.hideLoading()
+				console.error('fileList 不是数组也不是对象:', fileList)
+				showToast('更新数据格式错误')
+				return
+			}
+		}
+		
+		console.log('最终 fileList 长度:', fileList.length)
+		if (fileList.length === 0) {
+			console.log('fileList 长度为 0，返回')
+			uni.hideLoading()
+			showToast('暂无更新文件')
+			return
+		}
+		
+		console.log('fileList 验证通过，继续处理')
+
+		// 4. 获取第一个文件（最新版本）
+		const fileData = fileList[0]
+		console.log('fileData:', fileData)
+		console.log('fileData.DownloadUrl:', fileData?.DownloadUrl)
+		console.log('fileData.file_path:', fileData?.file_path)
+		console.log('fileData.file_name:', fileData?.file_name)
+
+		// 5. 提取下载地址（优先使用 DownloadUrl，其次使用 file_path + file_name）
+		const wgtUrl = fileData.DownloadUrl || (fileData.file_path + fileData.file_name)
+		console.log('wgtUrl:', wgtUrl)
+		if (!wgtUrl) {
+			console.log('wgtUrl 为空，返回')
+			uni.hideLoading()
+			showToast('更新文件地址无效')
+			return
+		}
+
+		uni.hideLoading()
+
+		// 6. 获取当前应用版本号
+		let currentVersion = 100 // 默认版本号
+		// #ifdef APP-PLUS
+		if (typeof plus !== 'undefined' && plus.runtime) {
+			currentVersion = parseInt(plus.runtime.versionCode) || 100
+		}
+		// #endif
+
+		// 7. 格式化文件大小
+		const fileSize = fileData.file_size ? (fileData.file_size / 1024).toFixed(2) + ' KB' : '未知大小'
+		const fileName = fileData.original_file_name || fileData.file_name || '更新包'
+
+		// 8. 弹出更新提示框
+		uni.showModal({
+			title: '发现新版本',
+			content: `文件名：${fileName}\n文件大小：${fileSize}\n是否立即更新？`,
+			confirmText: '立即更新',
+			cancelText: '稍后',
+			success: (modalRes) => {
+				if (modalRes.confirm) {
+					// 9. 下载并安装更新
+					downloadAndInstall(wgtUrl)
+				}
+			}
+		})
+
+	} catch (error) {
+		uni.hideLoading()
+		console.error('检查更新失败:', error)
+		showToast('检查更新失败：' + (error.message || '未知错误'))
+	}
+}
+
+// 下载并安装更新包
+const downloadAndInstall = (wgtUrl) => {
+	// 显示下载进度
+	uni.showLoading({
+		title: '正在下载更新...',
+		mask: true
+	})
+
+	// 下载 wgt 文件
+	const downloadTask = uni.downloadFile({
+		url: wgtUrl,
+		success: (downloadRes) => {
+			if (downloadRes.statusCode === 200) {
+				// #ifdef APP-PLUS
+				if (typeof plus !== 'undefined' && plus.runtime) {
+					// 安装 wgt 资源包
+					plus.runtime.install(
+						downloadRes.tempFilePath,
+						{
+							force: false // 是否强制安装
+						},
+						() => {
+							// 安装成功
+							uni.hideLoading()
+							uni.showModal({
+								title: '更新完成',
+								content: '应用将重启以完成更新',
+								showCancel: false,
+								confirmText: '确定',
+								success: () => {
+									// 重启应用
+									plus.runtime.restart()
+								}
+							})
+						},
+						(error) => {
+							// 安装失败
+							uni.hideLoading()
+							console.error('安装失败:', error)
+							showToast('安装失败：' + (error.message || '未知错误'))
+						}
+					)
+				} else {
+					uni.hideLoading()
+					showToast('当前环境不支持热更新')
+				}
+				// #endif
+
+				// #ifndef APP-PLUS
+				uni.hideLoading()
+				showToast('当前环境不支持热更新，请在APP中使用')
+				// #endif
+			} else {
+				uni.hideLoading()
+				showToast('下载失败，状态码：' + downloadRes.statusCode)
+			}
+		},
+		fail: (error) => {
+			uni.hideLoading()
+			console.error('下载失败:', error)
+			showToast('下载失败：' + (error.errMsg || '未知错误'))
+		}
+	})
+
+	// 监听下载进度
+	downloadTask.onProgressUpdate((res) => {
+		const progress = Math.floor(res.progress)
+		uni.showLoading({
+			title: `下载中 ${progress}%`,
+			mask: true
+		})
+	})
+}
 
 // 登录过的用户列表
 const userStore = useUserStore()
@@ -261,6 +465,7 @@ const goChangePassword = () => {
 
 			.rem-text {
 				color: #fff;
+				font-size: px2vw(20px);
 			}
 		}
 

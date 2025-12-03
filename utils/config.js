@@ -19,8 +19,10 @@ export default {
   WORKFLOW_API: {
     // 数据详情查询端点
     TRIGGER_URL: '/api/workflow/hooks/NjkxMmRkZjQ3NDM1ZTE5MjVmMGEwYzcz',
+    // TRIGGER_URL: 'https://www.dachen.vip/api/workflow/hooks/NjkxNTc3NDc4YTVhMDAzMjI2M2I1ZGJi',
 
     // 数据列表查询端点
     LIST_URL: '/api/workflow/hooks2/NjkxMmQzOTI3NDM1ZTE5MjVmMDkyMjM1',
+    // LIST_URL: 'https://www.dachen.vip/api/workflow/hooks2/NjkxMmQzOTI3NDM1ZTE5MjVmMDkyMjM1',
   },
 }
