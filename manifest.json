@@ -48,7 +48,29 @@
                 "dSYMs" : false
             },
             /* SDK配置 */
-            "sdkConfigs" : {}
+            "sdkConfigs" : {},
+            "icons" : {
+                "android" : {
+                    "hdpi" : "C:/Users/C'heng'quan'feng/OneDrive/Desktop/dczn.png",
+                    "xhdpi" : "C:/Users/C'heng'quan'feng/OneDrive/Desktop/dczn.png",
+                    "xxhdpi" : "C:/Users/C'heng'quan'feng/OneDrive/Desktop/dczn.png",
+                    "xxxhdpi" : "C:/Users/C'heng'quan'feng/OneDrive/Desktop/dczn.png"
+                },
+                "ios" : {
+                    "appstore" : "C:/Users/C'heng'quan'feng/OneDrive/Desktop/dczn.png",
+                    "ipad" : {
+                        "app" : "C:/Users/C'heng'quan'feng/OneDrive/Desktop/dczn.png",
+                        "app@2x" : "C:/Users/C'heng'quan'feng/OneDrive/Desktop/dczn.png",
+                        "proapp@2x" : "C:/Users/C'heng'quan'feng/OneDrive/Desktop/dczn.png",
+                        "spotlight" : "C:/Users/C'heng'quan'feng/OneDrive/Desktop/dczn.png",
+                        "spotlight@2x" : "C:/Users/C'heng'quan'feng/OneDrive/Desktop/dczn.png",
+                        "settings" : "C:/Users/C'heng'quan'feng/OneDrive/Desktop/dczn.png",
+                        "settings@2x" : "C:/Users/C'heng'quan'feng/OneDrive/Desktop/dczn.png",
+                        "notification" : "C:/Users/C'heng'quan'feng/OneDrive/Desktop/dczn.png",
+                        "notification@2x" : "C:/Users/C'heng'quan'feng/OneDrive/Desktop/dczn.png"
+                    }
+                }
+            }
         }
     },
     /* 快应用特有相关 */
