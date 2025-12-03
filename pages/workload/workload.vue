@@ -21,17 +21,25 @@
 
 		<!-- 表格区域 -->
 		<view class="table">
-			<uni-table stripe style="width: 100%;">
-				<uni-tr class="table-header-row">
-					<uni-th align="center" class="table-header-cell">员工</uni-th>
-					<uni-th align="center" class="table-header-cell">已派未记工时</uni-th>
-				</uni-tr>
-				<uni-tr v-for="item in tableData" class="table-body-row">
-					<uni-td align="center" class="table-data-cell">{{ item.staff }}</uni-td>
-					<uni-td align="center" class="table-data-cell">{{ item.worktime }}</uni-td>
-
-				</uni-tr>
-			</uni-table>
+			<scroll-view scroll-y class="table-content" @scrolltolower="loadMore" lower-threshold="50">
+				<uni-table stripe style="width: 100%;">
+					<uni-tr class="table-header-row">
+						<uni-th align="center" class="table-header-cell">员工</uni-th>
+						<uni-th align="center" class="table-header-cell">已派未记工时</uni-th>
+					</uni-tr>
+					<uni-tr v-for="item in tableData" :key="item.staff" class="table-body-row">
+						<uni-td align="center" class="table-data-cell">{{ item.staff }}</uni-td>
+						<uni-td align="center" class="table-data-cell">{{ item.worktime }}</uni-td>
+					</uni-tr>
+					<!-- 加载更多提示 -->
+					<uni-tr v-if="loading && tableData.length > 0" class="loading-row">
+						<uni-td align="center" class="loading-text loading-cell">加载中...</uni-td>
+					</uni-tr>
+					<uni-tr v-if="!hasMore && tableData.length > 0" class="no-more-row">
+						<uni-td align="center" class="loading-text loading-cell">没有更多数据了</uni-td>
+					</uni-tr>
+				</uni-table>
+			</scroll-view>
 		</view>
 	</view>
 </template>
@@ -39,15 +47,69 @@
 <script setup>
 import {
 	ref,
-	computed
 } from 'vue'
+import {
+	onLoad,
+	onPullDownRefresh,
+	onReachBottom
+} from '@dcloudio/uni-app'
 import { useStatusBar } from '../../composables/useStatusBar'
 const { statusBarHeight } = useStatusBar()
+import { callWorkflowListAPIPaged } from '../../utils/workflow'
+
 // 表格数据
-const tableData = ref([{
-	staff: '江桥',
-	worktime: 10
-}])
+const tableData = ref([])
+const currentPage = ref(1)
+const pageSize = ref(10)
+const hasMore = ref(true)
+const loading = ref(false)
+
+onLoad(() => {
+	getWorkloadList(1, true)
+})
+
+onPullDownRefresh(() => {
+	getWorkloadList(1, true)
+	uni.stopPullDownRefresh()
+})
+
+onReachBottom(() => {
+	loadMore()
+})
+
+const loadMore = () => {
+	if (!hasMore.value || loading.value) return;
+	getWorkloadList(currentPage.value + 1, false)
+}
+
+// 获取员工工作量查询列表
+const getWorkloadList = async (pageNum, isRefresh = false) => {
+	if (loading.value) return;
+	loading.value = true;
+	
+	const res = await callWorkflowListAPIPaged({
+		worksheetId: 'yggs',
+		filters: []
+	}, pageSize.value, pageNum)
+	
+	const mappedData = res.data.map(item => ({
+		staff: item['692112b021066a9f124f5ca0'],
+		worktime: item['6921135b21066a9f124f5f79'],
+	}))
+	
+	if (isRefresh) {
+		tableData.value = mappedData
+	}
+	currentPage.value = pageNum
+	
+	if (!isRefresh) {
+		tableData.value.push(...mappedData)
+	}
+	
+	// 判断是否还有更多数据
+	hasMore.value = mappedData.length === pageSize.value && res.total > tableData.value.length
+	loading.value = false
+}
 // 退出
 const quit = () => {
 	uni.navigateBack()
@@ -108,75 +170,101 @@ const quit = () => {
 .table {
 	margin-top: px2vw(10px);
 	height: calc(100vh - #{px2vw(130px)});
-	overflow: auto;
+	overflow: hidden;
+}
 
-	::v-deep .uni-table {
-		display: flex;
-		flex-direction: column;
-		width: 100%;
-	}
+.table-content {
+	height: 100%;
+}
 
-	::v-deep .table-header-row,
-	::v-deep .table-body-row {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		width: 100%;
-	}
+::v-deep .uni-table {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	min-height: 100%;
+}
 
-	::v-deep .table-header-row .table-header-cell,
-	::v-deep .table-header-row uni-th {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: px2vw(30px) px2vw(20px);
-		font-size: px2vw(35px) !important;
-		font-weight: 600;
-	}
+::v-deep .table-header-row,
+::v-deep .table-body-row {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	width: 100%;
+}
 
-	::v-deep .table-body-row .uni-table-td,
-	::v-deep .table-body-row uni-td,
-	::v-deep .table-data-cell,
-	::v-deep .uni-table .table-body-row .uni-table-td,
-	::v-deep .uni-table .table-body-row uni-td {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: px2vw(30px) px2vw(20px);
-		font-size: px2vw(30px) !important;
-	}
-	
-	::v-deep .table-body-row .uni-table-td *,
-	::v-deep .table-body-row uni-td *,
-	::v-deep .table-data-cell * {
-		font-size: px2vw(30px) !important;
-	}
+::v-deep .table-header-row .table-header-cell,
+::v-deep .table-header-row uni-th {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: px2vw(30px) px2vw(20px);
+	font-size: px2vw(35px) !important;
+	font-weight: 600;
+}
 
-	::v-deep .table-header-row {
-		min-height: px2vw(100px);
-		align-items: center;
-		font-weight: bold;
-	}
+::v-deep .table-body-row .uni-table-td,
+::v-deep .table-body-row uni-td,
+::v-deep .table-data-cell,
+::v-deep .uni-table .table-body-row .uni-table-td,
+::v-deep .uni-table .table-body-row uni-td {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: px2vw(30px) px2vw(20px);
+	font-size: px2vw(30px) !important;
+}
 
-	::v-deep .table-body-row {
-		min-height: px2vw(100px);
-		align-items: center;
-	}
+::v-deep .table-body-row .uni-table-td *,
+::v-deep .table-body-row uni-td *,
+::v-deep .table-data-cell * {
+	font-size: px2vw(30px) !important;
+}
 
-	/* 斑马纹效果 - 从标题开始 */
-	/* 标题行作为第1行 - 灰色 */
-	::v-deep .table-header-row {
-		background-color: #b0b0b0 !important;
-	}
+::v-deep .table-header-row {
+	min-height: px2vw(100px);
+	align-items: center;
+	font-weight: bold;
+}
 
-	/* 数据行：第1个数据行是第2行（白色），第2个数据行是第3行（灰色） */
-	/* 所以数据行的第1、3、5...个应该是白色，第2、4、6...个应该是灰色 */
-	::v-deep .table-body-row:nth-of-type(odd) {
-		background-color: #b0b0b0 !important;
-	}
+::v-deep .table-body-row {
+	min-height: px2vw(100px);
+	align-items: center;
+}
 
-	::v-deep .table-body-row:nth-of-type(even) {
-		background-color: white !important;
-	}
+/* 斑马纹效果 - 从标题开始 */
+/* 标题行作为第1行 - 灰色 */
+::v-deep .table-header-row {
+	background-color: #b0b0b0 !important;
+}
 
+/* 数据行：第1个数据行是第2行（白色），第2个数据行是第3行（灰色） */
+/* 所以数据行的第1、3、5...个应该是白色，第2、4、6...个应该是灰色 */
+::v-deep .table-body-row:nth-of-type(odd) {
+	background-color: #b0b0b0 !important;
+}
+
+::v-deep .table-body-row:nth-of-type(even) {
+	background-color: white !important;
+}
+
+::v-deep .loading-row,
+::v-deep .no-more-row {
+	background-color: #f5f5f5 !important;
+	min-height: px2vw(80px);
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	width: 100%;
+}
+
+::v-deep .loading-row .loading-cell,
+::v-deep .no-more-row .loading-cell {
+	grid-column: 1 / -1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	font-size: px2vw(25px);
+	color: #999999;
+	padding: px2vw(15px) 0;
+	font-weight: 400;
 }
 </style>
