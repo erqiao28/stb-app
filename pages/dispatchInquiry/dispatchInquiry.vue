@@ -428,6 +428,7 @@ const quit = () => {
 				.btn-item {
 					width: px2vw(400px);
 					height: px2vw(60px);
+					font-size: px2vw(25px);
 					display: flex;
 					align-items: center;
 					justify-content: center;

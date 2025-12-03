@@ -424,13 +424,13 @@ const quit = () => {
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			font-size: px2vw(35px);
 		}
 
 		::v-deep .table-header-row .table-header-cell {
 			padding: px2vw(30px) px2vw(15px);
 			letter-spacing: px2vw(5px);
 			font-weight: 600;
+			font-size: px2vw(35px);
 		}
 
 		::v-deep .table-body-row {
@@ -438,8 +438,17 @@ const quit = () => {
 			align-items: center;
 		}
 
-		::v-deep .table-body-row .uni-table-td {
+		::v-deep .table-body-row .uni-table-td,
+		::v-deep .table-body-row uni-td,
+		::v-deep .uni-table .table-body-row .uni-table-td,
+		::v-deep .uni-table .table-body-row uni-td {
 			padding: px2vw(40px) px2vw(15px);
+			font-size: px2vw(30px) !important;
+		}
+		
+		::v-deep .table-body-row .uni-table-td *,
+		::v-deep .table-body-row uni-td * {
+			font-size: px2vw(30px) !important;
 		}
 
 		::v-deep .table-header-gap {

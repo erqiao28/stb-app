@@ -129,17 +129,26 @@ const quit = () => {
 		align-items: center;
 		justify-content: center;
 		padding: px2vw(30px) px2vw(20px);
-		font-size: px2vw(30px) !important;
+		font-size: px2vw(35px) !important;
+		font-weight: 600;
 	}
 
 	::v-deep .table-body-row .uni-table-td,
 	::v-deep .table-body-row uni-td,
-	::v-deep .table-data-cell {
+	::v-deep .table-data-cell,
+	::v-deep .uni-table .table-body-row .uni-table-td,
+	::v-deep .uni-table .table-body-row uni-td {
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		padding: px2vw(30px) px2vw(20px);
-		font-size: px2vw(25px) !important;
+		font-size: px2vw(30px) !important;
+	}
+	
+	::v-deep .table-body-row .uni-table-td *,
+	::v-deep .table-body-row uni-td *,
+	::v-deep .table-data-cell * {
+		font-size: px2vw(30px) !important;
 	}
 
 	::v-deep .table-header-row {

@@ -444,12 +444,14 @@ const tableData = ref([
 
 			/* 为时间列设置更大 min-width 以匹配 */
 			::v-deep .table-header-row .table-header-cell:nth-child(n+14):nth-child(-n+16),
-			::v-deep .table-body-row .uni-table-td:nth-child(n+14):nth-child(-n+16) {
+			::v-deep .table-body-row .uni-table-td:nth-child(n+14):nth-child(-n+16),
+			::v-deep .table-body-row uni-td:nth-child(n+14):nth-child(-n+16) {
 				min-width: px2vw(300px) !important;
 			}
 
 			::v-deep .table-header-row .table-header-cell,
-			::v-deep .table-body-row .uni-table-td {
+			::v-deep .table-body-row .uni-table-td,
+			::v-deep .table-body-row uni-td {
 				min-width: px2vw(200px) !important;
 				width: auto !important;
 				/* 让 grid 轨道控制宽度 */
@@ -457,7 +459,6 @@ const tableData = ref([
 				display: flex !important;
 				align-items: center !important;
 				justify-content: center !important;
-				font-size: px2vw(35px) !important;
 				white-space: nowrap !important;
 				/* 防止文本换行 */
 			}
@@ -480,13 +481,28 @@ const tableData = ref([
 				align-items: center !important;
 			}
 
-			::v-deep .table-body-row .uni-table-td {
+			::v-deep .table-body-row .uni-table-td,
+			::v-deep .table-body-row uni-td,
+			::v-deep .uni-table .table-body-row .uni-table-td,
+			::v-deep .uni-table .table-body-row uni-td,
+			::v-deep .table-body-row .uni-table-td *,
+			::v-deep .table-body-row uni-td * {
 				padding: px2vw(40px) px2vw(5px) !important;
 				/* 进一步减小垂直 padding 以匹配高度 */
 				white-space: nowrap !important;
 				/* 内容不换行 */
-				font-size: px2vw(35px) !important;
-				/* 内容字体保持原样 */
+			}
+			
+			::v-deep .table-body-row .uni-table-td,
+			::v-deep .table-body-row uni-td {
+				font-size: px2vw(30px) !important;
+				/* 内容字体大小 */
+			}
+			
+			::v-deep .table-body-row .uni-table-td *,
+			::v-deep .table-body-row uni-td * {
+				font-size: px2vw(30px) !important;
+				/* 内容字体大小 - 针对内部元素 */
 			}
 		}
 }

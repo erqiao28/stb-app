@@ -249,7 +249,15 @@ const getMachineList = async () => {
 	  console.log(workshop.value);
     const res = await callWorkflowListAPIPaged({
       worksheetId: 'shebeidangan',
-      filters: []
+      filters: [
+        {
+          "controlId": "67ac0a87d6566fd9d09a2340",
+          "dataType": 30,
+          "spliceType": 1,
+          "filterType": 2,
+          "values": [workshop.value]
+        }
+      ]
     })
     if (!res.data || res.data.length === 0) {
       uni.showToast({ title: '无机台数据', icon: 'none' })
