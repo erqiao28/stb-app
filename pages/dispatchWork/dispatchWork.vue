@@ -13,28 +13,16 @@
     <AddWorkerRadiobox v-model="selectedEmployeesForAdd" :options="allEmployeesOptions" title="添加员工" 
       :visible="showAddEmployeeModal" @update:visible="handleAddEmployeeModalClose" @confirm="handleAddEmployeeConfirm" />
     <!-- 图片预览模态框 -->
-    <view class="image-preview-modal" v-if="showImagePreview" @click.self="closeImagePreview">
-      <view class="image-preview-content" @click.stop>
-        <view class="image-preview-header">
-          <text class="image-preview-title">图片预览</text>
-          <view class="image-preview-close" @click="closeImagePreview">×</view>
-        </view>
-        <view class="image-preview-body">
-          <image 
-            :src="currentImageUrl" 
-            mode="aspectFit" 
-            class="preview-image"
-            @error="handleImageError"
-          ></image>
-        </view>
-        <view class="image-preview-footer" v-if="imageUrls.length > 1">
-          <view class="image-preview-nav">
-            <button class="nav-btn" @click="prevImage" :disabled="currentImageIndex === 0">上一张</button>
-            <text class="image-counter">{{ currentImageIndex + 1 }} / {{ imageUrls.length }}</text>
-            <button class="nav-btn" @click="nextImage" :disabled="currentImageIndex === imageUrls.length - 1">下一张</button>
-          </view>
-        </view>
-      </view>
+    <view class="image-preview-modal" v-if="showImagePreview" @click="closeImagePreview" :style="{ paddingTop: statusBarHeight + 'px' }">
+      <button class="btn-close" @click="closeImagePreview">关闭</button>
+      <img 
+        v-if="currentImageUrl"
+        :src="currentImageUrl" 
+        class="preview-image"
+        @error="handleImageError"
+        @load="handleImageLoad"
+        alt="预览图片"
+      />
     </view>
     <!-- 工序派工模态框 -->
     <view class="process-modal" v-if="showProcessModal" @click.self="closeProcessModal">
@@ -350,10 +338,7 @@ const listKey = ref(0)  // 用于强制重新渲染的key
 
 // 图片预览相关状态
 const showImagePreview = ref(false)  // 是否显示图片预览
-const imageUrls = ref([])  // 图片URL数组
-const currentImageIndex = ref(0)  // 当前图片索引
-const currentImageUrl = computed(() => imageUrls.value[currentImageIndex.value] || '')  // 当前图片URL
-
+const currentImageUrl = ref('')  // 当前显示的图片URL
 
 // 新增：工序模态状态
 const showProcessModal = ref(false)
@@ -842,6 +827,11 @@ const dispatchOrder = (item) => {
   // 获取图片数据
   let imageData = item?.image
   
+  if (!imageData) {
+    uni.showToast({ title: '暂无图片', icon: 'none' })
+    return
+  }
+  
   // 如果 image 是字符串，尝试解析为 JSON
   if (typeof imageData === 'string') {
     try {
@@ -860,41 +850,24 @@ const dispatchOrder = (item) => {
     return
   }
   
-  // 将所有图片的 DownloadUrl 提取出来，用于预览（支持多图切换）
-  const urls = imageArray
-    .map(img => img?.DownloadUrl)
-    .filter(url => url) // 过滤掉空值
+  // 获取第一个图片的 DownloadUrl
+  const firstImage = imageArray[0]
+  const downloadUrl = firstImage?.DownloadUrl
   
-  if (urls.length === 0) {
+  if (!downloadUrl) {
     uni.showToast({ title: '图片地址不存在', icon: 'none' })
     return
   }
   
-  // 设置图片URL数组和当前索引
-  imageUrls.value = urls
-  currentImageIndex.value = 0
+  // 设置当前图片URL并显示预览模态框
+  currentImageUrl.value = downloadUrl
   showImagePreview.value = true
 }
 
 // 关闭图片预览
 const closeImagePreview = () => {
   showImagePreview.value = false
-  imageUrls.value = []
-  currentImageIndex.value = 0
-}
-
-// 上一张图片
-const prevImage = () => {
-  if (currentImageIndex.value > 0) {
-    currentImageIndex.value--
-  }
-}
-
-// 下一张图片
-const nextImage = () => {
-  if (currentImageIndex.value < imageUrls.value.length - 1) {
-    currentImageIndex.value++
-  }
+  currentImageUrl.value = ''
 }
 
 // 图片加载错误处理
@@ -1469,116 +1442,43 @@ const quit = () => {
 /* 图片预览模态框样式 */
 .image-preview-modal {
   position: fixed;
-  top: 0;
+  top: px2vw(100px);
   left: 0;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
+  box-sizing: border-box;
   background-color: rgba(0, 0, 0, 0.8);
+  z-index: 9999;
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 200;
 
-  .image-preview-content {
-    background: white;
-    border-radius: px2vw(18px);
-    width: 90%;
-    max-width: px2vw(1000px);
-    max-height: 80vh;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 px2vw(10px) px2vw(30px) rgba(0, 0, 0, 0.5);
+  .btn-close {
+    position: absolute;
+    top: px2vw(30px);
+    right: px2vw(30px);
+    margin-top: 0;
+    padding: px2vw(10px) px2vw(30px);
+    background-color: #5884f1;
+    color: white;
+    border: none;
+    border-radius: px2vw(8px);
+    font-size: px2vw(28px);
+    cursor: pointer;
+    z-index: 10000;
 
-    .image-preview-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: px2vw(20px) px2vw(30px);
-      border-bottom: px2vw(2px) solid #eee;
-
-      .image-preview-title {
-        font-size: px2vw(35px);
-        font-weight: bold;
-        color: #333;
-      }
-
-      .image-preview-close {
-        width: px2vw(60px);
-        height: px2vw(60px);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        font-size: px2vw(50px);
-        color: #666;
-        cursor: pointer;
-        border-radius: 50%;
-        transition: background-color 0.3s;
-
-        &:active {
-          background-color: #f0f0f0;
-        }
-      }
+    &:active {
+      background-color: #2755f1;
     }
+  }
 
-    .image-preview-body {
-      flex: 1;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: px2vw(30px);
-      overflow: auto;
-      min-height: px2vw(400px);
-      max-height: 60vh;
-
-      .preview-image {
-        max-width: 100%;
-        max-height: 100%;
-        width: auto;
-        height: auto;
-        border-radius: px2vw(10px);
-      }
-    }
-
-    .image-preview-footer {
-      padding: px2vw(20px) px2vw(30px);
-      border-top: px2vw(2px) solid #eee;
-
-      .image-preview-nav {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: px2vw(20px);
-
-        .nav-btn {
-          flex: 1;
-          height: px2vw(70px);
-          border-radius: px2vw(18px);
-          font-size: px2vw(30px);
-          border: px2vw(2px) solid #5884f1;
-          color: #5884f1;
-          background: white;
-          transition: all 0.3s;
-
-          &:active:not(:disabled) {
-            background: #5884f1;
-            color: white;
-          }
-
-          &:disabled {
-            opacity: 0.5;
-            border-color: #ccc;
-            color: #ccc;
-          }
-        }
-
-        .image-counter {
-          font-size: px2vw(28px);
-          color: #666;
-          min-width: px2vw(120px);
-          text-align: center;
-        }
-      }
-    }
+  .preview-image {
+    max-width: 50vw;
+    max-height: 50vh;
+    width: auto;
+    height: auto;
+    display: block;
+    object-fit: contain;
   }
 }
 </style>
