@@ -423,7 +423,7 @@ const selectOrder = (orderCode) => {
 					justify-content: space-between;
 					.name {
 						display: flex;
-						margin: 0 px2vw(30px);
+						margin: px2vw(30px);
 						font-size: px2vw(25px);
 					}
 

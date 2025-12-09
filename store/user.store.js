@@ -27,6 +27,9 @@ export const useUserStore = defineStore(
 			rememberPassword.value = !rememberPassword.value
 		}
 		
+		// 应用版本号（从更新接口获取后存储）
+		const appVersion = ref('')
+		
 		// 登出
 		const logout = () => {
 			uni.navigateTo({
@@ -41,7 +44,8 @@ export const useUserStore = defineStore(
 			rememberPassword,
 			changeRememberPassword,
 			serverSite,
-			account
+			account,
+			appVersion
 		}
 	}, {
 		persist: {

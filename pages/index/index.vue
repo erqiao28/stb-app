@@ -96,13 +96,19 @@ const checkUpdate = async () => {
 			return
 		}
 
-		// 3. 提取文件数据数组
+		// 3. 提取文件数据数组和版本号
 		let fileList = res.data[0]['692feb5aee6bb1f6871490de']
+		let newVersion = res.data[0]['6937e096ff2b019b3cb35149'] // 从接口获取的新版本
+		
+		// 获取当前版本（从 pinia 读取）
+		const currentVersion = userStore.appVersion || ''
 		
 		// 调试信息
 		console.log('fileList 原始数据:', fileList)
 		console.log('fileList 类型:', typeof fileList)
 		console.log('是否为数组:', Array.isArray(fileList))
+		console.log('当前版本（pinia）:', currentVersion)
+		console.log('新版本（接口）:', newVersion)
 		
 		// 如果 fileList 是字符串，尝试解析为 JSON
 		if (typeof fileList === 'string') {
@@ -171,30 +177,20 @@ const checkUpdate = async () => {
 
 		uni.hideLoading()
 
-		// 6. 获取当前应用版本号
-		let currentVersion = 100 // 默认版本号
-		let currentVersionName = '1.0.0' // 默认版本名
-		// #ifdef APP-PLUS
-		if (typeof plus !== 'undefined' && plus.runtime) {
-			currentVersion = parseInt(plus.runtime.versionCode) || 100
-			currentVersionName = plus.runtime.version || '1.0.0'
-		}
-		// #endif
-
-		// 7. 格式化文件大小
+		// 6. 格式化文件大小
 		const fileSize = fileData.file_size ? (fileData.file_size / 1024).toFixed(2) + ' KB' : '未知大小'
 		const fileName = fileData.original_file_name || fileData.file_name || '更新包'
 
-		// 8. 弹出更新提示框
+		// 7. 弹出更新提示框
 		uni.showModal({
 			title: '发现新版本',
-			content: `当前版本：${currentVersionName} (${currentVersion})\n文件名：${fileName}\n文件大小：${fileSize}\n\n注意：更新包的版本号必须大于当前版本号才能安装`,
+			content: `当前版本：${currentVersion || '未知'}\n更新版本：${newVersion || '未知'}\n文件名：${fileName}\n文件大小：${fileSize}`,
 			confirmText: '立即更新',
 			cancelText: '稍后',
 			success: (modalRes) => {
 				if (modalRes.confirm) {
-					// 9. 下载并安装更新
-					downloadAndInstall(wgtUrl, currentVersion)
+					// 8. 下载并安装更新（传入新版本号，更新成功后保存到 pinia）
+					downloadAndInstall(wgtUrl, newVersion)
 				}
 			}
 		})
@@ -207,7 +203,7 @@ const checkUpdate = async () => {
 }
 
 // 下载并安装更新包
-const downloadAndInstall = (wgtUrl, currentVersion = 100) => {
+const downloadAndInstall = (wgtUrl, newVersion) => {
 	// 显示下载进度
 	uni.showLoading({
 		title: '正在下载更新...',
@@ -228,7 +224,11 @@ const downloadAndInstall = (wgtUrl, currentVersion = 100) => {
 							force: false // 是否强制安装
 						},
 						() => {
-							// 安装成功
+							// 安装成功，保存新版本到 pinia
+							if (newVersion) {
+								userStore.appVersion = newVersion
+								console.log('版本已保存到 pinia:', newVersion)
+							}
 							uni.hideLoading()
 							uni.showModal({
 								title: '更新完成',
