@@ -177,7 +177,7 @@ const addProcess = async () => {
 		showToast('请选择工序')
 		return
 	}
-	const res = await http.post('/api/workflow/hooks/NjkxYzU0ODlkMjYxYWY3YTM3ZjA3M2Nm', {
+	const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjkxYzU0ODlkMjYxYWY3YTM3ZjA3M2Nm', {
 		ordercode: orderData.value.ordercode,
 		productcode: orderData.value.productcode,
 		workshop: orderData.value.workshop,

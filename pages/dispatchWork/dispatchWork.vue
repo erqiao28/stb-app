@@ -163,17 +163,17 @@
             </view>
           </view>
           <view class="goodsInfo-down">
-            <view class="orderItem">
-              <view>订单物品：</view>
-              <view>{{ item.orderGoods }}</view>
+            <view class="name">
+              <view>产品名称：</view>
+              <view>{{ item.name }}</view>
+            </view>
+            <view class="productCode">
+              <view>生产执行单：</view>
+              <view>{{ item.productionCode }}</view>
             </view>
             <view class="orderCount">
               <view>订单数量：</view>
               <view>{{ item.orderCount }}</view>
-            </view>
-            <view class="name">
-              <view>名称：</view>
-              <view>{{ item.name }}</view>
             </view>
           </view>
           <view class="processes-section" v-if="item.processes && item.processes.length > 0" :key="`processes-${item.orderCode}-${listKey}`">
@@ -451,7 +451,7 @@ const confirmProcessDispatch = async () => {
   console.log('工序派工模态框的数据:', dispatchData)
   console.log('选中的员工数据:', selectedEmployees)
 
-  const res = await http.post('/api/workflow/hooks/NjkyMTJlNzdhOWE4ZGM2YmMxZjczYzlk', dispatchData)
+  const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjkyMTJlNzdhOWE4ZGM2YmMxZjczYzlk', dispatchData)
   if (res.status === 1) {
     uni.showToast({ title: '派工成功' })
     showProcessModal.value = false
@@ -656,7 +656,8 @@ const search = async () => {
     return {
       orderGoods,
       orderCount: item['681b0b53b139204fd264c5fd'],
-      name: item['691c247e1c02c451c72a6169'],
+      name: item['6937d255ff2b019b3cb34be3'],
+      productionCode: item['691d6336535b29cbd5c6c0ca'],
       completedProcess: processes.length > 0 ? `${processes.filter(p => p.finishCount === p.needCount).length}/${processes.length}` : '0',
       productCode: item['691d6336535b29cbd5c6c0ca'],
       processes: processes.map(p => ({ ...p })),  // 深拷贝每个process对象

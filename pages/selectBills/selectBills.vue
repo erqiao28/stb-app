@@ -27,7 +27,7 @@
 			<view class="productionOrder">
 				<text class="productionOrder-text">生产执行单</text>
 				<view class="input-box">
-					<input type="text" v-model="searchValue.productionOrder" placeholder="请输入生产执行单" />
+					<input type="text" v-model="searchValue.productionOrder" placeholder="请输入生产进度单" />
 				</view>
 			</view>
 
@@ -46,20 +46,25 @@
 			<view class="orderItem" v-for="item in billsList" @click="selectOrder(item.orderCode)">
 				<view class="goodsInfo">
 					<view class="goodsInfo-up">
-						<view class="orderGoods">
-							<view>订单物品：</view>
-							<view>{{ item.orderGoods }}</view>
+						<view class="orderCode">
+							<view>订单编号：</view>
+							<view>{{ item.orderCode }}</view>
 						</view>
+						<view class="productCode">
+							<view>生产执行单：</view>
+							<view>{{ item.productionCode }}</view>
+						</view>
+
 						<view class="orderCount">
 							<view>订单数量：</view>
 							<view>{{ item.orderCount }}</view>
 						</view>
-						<view class="name">
-							<view>名称：</view>
-							<view>{{ item.name }}</view>
-						</view>
 					</view>
 					<view class="goodsInfo-down">
+						<view class="name">
+							<view>产品名称：</view>
+							<view>{{ item.name }}</view>
+						</view>
 						<view class="model">
 							<view class="model-text">规格型号：</view>
 							<view class="model-value">{{ item.model }}</view>
@@ -180,16 +185,14 @@ const search = async () => {
 		})
 		console.log(processList.value)
 		billsList.value = billsRes.data.map(item => {
-			const orderGoods = item['691c47ee1c02c451c72a81c5']  // 新订单物品 ID
 			const orderCode = item['655e1cbbbd2094b316347f92']  // 旧订单编码 ID
 			const processes = processList.value.filter(p => p.processOrder === orderCode)  // 关联基于 orderCode
 			return {
-				orderGoods,
 				orderCode,
 				orderCount: item['681b0b53b139204fd264c5fd'],
-				name: item['691c247e1c02c451c72a6169'],
-				model: item['691c24f11c02c451c72a61ba'],
-				productCode: item['691d6336535b29cbd5c6c0ca'],
+				name: item['6937d255ff2b019b3cb34be3'],
+				model: item['6937d255ff2b019b3cb34be4'],
+				productionCode: item['691d6336535b29cbd5c6c0ca'],
 				completedProcess: '0',
 				processes
 			}

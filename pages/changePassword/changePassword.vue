@@ -85,7 +85,7 @@
 
 		// 发送请求
 		const res = await http.post(
-			'/api/workflow/hooks/NjkxYTdlNjg5ZDQzNzY1NDk1YmYyOGQy', formdata.value)
+			'https://www.dachen.vip/api/workflow/hooks/NjkxYTdlNjg5ZDQzNzY1NDk1YmYyOGQy', formdata.value)
 		if (res.status === 1) {
 			showToast('账号或密码错误')
 			return

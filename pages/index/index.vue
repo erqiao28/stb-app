@@ -173,9 +173,11 @@ const checkUpdate = async () => {
 
 		// 6. 获取当前应用版本号
 		let currentVersion = 100 // 默认版本号
+		let currentVersionName = '1.0.0' // 默认版本名
 		// #ifdef APP-PLUS
 		if (typeof plus !== 'undefined' && plus.runtime) {
 			currentVersion = parseInt(plus.runtime.versionCode) || 100
+			currentVersionName = plus.runtime.version || '1.0.0'
 		}
 		// #endif
 
@@ -186,13 +188,13 @@ const checkUpdate = async () => {
 		// 8. 弹出更新提示框
 		uni.showModal({
 			title: '发现新版本',
-			content: `文件名：${fileName}\n文件大小：${fileSize}\n是否立即更新？`,
+			content: `当前版本：${currentVersionName} (${currentVersion})\n文件名：${fileName}\n文件大小：${fileSize}\n\n注意：更新包的版本号必须大于当前版本号才能安装`,
 			confirmText: '立即更新',
 			cancelText: '稍后',
 			success: (modalRes) => {
 				if (modalRes.confirm) {
 					// 9. 下载并安装更新
-					downloadAndInstall(wgtUrl)
+					downloadAndInstall(wgtUrl, currentVersion)
 				}
 			}
 		})
@@ -205,7 +207,7 @@ const checkUpdate = async () => {
 }
 
 // 下载并安装更新包
-const downloadAndInstall = (wgtUrl) => {
+const downloadAndInstall = (wgtUrl, currentVersion = 100) => {
 	// 显示下载进度
 	uni.showLoading({
 		title: '正在下载更新...',
@@ -243,7 +245,26 @@ const downloadAndInstall = (wgtUrl) => {
 							// 安装失败
 							uni.hideLoading()
 							console.error('安装失败:', error)
-							showToast('安装失败：' + (error.message || '未知错误'))
+							
+							// 检查是否是版本不匹配错误
+							const errorMsg = error.message || error.code || JSON.stringify(error)
+							let errorTip = '安装失败：'
+							
+							if (errorMsg.includes('version') || errorMsg.includes('版本') || errorMsg.includes('manifest')) {
+								errorTip = '版本不匹配：更新包的版本号必须大于当前应用版本号。\n\n'
+								errorTip += '解决方案：\n'
+								errorTip += '1. 请重新打包APK并安装\n'
+								errorTip += '2. 或联系管理员更新资源包版本号'
+								
+								uni.showModal({
+									title: '安装失败',
+									content: errorTip,
+									showCancel: false,
+									confirmText: '知道了'
+								})
+							} else {
+								showToast(errorTip + errorMsg)
+							}
 						}
 					)
 				} else {
@@ -299,7 +320,7 @@ const login = async () => {
 		return
 	}
 	// 发请求
-	const res = await http.post('/api/workflow/hooks/NjkxNTc3NDc4YTVhMDAzMjI2M2I1ZGJi', loginform.value)
+	const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjkxNTc3NDc4YTVhMDAzMjI2M2I1ZGJi', loginform.value)
 	if (res.status === 1) {
 		showToast('账号或密码错误')
 		return
@@ -465,7 +486,7 @@ const goChangePassword = () => {
 
 			.rem-text {
 				color: #fff;
-				font-size: px2vw(20px);
+				font-size: px2vw(45px);
 			}
 		}
 
