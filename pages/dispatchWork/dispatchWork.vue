@@ -653,11 +653,24 @@ const search = async () => {
     const orderCode = item['655e1cbbbd2094b316347f92']  // 订单编码 (旧 ID)
     // 使用最新的 processList.value 来过滤工序
     const processes = processList.value.filter(p => p.processOrder === orderCode)  // 关联基于 orderCode (旧 ID)
+    
+    // 处理 image 字段
+    let imageData = item['6683a0448d2110bec155ac64']
+    // 如果是字符串，尝试解析为 JSON
+    if (typeof imageData === 'string' && imageData.trim()) {
+      try {
+        imageData = JSON.parse(imageData)
+      } catch (e) {
+        // 如果解析失败，保持原值
+      }
+    }
+    
     return {
       orderGoods,
       orderCount: item['681b0b53b139204fd264c5fd'],
       name: item['6937d255ff2b019b3cb34be3'],
       productionCode: item['691d6336535b29cbd5c6c0ca'],
+      image: imageData,
       completedProcess: processes.length > 0 ? `${processes.filter(p => p.finishCount === p.needCount).length}/${processes.length}` : '0',
       productCode: item['691d6336535b29cbd5c6c0ca'],
       processes: processes.map(p => ({ ...p })),  // 深拷贝每个process对象
@@ -792,6 +805,61 @@ const goSelectBills = () => {
   uni.navigateTo({
     url: `/pages/selectBills/selectBills?workshop=${workshop.value}`
   })
+}
+
+// 查看图片
+const dispatchOrder = (item) => {
+  // 获取图片数据
+  let imageData = item?.image
+  
+  // 如果 image 是字符串，尝试解析为 JSON
+  if (typeof imageData === 'string') {
+    try {
+      imageData = JSON.parse(imageData)
+    } catch (e) {
+      uni.showToast({ title: '图片数据格式错误', icon: 'none' })
+      return
+    }
+  }
+  
+  // 确保是数组
+  const imageArray = Array.isArray(imageData) ? imageData : (imageData ? [imageData] : [])
+  
+  if (!imageArray || imageArray.length === 0) {
+    uni.showToast({ title: '暂无图片', icon: 'none' })
+    return
+  }
+  
+  // 获取第一个图片的 DownloadUrl
+  const firstImage = imageArray[0]
+  const downloadUrl = firstImage?.DownloadUrl
+  
+  if (!downloadUrl) {
+    uni.showToast({ title: '图片地址不存在', icon: 'none' })
+    return
+  }
+  
+  // 将所有图片的 DownloadUrl 提取出来，用于预览（支持多图切换）
+  const imageUrls = imageArray
+    .map(img => img?.DownloadUrl)
+    .filter(url => url) // 过滤掉空值
+  
+  if (imageUrls.length === 0) {
+    uni.showToast({ title: '图片地址不存在', icon: 'none' })
+    return
+  }
+  
+  // 使用 uni.previewImage 预览图片
+  uni.previewImage({
+    urls: imageUrls, // 图片地址数组
+    current: downloadUrl // 当前显示的图片地址
+  })
+}
+
+// 插入工序（保留原有功能）
+const viewDetail = (item) => {
+  // 这里可以添加插入工序的逻辑
+  console.log('插入工序', item)
 }
 
 // 退出
