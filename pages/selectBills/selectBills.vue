@@ -398,7 +398,13 @@ const selectOrder = (orderCode) => {
 					justify-content: space-between;
 					align-items: center;
 
-					.orderGoods {
+					.orderCode {
+						display: flex;
+						margin: 0 px2vw(30px);
+						font-size: px2vw(25px);
+					}
+
+					.productCode {
 						display: flex;
 						margin: 0 px2vw(30px);
 						font-size: px2vw(25px);
@@ -409,18 +415,17 @@ const selectOrder = (orderCode) => {
 						margin: 0 px2vw(30px);
 						font-size: px2vw(25px);
 					}
-
-					.name {
-						display: flex;
-						margin: 0 px2vw(30px);
-						font-size: px2vw(25px);
-					}
 				}
 
 				.goodsInfo-down {
 					display: flex;
 					width: 100%;
 					justify-content: space-between;
+					.name {
+						display: flex;
+						margin: 0 px2vw(30px);
+						font-size: px2vw(25px);
+					}
 
 					.model {
 						width: px2vw(800px);

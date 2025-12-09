@@ -1020,6 +1020,7 @@ const quit = () => {
 
           .orderItem,
           .orderCount,
+          .productCode,
           .name {
             font-size: px2vw(25px);
             display: flex;
