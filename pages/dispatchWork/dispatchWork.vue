@@ -366,7 +366,7 @@ const loadEmployees = async () => {
     const res = await callWorkflowListAPIPaged({
       worksheetId: 'yggs',  // 假设员工worksheetId，根据实际调整
       filters: [{
-        "controlId": "6921131b21066a9f124f5cec",  // 车间过滤
+        "controlId": "6937d496ff2b019b3cb34c95",  // 车间过滤
         "dataType": 30,
         "spliceType": 1,
         "filterType": 2,
@@ -376,7 +376,7 @@ const loadEmployees = async () => {
     if (res.data && res.data.length > 0) {
       const mappedEmployees = res.data.map(item => ({
         id: item['692113fb21066a9f124f5fe2'] || '',  // 假设ID字段
-        name: item['692112b021066a9f124f5ca0'] || '',  // 姓名字段
+        name: item['6938db8bda0981f67b352af3'] || '',  // 姓名字段
         unrecordedHours: item['6921135b21066a9f124f5f79'] || 0  // 已派未记时数量字段，替换实际controlId
       })).filter(emp => emp.id)
       
