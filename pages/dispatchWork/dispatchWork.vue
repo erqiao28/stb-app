@@ -1,17 +1,23 @@
 <template>
   <view class="process-container" @click="closeWorkshopOptions" :style="{ paddingTop: statusBarHeight + 'px' }">
-    <!-- 车间选择单选模态框 -->
+    <!-- ==================== 模态框组件 ==================== -->
+    
+    <!-- 车间选择模态框 -->
     <Radiobox v-model="workshop" :options="workshopOptions" title="车间" v-model:visible="showWorkshopModal"
       @confirm="handleWorkshopConfirm" />
-    <!-- 机台选择单选模态框 -->
+    
+    <!-- 机台选择模态框 -->
     <MachineRadiobox v-model="machine" :options="machineOptions" title="选择机台" v-model:visible="showMachineModal"
       @confirm="handleMachineConfirm" />
-    <!-- 模具选择单选模态框 -->
+    
+    <!-- 模具选择模态框 -->
     <MachineRadiobox v-model="mold" :options="moldOptions" title="选择模具" v-model:visible="showMoldModal"
       @confirm="handleMoldConfirm" />
-    <!-- 添加员工多选模态框 -->
+    
+    <!-- 添加员工模态框 -->
     <AddWorkerRadiobox v-model="selectedEmployeesForAdd" :options="allEmployeesOptions" title="添加员工" 
       :visible="showAddEmployeeModal" @update:visible="handleAddEmployeeModalClose" @confirm="handleAddEmployeeConfirm" />
+    
     <!-- 图片预览模态框 -->
     <view class="image-preview-modal" v-if="showImagePreview" @click="closeImagePreview" :style="{ paddingTop: statusBarHeight + 'px' }">
       <button class="btn-close" @click="closeImagePreview">关闭</button>
@@ -24,14 +30,17 @@
         alt="预览图片"
       />
     </view>
+    
     <!-- 工序派工模态框 -->
     <view class="process-modal" v-if="showProcessModal" @click.self="closeProcessModal">
       <view class="process-content" @click.stop>
         <view class="modal-header">
-          <text class="modal-title"> {{ selectedProcessData?.process?.processName }}(工序派工)</text>
+          <text class="modal-title">{{ selectedProcessData?.process?.processName }}(工序派工)</text>
         </view>
-        <!-- 模态框模板：修改 modal-body 内结构 -->
+        
+        <!-- 表单信息区域 -->
         <view class="modal-body">
+          <!-- 订单编号和工序名称 -->
           <view class="row-group">
             <view class="form-group">
               <text class="label">订单编号：</text>
@@ -42,6 +51,8 @@
               <text class="value">{{ selectedProcessData?.process?.processName }}</text>
             </view>
           </view>
+          
+          <!-- 已派工数量和待派工数量 -->
           <view class="row-group">
             <view class="form-group">
               <text class="label">已派工数量：</text>
@@ -52,7 +63,8 @@
               <text class="value">{{ selectedProcessData?.process?.needCount }}</text>
             </view>
           </view>
-          <!-- 新增：本次派工数量和时数行 -->
+          
+          <!-- 本次派工数量和时数 -->
           <view class="row-group">
             <view class="form-group">
               <text class="label">本次派工数量：</text>
@@ -65,7 +77,8 @@
                 class="input-field" disabled />
             </view>
           </view>
-          <!-- 新增：机台和模具选择行 -->
+          
+          <!-- 机台和模具选择 -->
           <view class="row-group">
             <view class="form-group">
               <text class="label">机台：</text>
@@ -81,6 +94,7 @@
             </view>
           </view>
         </view>
+        
         <!-- 员工选择表格 -->
         <view class="employee-section">
           <view class="table-header">
@@ -98,6 +112,8 @@
             </label>
           </checkbox-group>
         </view>
+        
+        <!-- 模态框底部按钮 -->
         <view class="modal-footer">
           <button class="btn-cancel" @click="closeProcessModal">取消</button>
           <button class="btn-confirm" @click="addEmployee">添加员工</button>
@@ -106,13 +122,15 @@
         </view>
       </view>
     </view>
+    
+    <!-- ==================== 页面主体内容 ==================== -->
+    
     <!-- 导航栏 -->
     <view class="header">
       <image src="/static/left-arrow.svg" @click="quit"></image>
       <view class="title">
         派工( {{ userStore?.loginName || '' }} )
       </view>
-
       <view class="btn-box">
         <view class="btn-one" @click="userStore?.logout()">
           <image src="/static/Quit.svg"></image>
@@ -124,18 +142,14 @@
         </view>
       </view>
     </view>
-    <!-- 按钮栏 -->
+    
+    <!-- 功能按钮栏 -->
     <view class="btn-list">
-      <view class="btn-item" @click="goDispatchInquiry">
-        派工查询
-      </view>
-      <view class="btn-item" @click="goWorkload">
-        员工工作量查询
-      </view>
-      <view class="btn-item" @click="goWorkGuide">
-        作业指导书
-      </view>
+      <view class="btn-item" @click="goDispatchInquiry">派工查询</view>
+      <view class="btn-item" @click="goWorkload">员工工作量查询</view>
+      <view class="btn-item" @click="goWorkGuide">作业指导书</view>
     </view>
+    
     <!-- 搜索区域 -->
     <view class="search-box">
       <view class="assemble">
@@ -143,17 +157,12 @@
           {{ workshop }}
         </view>
       </view>
-
-      <view class="selectDocument" @click="goSelectBills">
-        选择单据
-      </view>
-
+      <view class="selectDocument" @click="goSelectBills">选择单据</view>
       <view class="device">
         <view class="input-box">
           <input type="text" v-model="searchValue" placeholder="请输入客户或单据编码" @input="search" />
         </view>
       </view>
-
       <view class="scan">
         <image src="/static/scan.svg"></image>
       </view>
@@ -163,6 +172,7 @@
     <view class="orderList" :key="listKey">
       <view class="orderItem" v-for="item in billsList" :key="item.orderCode">
         <view class="goodsInfo">
+          <!-- 订单信息头部 -->
           <view class="goodsInfo-up">
             <view class="orderGoods">
               <view class="order-label">订单</view>
@@ -174,6 +184,8 @@
               <button class="btn-delete" @click="addProcess(item)">添加工序</button>
             </view>
           </view>
+          
+          <!-- 订单详细信息 -->
           <view class="goodsInfo-down">
             <view class="name">
               <view>产品名称：</view>
@@ -188,6 +200,8 @@
               <view>{{ item.orderCount }}</view>
             </view>
           </view>
+          
+          <!-- 工序进度展示 -->
           <view class="processes-section" v-if="item.processes && item.processes.length > 0" :key="`processes-${item.orderCode}-${listKey}`">
             <view class="processes-container" :key="`container-${item.orderCode}-${listKey}`">
               <view v-for="(process, index) in item.processes" :key="`${item.orderCode}-${process.processName}-${index}-${listKey}`" class="process-wrapper">
@@ -196,8 +210,7 @@
                     :style="{ '--percent': Math.round((process.finishCount / process.needCount) * 100) + '%' }"
                     @click="openProcessModal(item, process)">
                     <view class="progress-inner">
-                      <view class="progress-text">{{ process.finishCount }}/{{ process.needCount
-                      }}</view>
+                      <view class="progress-text">{{ process.finishCount }}/{{ process.needCount }}</view>
                     </view>
                   </view>
                   <text class="process-name">{{ process.processName }}</text>
@@ -207,58 +220,100 @@
             </view>
           </view>
         </view>
-        <view class="goodsProcess">
-        </view>
+        <view class="goodsProcess"></view>
       </view>
     </view>
   </view>
 </template>
 
 <script setup>
+// ==================== 导入部分 ====================
 import {
   ref,
   computed,
   watch,
-  onMounted,
   nextTick
 } from 'vue'
+import { onLoad, onUnload, onShow } from '@dcloudio/uni-app'
 import http from '../../utils/request'
-import Radiobox from "../../component/radiobox/radiobox.vue";
-import MachineRadiobox from "../../component/machineRadiobox/machineRadiobox.vue";
-import AddWorkerRadiobox from "../../component/addWorkerRadiobox/addWorkerRadiobox.vue";
+import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { useUserStore } from '../../store/user.store'
 import { useStatusBar } from '../../composables/useStatusBar'
-import { onLoad, onUnload, onShow } from '@dcloudio/uni-app'
-import { callWorkflowListAPIPaged } from '../../utils/workflow'
+import Radiobox from "../../component/radiobox/radiobox.vue"
+import MachineRadiobox from "../../component/machineRadiobox/machineRadiobox.vue"
+import AddWorkerRadiobox from "../../component/addWorkerRadiobox/addWorkerRadiobox.vue"
+
+// ==================== Store和Composables ====================
 const userStore = useUserStore()
 const { statusBarHeight } = useStatusBar()
-// 添加函数定义
-const closeWorkshopOptions = () => {
-  // 空函数，防止warn（如果不需要，可移除模板@click）
-}
 
-// 车间选择单选框
+// ==================== 响应式数据定义 ====================
+
+// ---------- 车间相关 ----------
 const workshop = ref('拉伸车间')
 const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
 const showWorkshopModal = ref(false)
+
+// ---------- 机台相关 ----------
+const machine = ref(null)
+const machineOptions = ref([])
+const showMachineModal = ref(false)
+
+// ---------- 模具相关 ----------
+const mold = ref(null)
+const moldOptions = ref([])
+const showMoldModal = ref(false)
+
+// ---------- 搜索和列表相关 ----------
+const searchValue = ref('')
+const billsList = ref([])
+const processList = ref([])
+const listKey = ref(0)
+
+// ---------- 图片预览相关 ----------
+const showImagePreview = ref(false)
+const currentImageUrl = ref('')
+
+// ---------- 工序模态相关 ----------
+const showProcessModal = ref(false)
+const selectedProcessData = ref(null)
+const processDispatchData = ref({
+  employee: '',
+  quantity: 1,
+  time: 1,
+  machine: '',
+  mold: ''
+})
+
+// ---------- 员工相关 ----------
+const employeeList = ref([])
+const selectedEmployee = ref([])
+const showAddEmployeeModal = ref(false)
+const selectedEmployeesForAdd = ref([])
+const allEmployeesOptions = ref([])
+const allEmployeesMap = ref({})
+
+// ==================== 计算属性 ====================
+const remainingQuantity = computed(() => {
+  return selectedProcessData.value?.process?.needCount - selectedProcessData.value?.process?.finishCount || 0
+})
+
+// ==================== 方法定义 ====================
+
+// ---------- 车间相关方法 ----------
 const handleWorkshopConfirm = (value) => {
   workshop.value = value
   showWorkshopModal.value = false
-  search()  // 车间改变时触发搜索，使用新 workshop 值
+  search()
 }
 
-// 新增：机台选择
-const machine = ref(null)
-const machineOptions = ref([])  // 将从API加载对象数组
-const showMachineModal = ref(false)
-const handleMachineConfirm = (value) => {
-  machine.value = value  // value现在是对象
-  showMachineModal.value = false
+const closeWorkshopOptions = () => {
+  // 空函数，防止warn
 }
-// 获取机台列表
+
+// ---------- 机台相关方法 ----------
 const getMachineList = async () => {
   try {
-	  console.log(workshop.value);
     const res = await callWorkflowListAPIPaged({
       worksheetId: 'shebeidangan',
       filters: [
@@ -275,13 +330,12 @@ const getMachineList = async () => {
       uni.showToast({ title: '无机台数据', icon: 'none' })
       return
     }
-    // 映射为对象数组
     machineOptions.value = res.data.map(item => ({
       workshop: item['67ac0a87d6566fd9d09a2340'] || '',
       code: item['63db6b67e134b5cd4f9f96bb'] || '',
       name: item['63db6b67e134b5cd4f9f96bc'] || '',
-      value: item['63db6b67e134b5cd4f9f96bb'] || ''  // 添加value，用code作为唯一键
-    })).filter(item => item.value)  // 过滤无效项
+      value: item['63db6b67e134b5cd4f9f96bb'] || ''
+    })).filter(item => item.value)
     showMachineModal.value = true
   } catch (error) {
     console.error('获取机台列表失败:', error)
@@ -289,19 +343,15 @@ const getMachineList = async () => {
   }
 }
 
-// 新增：模具选择
-const mold = ref(null)
-const moldOptions = ref([])  // 将从API加载对象数组
-const showMoldModal = ref(false)
-const handleMoldConfirm = (value) => {
-  mold.value = value  // value现在是对象
-  showMoldModal.value = false
+const handleMachineConfirm = (value) => {
+  machine.value = value
+  showMachineModal.value = false
 }
-// 获取模具列表
+
+// ---------- 模具相关方法 ----------
 const getMoldList = async () => {
-  let res = null  // 初始化
   try {
-    res = await callWorkflowListAPIPaged({
+    const res = await callWorkflowListAPIPaged({
       worksheetId: 'shebeidangan',
       filters: [{
         "controlId": "67ac0a87d6566fd9d09a2340",
@@ -315,108 +365,231 @@ const getMoldList = async () => {
       uni.showToast({ title: '无模具数据', icon: 'none' })
       return null
     }
-    // 映射为对象数组
     moldOptions.value = res.data.map(item => ({
       workshop: item['67ac0a87d6566fd9d09a2340'] || '',
       code: item['63db6b67e134b5cd4f9f96bb'] || '',
       name: item['63db6b67e134b5cd4f9f96bc'] || '',
       value: item['63db6b67e134b5cd4f9f96bb'] || ''
-    })).filter(item => item.value)  // 过滤无效项
+    })).filter(item => item.value)
     showMoldModal.value = true
-    return res  // 在try内return
+    return res
   } catch (error) {
     console.error('获取模具列表失败:', error)
     uni.showToast({ title: '获取模具列表失败', icon: 'none' })
-    return null  // catch中return null
+    return null
   }
 }
 
-const searchValue = ref('')  // 搜索输入值
-const billsList = ref([])  // 单据列表
-const processList = ref([])  // 工序列表
-const listKey = ref(0)  // 用于强制重新渲染的key
+const handleMoldConfirm = (value) => {
+  mold.value = value
+  showMoldModal.value = false
+}
 
-// 图片预览相关状态
-const showImagePreview = ref(false)  // 是否显示图片预览
-const currentImageUrl = ref('')  // 当前显示的图片URL
-
-// 新增：工序模态状态
-const showProcessModal = ref(false)
-const selectedProcessData = ref(null)  // { item, process }
-const processDispatchData = ref({
-  employee: '',  // 员工名称
-  quantity: 1,   // 派工数量
-  time: 1,       // 改为初始1
-  machine: '',   // 新增：机台
-  mold: ''       // 新增：模具
-})
-
-const employeeList = ref([])  // 员工列表
-const selectedEmployee = ref([])  // 选中员工ID数组（多选）
-
-// 添加员工模态框相关状态
-const showAddEmployeeModal = ref(false)
-const selectedEmployeesForAdd = ref([])  // 选中的员工ID数组
-const allEmployeesOptions = ref([])  // 所有员工选项（用于添加员工模态框）
-const allEmployeesMap = ref({})  // 所有员工的完整信息映射（id -> employee对象）
-
-// 加载员工列表（仅用于添加员工模态框的可选项，不更新工序派工模态框的employeeList）
-const loadEmployees = async () => {
-  try {
-    const res = await callWorkflowListAPIPaged({
-      worksheetId: 'yggs',  // 假设员工worksheetId，根据实际调整
-      filters: [{
-        "controlId": "6937d496ff2b019b3cb34c95",  // 车间过滤
-        "dataType": 30,
-        "spliceType": 1,
-        "filterType": 2,
-        "values": [workshop.value]
-      }]
+// ---------- 搜索和列表相关方法 ----------
+const getProcessRaw = async (searchVal = '') => {
+  const filters = [{
+    "controlId": "669a6cae2503723eec1b49bb",
+    "dataType": 30,
+    "spliceType": 1,
+    "filterType": 2,
+    "values": [workshop.value]
+  }]
+  if (searchVal) {
+    filters.push({
+      "controlId": "6593b07ae97eb866a50eeba1",
+      "dataType": 30,
+      "spliceType": 1,
+      "filterType": 2,
+      "values": [searchVal]
     })
-    if (res.data && res.data.length > 0) {
-      const mappedEmployees = res.data.map(item => ({
-        id: item['692113fb21066a9f124f5fe2'] || '',  // 假设ID字段
-        name: item['6938db8bda0981f67b352af3'] || '',  // 姓名字段
-        unrecordedHours: item['6921135b21066a9f124f5f79'] || 0  // 已派未记时数量字段，替换实际controlId
-      })).filter(emp => emp.id)
-      
-      // 只更新添加员工模态框的选项，不更新工序派工模态框的employeeList
-      // employeeList 应该初始为空，只有通过"添加员工"按钮添加的员工才会显示
-      allEmployeesOptions.value = mappedEmployees.map(emp => ({
-        label: emp.name,
-        value: emp.id
-      }))
-      // 创建员工映射，方便快速查找
-      allEmployeesMap.value = {}
-      mappedEmployees.forEach(emp => {
-        allEmployeesMap.value[emp.id] = emp
-      })
+  }
+  const res = await callWorkflowListAPIPaged({
+    worksheetId: 'paigongdan',
+    filters
+  })
+  return res
+}
+
+const getBillsListRaw = async (searchVal = '') => {
+  const filters = [{
+    "controlId": "67de26c9c5377d50a523c735",
+    "dataType": 30,
+    "spliceType": 1,
+    "filterType": 2,
+    "values": [workshop.value]
+  }]
+  if (searchVal) {
+    filters.push({
+      "controlId": "655e1cbbbd2094b316347f92",
+      "dataType": 30,
+      "spliceType": 1,
+      "filterType": 2,
+      "values": [searchVal]
+    })
+  }
+  const res = await callWorkflowListAPIPaged({
+    worksheetId: 'paichanjihua',
+    filters
+  })
+  return res
+}
+
+const search = async () => {
+  if (!searchValue.value || !searchValue.value.trim()) {
+    billsList.value = []
+    processList.value = []
+    return
+  }
+  
+  const [billsRes, processRes] = await Promise.all([
+    getBillsListRaw(searchValue.value),
+    getProcessRaw(searchValue.value)
+  ])
+
+  const newProcessList = processRes.data.map(item => ({
+    processName: item['656ffd1bba5ef3863bf3ec1e'],
+    needCount: item['68099ac75d6fc47331574e82'],
+    finishCount: item['669b71152503723eec1b52d7'],
+    processOrder: item['6593b07ae97eb866a50eeba1'],
+    worktime: item['69211dac21066a9f124f62df']
+  }))
+  processList.value = newProcessList.map(item => ({ ...item }))
+
+  if (billsRes.data.length === 0) {
+    billsList.value = []
+    return
+  }
+
+  const newBillsList = billsRes.data.map(item => {
+    const orderGoods = item['691c47ee1c02c451c72a81c5']
+    const orderCode = item['655e1cbbbd2094b316347f92']
+    const processes = processList.value.filter(p => p.processOrder === orderCode)
+    
+    let imageData = item['6683a0448d2110bec155ac64']
+    if (typeof imageData === 'string' && imageData.trim()) {
+      try {
+        imageData = JSON.parse(imageData)
+      } catch (e) {
+        // 解析失败，保持原值
+      }
     }
-  } catch (error) {
-    console.error('加载员工失败:', error)
+    
+    return {
+      orderGoods,
+      orderCount: item['681b0b53b139204fd264c5fd'],
+      name: item['6937d255ff2b019b3cb34be3'],
+      productionCode: item['691d6336535b29cbd5c6c0ca'],
+      image: imageData,
+      completedProcess: processes.length > 0 ? `${processes.filter(p => p.finishCount === p.needCount).length}/${processes.length}` : '0',
+      productCode: item['691d6336535b29cbd5c6c0ca'],
+      processes: processes.map(p => ({ ...p })),
+      orderCode
+    }
+  })
+  
+  billsList.value = []
+  await nextTick()
+  billsList.value = newBillsList.map(item => ({
+    ...item,
+    processes: item.processes.map(p => ({ ...p }))
+  }))
+  listKey.value = Date.now()
+  await nextTick()
+}
+
+const loadAllData = async (retryCount = 0) => {
+  if (!searchValue.value || !searchValue.value.trim()) {
+    billsList.value = []
+    processList.value = []
+    return
+  }
+  
+  await search()
+  
+  if (retryCount === 0) {
+    setTimeout(async () => {
+      await search()
+    }, 1000)
   }
 }
 
-// 打开工序模态
+// ---------- 图片预览相关方法 ----------
+const dispatchOrder = (item) => {
+  let imageData = item?.image
+  
+  if (!imageData) {
+    uni.showToast({ title: '暂无图片', icon: 'none' })
+    return
+  }
+  
+  if (typeof imageData === 'string') {
+    try {
+      imageData = JSON.parse(imageData)
+    } catch (e) {
+      uni.showToast({ title: '图片数据格式错误', icon: 'none' })
+      return
+    }
+  }
+  
+  const imageArray = Array.isArray(imageData) ? imageData : (imageData ? [imageData] : [])
+  
+  if (!imageArray || imageArray.length === 0) {
+    uni.showToast({ title: '暂无图片', icon: 'none' })
+    return
+  }
+  
+  const firstImage = imageArray[0]
+  const downloadUrl = firstImage?.DownloadUrl
+  
+  if (!downloadUrl) {
+    uni.showToast({ title: '图片地址不存在', icon: 'none' })
+    return
+  }
+  
+  currentImageUrl.value = downloadUrl
+  showImagePreview.value = true
+}
+
+const closeImagePreview = () => {
+  showImagePreview.value = false
+  currentImageUrl.value = ''
+}
+
+const handleImageError = (e) => {
+  uni.showToast({ title: '图片加载失败', icon: 'none' })
+}
+
+const handleImageLoad = () => {
+  // 图片加载成功处理
+}
+
+// ---------- 工序模态相关方法 ----------
 const openProcessModal = (item, process) => {
   selectedProcessData.value = { item, process }
-  // 新增：重置选择
   machine.value = null
   mold.value = null
   processDispatchData.value = {
     employee: '',
     quantity: 1,
-    time: process?.worktime || 0,  // 从工序数据中获取工时
+    time: process?.worktime || 0,
     machine: '',
     mold: ''
   }
-  selectedEmployee.value = []  // 重置选中员工数组
-  employeeList.value = []  // 清空员工列表，只有通过"添加员工"按钮添加的员工才会显示
-  loadEmployees()  // 加载员工选项（用于添加员工模态框），不更新employeeList
+  selectedEmployee.value = []
+  employeeList.value = []
+  loadEmployees()
   showProcessModal.value = true
 }
 
-// 确认派工，添加员工验证和dispatchData
+const closeProcessModal = () => {
+  showProcessModal.value = false
+  processDispatchData.value = { employee: '', quantity: 1, time: 1, machine: '', mold: '' }
+  machine.value = null
+  mold.value = null
+  employeeList.value = []
+  selectedEmployee.value = []
+}
+
 const confirmProcessDispatch = async () => {
   if (!processDispatchData.value.quantity || processDispatchData.value.quantity <= 0) {
     uni.showToast({ title: '请填写有效的派工数量 (>0)', icon: 'none' })
@@ -439,81 +612,97 @@ const confirmProcessDispatch = async () => {
     return
   }
 
-  // 获取所有选中员工的完整数据
   const selectedEmployees = employeeList.value.filter(emp => selectedEmployee.value.includes(emp.id))
-  
-  // 获取所有选中员工的名称（多个员工用顿号分隔）
   const selectedEmployeeNames = selectedEmployees.map(emp => emp.name).join('、')
-  processDispatchData.value.employee = selectedEmployeeNames  // 设置员工名称（多个用顿号分隔）
+  processDispatchData.value.employee = selectedEmployeeNames
 
-  // 单独创建工序派工模态框的核心数据对象
   const dispatchData = {
-    productCode: selectedProcessData.value?.item?.productCode || '',  // 生产编码
-    orderCode: selectedProcessData.value?.item?.orderCode || '',  // 订单编号
-    processName: selectedProcessData.value?.process?.processName || '',  // 工序
-    finishCount: selectedProcessData.value?.process?.finishCount || 0,  // 已派工数量
-    needCount: selectedProcessData.value?.process?.needCount || 0,  // 待派工数量
-    quantity: processDispatchData.value.quantity,  // 本次派工数量
-    time: processDispatchData.value.time,  // 本次派工时数
-    employee: processDispatchData.value.employee,  // 员工名称（多个用顿号分隔）
-    employees: selectedEmployees,  // 选中的员工完整数据数组
-    machine: machine.value?.name || '',  // 机台（名称）
-    mold: mold.value?.name || '', // 模具（名称）
-    workshop: workshop.value || '' // 车间
+    productCode: selectedProcessData.value?.item?.productCode || '',
+    orderCode: selectedProcessData.value?.item?.orderCode || '',
+    processName: selectedProcessData.value?.process?.processName || '',
+    finishCount: selectedProcessData.value?.process?.finishCount || 0,
+    needCount: selectedProcessData.value?.process?.needCount || 0,
+    quantity: processDispatchData.value.quantity,
+    time: processDispatchData.value.time,
+    employee: processDispatchData.value.employee,
+    employees: selectedEmployees,
+    machine: machine.value?.name || '',
+    mold: mold.value?.name || '',
+    workshop: workshop.value || ''
   }
-
-  // 打印所有数据（包括选中的员工数据）
-  console.log('工序派工模态框的数据:', dispatchData)
-  console.log('选中的员工数据:', selectedEmployees)
 
   const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjkyMTJlNzdhOWE4ZGM2YmMxZjczYzlk', dispatchData)
   if (res.status === 1) {
     uni.showToast({ title: '派工成功' })
     showProcessModal.value = false
-    // 刷新列表以更新工序进度
     search()
   } else {
     uni.showToast({ title: res.message })
   }
 }
 
-// 新增：添加员工按钮处理
+// ---------- 员工相关方法 ----------
+const loadEmployees = async () => {
+  try {
+    const res = await callWorkflowListAPIPaged({
+      worksheetId: 'yggs',
+      filters: [{
+        "controlId": "6937d496ff2b019b3cb34c95",
+        "dataType": 30,
+        "spliceType": 1,
+        "filterType": 2,
+        "values": [workshop.value]
+      }]
+    })
+    if (res.data && res.data.length > 0) {
+      const mappedEmployees = res.data.map(item => ({
+        id: item['692113fb21066a9f124f5fe2'] || '',
+        name: item['6938db8bda0981f67b352af3'] || '',
+        unrecordedHours: item['6921135b21066a9f124f5f79'] || 0
+      })).filter(emp => emp.id)
+      
+      allEmployeesOptions.value = mappedEmployees.map(emp => ({
+        label: emp.name,
+        value: emp.id
+      }))
+      
+      allEmployeesMap.value = {}
+      mappedEmployees.forEach(emp => {
+        allEmployeesMap.value[emp.id] = emp
+      })
+    }
+  } catch (error) {
+    console.error('加载员工失败:', error)
+  }
+}
+
 const addEmployee = async () => {
-  // 确保员工数据已加载
   if (allEmployeesOptions.value.length === 0) {
     await loadEmployees()
   }
-  // 重置选中的员工
   selectedEmployeesForAdd.value = []
-  // 打开模态框
   showAddEmployeeModal.value = true
 }
 
-// 处理添加员工模态框关闭
 const handleAddEmployeeModalClose = (value) => {
   showAddEmployeeModal.value = value
 }
 
-// 处理添加员工确认
 const handleAddEmployeeConfirm = async (selectedIds) => {
   if (!selectedIds || selectedIds.length === 0) {
     uni.showToast({ title: '请至少选择一个员工', icon: 'none' })
     return
   }
   
-  // 确保员工数据已加载
   if (Object.keys(allEmployeesMap.value).length === 0) {
     await loadEmployees()
   }
   
   let addedCount = 0
-  let firstAddedId = null  // 记录第一个添加的员工ID
   
-  // 将选中的员工添加到员工列表中（如果不存在）
   selectedIds.forEach(id => {
     const exists = employeeList.value.find(emp => emp.id === id)
     if (!exists) {
-      // 从员工映射中获取完整信息
       const fullEmployee = allEmployeesMap.value[id]
       if (fullEmployee) {
         employeeList.value.push({
@@ -521,12 +710,8 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
           name: fullEmployee.name,
           unrecordedHours: fullEmployee.unrecordedHours || 0
         })
-        if (addedCount === 0) {
-          firstAddedId = fullEmployee.id  // 记录第一个添加的员工ID
-        }
         addedCount++
       } else {
-        // 如果映射中没有，尝试从 allEmployeesOptions 中查找
         const option = allEmployeesOptions.value.find(opt => opt.value === id)
         if (option) {
           employeeList.value.push({
@@ -534,19 +719,14 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
             name: option.label,
             unrecordedHours: 0
           })
-          if (addedCount === 0) {
-            firstAddedId = option.value  // 记录第一个添加的员工ID
-          }
           addedCount++
         }
       }
     }
   })
   
-  // 关闭模态框
   showAddEmployeeModal.value = false
   
-  // 将选中的员工ID添加到选中数组中（如果还没有被选中）
   selectedIds.forEach(id => {
     if (!selectedEmployee.value.includes(id)) {
       selectedEmployee.value.push(id)
@@ -560,189 +740,60 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
   }
 }
 
-// 检查员工是否被选中
 const isEmployeeSelected = (employeeId) => {
   return selectedEmployee.value.includes(employeeId)
 }
 
-// 处理员工checkbox变化事件
 const onEmployeeCheckboxChange = (e) => {
   selectedEmployee.value = e.detail.value || []
 }
 
-// 新增：工单明细按钮处理
+// ---------- 页面跳转方法 ----------
+const goDispatchInquiry = () => {
+  uni.navigateTo({
+    url: '/pages/dispatchInquiry/dispatchInquiry'
+  })
+}
+
+const goWorkload = () => {
+  uni.navigateTo({
+    url: '/pages/workload/workload'
+  })
+}
+
+const goWorkGuide = () => {
+  uni.navigateTo({
+    url: '/pages/workGuide/workGuide'
+  })
+}
+
+const goSelectBills = () => {
+  uni.navigateTo({
+    url: `/pages/selectBills/selectBills?workshop=${workshop.value}`
+  })
+}
+
 const goOrderDetail = () => {
   uni.navigateTo({
     url: '/pages/orderDetail/orderDetail'
   })
 }
 
-// 关闭工序模态
-const closeProcessModal = () => {
-  showProcessModal.value = false
-  processDispatchData.value = { employee: '', quantity: 1, time: 1, machine: '', mold: '' }  // 改为time:1
-  machine.value = null
-  mold.value = null
-  // 清空员工表格数据
-  employeeList.value = []
-  selectedEmployee.value = []
-}
-
-const getProcessRaw = async (searchVal = '') => {
-  const filters = [{
-    "controlId": "669a6cae2503723eec1b49bb",
-    "dataType": 30,
-    "spliceType": 1,
-    "filterType": 2,
-    "values": [workshop.value]
-  }]
-  if (searchVal) {  // 只在有搜索值时添加 filter
-    filters.push({
-      "controlId": "6593b07ae97eb866a50eeba1",  // processOrder 字段，匹配订单编码
-      "dataType": 30,
-      "spliceType": 1,
-      "filterType": 2,  // 精确匹配
-      "values": [searchVal]
-    })
-  }
-  const res = await callWorkflowListAPIPaged({
-    worksheetId: 'paigongdan',
-    filters
-  })
-  return res
-}
-
-const getBillsListRaw = async (searchVal = '') => {
-  const filters = [{
-    "controlId": "67de26c9c5377d50a523c735",
-    "dataType": 30,
-    "spliceType": 1,
-    "filterType": 2,
-    "values": [workshop.value]
-  }]
-  if (searchVal) {  // 只在有搜索值时添加 filter
-    filters.push({
-      "controlId": "655e1cbbbd2094b316347f92",  // 订单编码字段（原来的 orderGoods ID）
-      "dataType": 30,
-      "spliceType": 1,
-      "filterType": 2,  // 精确匹配
-      "values": [searchVal]
-    })
-  }
-  const res = await callWorkflowListAPIPaged({
-    worksheetId: 'paichanjihua',
-    filters
-  })
-  return res
-}
-
-const search = async () => {
-  console.log('search 函数被调用，searchValue:', searchValue.value)
-  if (!searchValue.value || !searchValue.value.trim()) {
-    billsList.value = []
-    processList.value = []
-    return
-  }
-  console.log('search 开始请求数据')
-  const [billsRes, processRes] = await Promise.all([getBillsListRaw(searchValue.value), getProcessRaw(searchValue.value)])
-
-  // 使用新数组确保 Vue 检测到变化
-  const newProcessList = processRes.data.map(item => ({
-    processName: item['656ffd1bba5ef3863bf3ec1e'],
-    needCount: item['68099ac75d6fc47331574e82'],
-    finishCount: item['669b71152503723eec1b52d7'],
-    processOrder: item['6593b07ae97eb866a50eeba1'],
-    worktime: item['69211dac21066a9f124f62df']
-  }))
-  // 直接赋值新数组，确保引用完全改变
-  processList.value = newProcessList.map(item => ({ ...item }))
-  console.log('search 获取到的工序列表:', processList.value.length, '条')
-
-  if (billsRes.data.length === 0) {
-    billsList.value = []
-    return
-  }
-
-  const newBillsList = billsRes.data.map(item => {
-    const orderGoods = item['691c47ee1c02c451c72a81c5']  // 新订单物品 ID
-    const orderCode = item['655e1cbbbd2094b316347f92']  // 订单编码 (旧 ID)
-    // 使用最新的 processList.value 来过滤工序
-    const processes = processList.value.filter(p => p.processOrder === orderCode)  // 关联基于 orderCode (旧 ID)
-    
-    // 处理 image 字段
-    let imageData = item['6683a0448d2110bec155ac64']
-    // 如果是字符串，尝试解析为 JSON
-    if (typeof imageData === 'string' && imageData.trim()) {
-      try {
-        imageData = JSON.parse(imageData)
-      } catch (e) {
-        // 如果解析失败，保持原值
-      }
-    }
-    
-    return {
-      orderGoods,
-      orderCount: item['681b0b53b139204fd264c5fd'],
-      name: item['6937d255ff2b019b3cb34be3'],
-      productionCode: item['691d6336535b29cbd5c6c0ca'],
-      image: imageData,
-      completedProcess: processes.length > 0 ? `${processes.filter(p => p.finishCount === p.needCount).length}/${processes.length}` : '0',
-      productCode: item['691d6336535b29cbd5c6c0ca'],
-      processes: processes.map(p => ({ ...p })),  // 深拷贝每个process对象
-      orderCode
-    }
-  })
-  // 完全重新创建数组和对象，确保所有引用都是新的
-  billsList.value = []
-  await nextTick()
-  billsList.value = newBillsList.map(item => ({
-    ...item,
-    processes: item.processes.map(p => ({ ...p }))
-  }))
-  // 更新key强制重新渲染
-  listKey.value = Date.now()
-  await nextTick()
-  console.log('search 获取到的单据列表:', billsList.value.length, '条')
-  console.log('search 完成，数据已更新')
-  console.log('billsList 第一个项的 processes 数量:', billsList.value[0]?.processes?.length)
-  console.log('billsList 第一个项的 processes:', JSON.stringify(billsList.value[0]?.processes))
-  console.log('listKey 已更新为:', listKey.value)
-}
-
-// 添加工序
 const addProcess = async (item) => {
   uni.navigateTo({
     url: `/pages/addProcess/addProcess?orderCode=${encodeURIComponent(item.orderCode || '')}&productCode=${encodeURIComponent(item.productCode || '')}&workshop=${workshop.value}`
   })
 }
 
-// 刷新全部数据
-const loadAllData = async (retryCount = 0) => {
-  console.log('loadAllData 被调用，searchValue:', searchValue.value, 'retryCount:', retryCount)
-  if (!searchValue.value || !searchValue.value.trim()) {
-    billsList.value = []
-    processList.value = []
-    return
-  }
-  console.log('loadAllData 开始刷新数据')
-  await search() // search 函数内部已经同时获取了单据列表和工序列表
-  console.log('loadAllData 刷新完成')
-  
-  // 如果数据可能不完整，可以重试一次（最多重试1次）
-  if (retryCount === 0) {
-    setTimeout(async () => {
-      console.log('loadAllData 延迟重试获取数据')
-      await search()
-    }, 1000)  // 1秒后再次获取，确保数据已同步
-  }
+const viewDetail = (item) => {
+  // 插入工序功能
 }
 
-// 在 script setup 中添加 computed
-const remainingQuantity = computed(() => {
-  return selectedProcessData.value?.process?.needCount - selectedProcessData.value?.process?.finishCount || 0
-})
+const quit = () => {
+  uni.navigateBack()
+}
 
-// 更新 watch，移除调试log
+// ==================== Watch监听器 ====================
 watch(() => processDispatchData.value.quantity, (newVal) => {
   const remaining = remainingQuantity.value
   if (newVal > remaining) {
@@ -753,19 +804,14 @@ watch(() => processDispatchData.value.quantity, (newVal) => {
   }
 })
 
-// 时数从工序数据中获取，不需要 watch 监听
-
-// 页面挂载时注册事件监听器（只注册一次）
+// ==================== 生命周期钩子 ====================
 onLoad(() => {
-  // 监听选择单据事件
   uni.$on('selectOrder', (order) => {
     searchValue.value = order
   })
-  // 监听添加工序事件（保留事件监听，但刷新由 onShow 处理）
   uni.$on('processAdded', (data) => {
     // 事件已接收，刷新由 onShow 处理
   })
-  // 监听清空派工数据事件
   uni.$on('clearDispatchData', () => {
     searchValue.value = ''
     billsList.value = []
@@ -773,118 +819,19 @@ onLoad(() => {
   })
 })
 
-// 页面显示时刷新数据（从其他页面返回时）
 onShow(() => {
-  console.log('onShow 触发，searchValue:', searchValue.value)
-  // 每次显示页面时，如果有搜索值则刷新数据
   if (searchValue.value && searchValue.value.trim()) {
-    console.log('onShow 触发刷新数据')
-    // 延迟一下，确保后端数据已同步
     setTimeout(() => {
-      loadAllData(0)  // 传入retryCount=0，会触发一次延迟重试
-    }, 500)  // 延迟500ms再获取数据
-  } else {
-    console.log('onShow 触发，但 searchValue 为空，不刷新')
+      loadAllData(0)
+    }, 500)
   }
 })
 
 onUnload(() => {
-  uni.$off('selectOrder')  // 清理事件监听
-  uni.$off('processAdded')  // 清理事件监听
-  uni.$off('clearDispatchData')  // 清理清空事件监听
+  uni.$off('selectOrder')
+  uni.$off('processAdded')
+  uni.$off('clearDispatchData')
 })
-
-// 跳转派工查询
-const goDispatchInquiry = () => {
-  uni.navigateTo({
-    url: '/pages/dispatchInquiry/dispatchInquiry'
-  })
-}
-
-// 跳转员工工作量查询
-const goWorkload = () => {
-  uni.navigateTo({
-    url: '/pages/workload/workload'
-  })
-}
-
-// 跳转作业指导书
-const goWorkGuide = () => {
-  uni.navigateTo({
-    url: '/pages/workGuide/workGuide'
-  })
-}
-
-// 跳转选择单据
-const goSelectBills = () => {
-  uni.navigateTo({
-    url: `/pages/selectBills/selectBills?workshop=${workshop.value}`
-  })
-}
-
-// 查看图片
-const dispatchOrder = (item) => {
-  // 获取图片数据
-  let imageData = item?.image
-  
-  if (!imageData) {
-    uni.showToast({ title: '暂无图片', icon: 'none' })
-    return
-  }
-  
-  // 如果 image 是字符串，尝试解析为 JSON
-  if (typeof imageData === 'string') {
-    try {
-      imageData = JSON.parse(imageData)
-    } catch (e) {
-      uni.showToast({ title: '图片数据格式错误', icon: 'none' })
-      return
-    }
-  }
-  
-  // 确保是数组
-  const imageArray = Array.isArray(imageData) ? imageData : (imageData ? [imageData] : [])
-  
-  if (!imageArray || imageArray.length === 0) {
-    uni.showToast({ title: '暂无图片', icon: 'none' })
-    return
-  }
-  
-  // 获取第一个图片的 DownloadUrl
-  const firstImage = imageArray[0]
-  const downloadUrl = firstImage?.DownloadUrl
-  
-  if (!downloadUrl) {
-    uni.showToast({ title: '图片地址不存在', icon: 'none' })
-    return
-  }
-  
-  // 设置当前图片URL并显示预览模态框
-  currentImageUrl.value = downloadUrl
-  showImagePreview.value = true
-}
-
-// 关闭图片预览
-const closeImagePreview = () => {
-  showImagePreview.value = false
-  currentImageUrl.value = ''
-}
-
-// 图片加载错误处理
-const handleImageError = (e) => {
-  uni.showToast({ title: '图片加载失败', icon: 'none' })
-}
-
-// 插入工序（保留原有功能）
-const viewDetail = (item) => {
-  // 这里可以添加插入工序的逻辑
-  console.log('插入工序', item)
-}
-
-// 退出
-const quit = () => {
-  uni.navigateBack()
-}
 </script>
 
 <style scoped lang="scss">
