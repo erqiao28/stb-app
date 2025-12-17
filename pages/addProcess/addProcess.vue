@@ -6,8 +6,7 @@
 			<view class="title">
 				添加工序
 			</view>
-			<view class="save" @click="addProcess">
-				保存
+			<view>
 			</view>
 		</view>
 
@@ -17,27 +16,51 @@
 			<image src="/static/scan.svg"></image>
 		</view>
 
-		<!-- 表格区域 -->
-		<view class="table">
-			<scroll-view scroll-y class="table-content" @scrolltolower="loadMore" lower-threshold="50">
-				<view class="table">
-					<view class="table-header-row">
-						<view class="table-header-cell">工序序号</view>
-						<view class="table-header-cell">工序名称</view>
+		<!-- 主要内容区域：左侧表格，右侧输入框和按钮 -->
+		<view class="main-content">
+			<!-- 左侧：表格区域 -->
+			<view class="table-section">
+				<scroll-view scroll-y class="table-content" @scrolltolower="loadMore" lower-threshold="50">
+					<view class="table">
+						<view class="table-header-row">
+							<view class="table-header-cell">工序名称</view>
+						</view>
+						<view v-for="item in tableData" :key="item.processNumber" class="table-body-row" :class="{ selected: selectedProcess === item.processName }" @click="selectProcess(item)">
+							<view class="uni-table-td">{{ item.processName }}</view>
+						</view>
+						<!-- 加载更多提示 -->
+						<view v-if="loading && tableData.length > 0" class="loading-row">
+							<view class="loading-text">加载中...</view>
+						</view>
+						<view v-if="!hasMore && tableData.length > 0" class="no-more-row">
+							<view class="loading-text">没有更多数据了</view>
+						</view>
 					</view>
-					<view v-for="item in tableData" :key="item.processNumber" class="table-body-row" :class="{ selected: selectedProcess === item.processName }" @click="selectProcess(item)">
-						<view class="uni-table-td">{{ item.processNumber }}</view>
-						<view class="uni-table-td">{{ item.processName }}</view>
-					</view>
-					<!-- 加载更多提示 -->
-					<view v-if="loading && tableData.length > 0" class="loading-row">
-						<view class="loading-text">加载中...</view>
-					</view>
-					<view v-if="!hasMore && tableData.length > 0" class="no-more-row">
-						<view class="loading-text">没有更多数据了</view>
-					</view>
+				</scroll-view>
+			</view>
+
+			<!-- 右侧：输入框和按钮区域 -->
+			<view class="input-section">
+				<view class="input-group">
+					<view class="input-label">新增工序</view>
+					<input 
+						type="text" 
+						class="process-input" 
+						placeholder="请输入工序名称" 
+						v-model="manualProcessName"
+						@input="handleManualInput" />
 				</view>
-			</scroll-view>
+				<view class="input-group">
+					<view class="input-label">生产顺序</view>
+					<input 
+						type="number" 
+						class="process-input" 
+						placeholder="请输入生产顺序" 
+						v-model="productionSequence"
+						step="0.01" />
+				</view>
+				<button class="add-button" @click="addProcess">添加工序</button>
+			</view>
 		</view> 
 	</view>
 </template>
@@ -58,6 +81,7 @@ const orderData = ref({
 	ordercode: '',
 	productcode: '',
 	workshop: '',
+	selectedSequence: 0, // 从派工页面传过来的选中工序顺序
 })
 
 const tableData = ref([])
@@ -68,6 +92,15 @@ const loading = ref(false)
 
 // 选中的工序
 const selectedProcess = ref('')
+
+// 手动输入的工序名称
+const manualProcessName = ref('')
+
+// 生产顺序
+const productionSequence = ref('')
+
+// 是否新增状态（true=手动输入新增，false=从表格选择）
+const isNewProcess = ref(false)
 
 // 搜索输入值
 const searchValue = ref('')
@@ -81,6 +114,14 @@ onLoad((options) => {
 	orderData.value.ordercode = decodeURIComponent(options.orderCode || '');
 	orderData.value.productcode = decodeURIComponent(options.productCode || '');
 	orderData.value.workshop = options.workshop || '';
+	orderData.value.selectedSequence = parseFloat(options.selectedSequence || 0);
+	// 如果有传过来的顺序，设置生产顺序为选中顺序+0.01
+	if (orderData.value.selectedSequence > 0) {
+		productionSequence.value = (orderData.value.selectedSequence + 0.01).toFixed(2)
+	} else {
+		// 如果没有传顺序，默认为0.01
+		productionSequence.value = '0.01'
+	}
 	getProcessList(1, true)  // 初次加载全部
 })
 
@@ -151,7 +192,6 @@ const getProcessList = async (pageNum, isRefresh = false) => {
 	console.log('API res data:', res.data)  // 日志确认数据
 	const mappedData = res.data.map(item => {
 		return {
-			processNumber: item['66a119a51a67c46242038254'],
 			processName: item['Name'],
 		}
 	})
@@ -173,16 +213,26 @@ const getProcessList = async (pageNum, isRefresh = false) => {
 
 // 添加工序
 const addProcess = async () => {
-	if (!selectedProcess.value) {
-		showToast('请选择工序')
+	// 确定工序名称：优先使用手动输入的，否则使用表格选择的
+	const processName = manualProcessName.value.trim() || selectedProcess.value
+	
+	if (!processName) {
+		showToast('请选择工序或输入工序名称')
 		return
 	}
+
+	if (!productionSequence.value || !productionSequence.value.trim()) {
+		showToast('请输入生产顺序')
+		return
+	}
+
 	const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjkxYzU0ODlkMjYxYWY3YTM3ZjA3M2Nm', {
 		ordercode: orderData.value.ordercode,
 		productcode: orderData.value.productcode,
 		workshop: orderData.value.workshop,
-		processName: selectedProcess.value,
-		processOrder: orderData.value.ordercode  // 关联订单
+		processName: processName,
+		isNew: isNewProcess.value,
+		sequence: parseFloat(productionSequence.value) || 0
 	})
 	console.log('保存响应:', res)
 	showToast('添加成功')
@@ -191,7 +241,7 @@ const addProcess = async () => {
 		success: () => {
 			uni.$emit('processAdded', {
 				orderCode: orderData.value.ordercode,
-				processName: selectedProcess.value
+				processName: processName
 			})
 		}
 	})
@@ -200,7 +250,17 @@ const addProcess = async () => {
 // 选中工序
 const selectProcess = (item) => {
 	selectedProcess.value = item.processName
-	// selectedProcessId.value = item.processNumber
+	manualProcessName.value = '' // 清空手动输入
+	isNewProcess.value = false // 从表格选择，不是新增
+	// 生产顺序保持使用跳转前选中的顺序+0.01，不需要重新计算
+}
+
+// 处理手动输入
+const handleManualInput = () => {
+	if (manualProcessName.value.trim()) {
+		selectedProcess.value = '' // 清空表格选择
+		isNewProcess.value = true // 手动输入，是新增
+	}
 }
 
 // 返回
@@ -239,11 +299,6 @@ const quit = () => {
 		color: white;
 	}
 
-	.save {
-		font-size: px2vw(35px);
-		color: white;
-		margin-right: px2vw(50px);
-	}
 }
 
 .search-box {
@@ -270,9 +325,25 @@ const quit = () => {
 	}
 }
 
+/* 主要内容区域：左右布局 */
+.main-content {
+	display: flex;
+	flex: 1;
+	overflow: hidden;
+	gap: px2vw(15px);
+	margin: 0 px2vw(15px) px2vw(15px);
+}
+
+/* 左侧表格区域 */
+.table-section {
+	flex: 1;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
 .table {
-	margin: px2vw(15px);
-	margin-top: px2vw(10px);
+	margin: 0;
 	flex: 1;
 	overflow: hidden;
 }
@@ -291,8 +362,66 @@ const quit = () => {
 ::v-deep .table-header-row,
 ::v-deep .table-body-row {
 	display: grid;
-	grid-template-columns: repeat(2, 1fr);
+	grid-template-columns: 1fr;
 	width: 100%;
+}
+
+/* 右侧输入框和按钮区域 */
+.input-section {
+	width: 50%;
+	display: flex;
+	flex-direction: column;
+	gap: px2vw(30px);
+	padding: px2vw(20px);
+	background-color: #fff;
+	border-radius: px2vw(18px);
+}
+
+.input-group {
+	display: flex;
+	flex-direction: column;
+	gap: px2vw(15px);
+}
+
+.input-label {
+	font-size: px2vw(30px);
+	font-weight: bold;
+	color: #333;
+}
+
+.process-input {
+	width: 100%;
+	height: px2vw(80px);
+	padding: 0 px2vw(20px);
+	border: px2vw(2px) solid #e0e0e0;
+	border-radius: px2vw(12px);
+	font-size: px2vw(30px);
+	background-color: #fff;
+	box-sizing: border-box;
+
+	&:focus {
+		border-color: #5884f1;
+		outline: none;
+	}
+}
+
+.add-button {
+	width: 100%;
+	height: px2vw(80px);
+	background-color: #5884f1;
+	color: white;
+	border: none;
+	border-radius: px2vw(12px);
+	font-size: px2vw(30px);
+	font-weight: bold;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-top: auto;
+
+	&:active {
+		background-color: #2755f1;
+	}
 }
 
 ::v-deep .table-header-row .table-header-cell,

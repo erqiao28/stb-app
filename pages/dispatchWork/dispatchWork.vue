@@ -811,8 +811,23 @@ const goOrderDetail = () => {
 }
 
 const addProcess = async (item) => {
+  // 检查是否有选中的工序
+  if (!selectedProcess.value) {
+    uni.showToast({ title: '请先选择一个工序', icon: 'none' })
+    return
+  }
+  
+  // 检查选中的工序是否属于当前订单
+  if (selectedProcess.value.item.orderCode !== item.orderCode) {
+    uni.showToast({ title: '请选择当前订单的工序', icon: 'none' })
+    return
+  }
+  
+  // 获取选中工序的顺序，用于计算新工序的顺序
+  const selectedSequence = selectedProcess.value.process.sequence || 0
+  
   uni.navigateTo({
-    url: `/pages/addProcess/addProcess?orderCode=${encodeURIComponent(item.orderCode || '')}&productCode=${encodeURIComponent(item.productCode || '')}&workshop=${workshop.value}`
+    url: `/pages/addProcess/addProcess?orderCode=${encodeURIComponent(item.orderCode || '')}&productCode=${encodeURIComponent(item.productCode || '')}&workshop=${workshop.value}&selectedSequence=${selectedSequence}`
   })
 }
 
