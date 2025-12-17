@@ -180,13 +180,20 @@ const search = async () => {
 				processName: item['656ffd1bba5ef3863bf3ec1e'],
 				needCount: item['68099ac75d6fc47331574e82'],
 				finishCount: item['669b71152503723eec1b52d7'],
-				processOrder: item['6593b07ae97eb866a50eeba1']
+				processOrder: item['6593b07ae97eb866a50eeba1'],
+				sequence: item['693a62040f64427fac25ae80'],
 			}
 		})
 		console.log(processList.value)
 		billsList.value = billsRes.data.map(item => {
 			const orderCode = item['655e1cbbbd2094b316347f92']  // 旧订单编码 ID
 			const processes = processList.value.filter(p => p.processOrder === orderCode)  // 关联基于 orderCode
+				.sort((a, b) => {
+					// 按sequence字段从小到大排序
+					const seqA = a.sequence || 0
+					const seqB = b.sequence || 0
+					return seqA - seqB
+				})
 			return {
 				orderCode,
 				orderCount: item['681b0b53b139204fd264c5fd'],

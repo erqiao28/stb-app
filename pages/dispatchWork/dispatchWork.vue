@@ -67,14 +67,14 @@
           <!-- 本次派工数量和时数 -->
           <view class="row-group">
             <view class="form-group">
-              <text class="label">本次派工数量：</text>
+              <text class="label">派工数量：</text>
               <input v-model.number="processDispatchData.quantity" type="number" placeholder="请输入数量"
-                :max="remainingQuantity" min="1" class="input-field" />
+                :max="remainingQuantity" min="0" class="input-field" />
             </view>
             <view class="form-group">
-              <text class="label">本次派工时数：</text>
-              <input v-model.number="processDispatchData.time" type="number" placeholder="请输入时数" 
-                class="input-field" disabled />
+              <text class="label">派工工时：</text>
+              <input v-model.number="processDispatchData.time" type="number" placeholder="自动计算" 
+                class="input-field" readonly />
             </view>
           </view>
           
@@ -281,8 +281,8 @@ const selectedProcessData = ref(null)
 const selectedProcess = ref(null) // 当前选中的工序 { item, process }
 const processDispatchData = ref({
   employee: '',
-  quantity: 1,
-  time: 1,
+  quantity: 0,
+  time: 0,
   machine: '',
   mold: ''
 })
@@ -457,7 +457,8 @@ const search = async () => {
     finishCount: item['669b71152503723eec1b52d7'],
     processOrder: item['6593b07ae97eb866a50eeba1'],
     worktime: item['69211dac21066a9f124f62df'],
-    sequence: item['693a62040f64427fac25ae80']
+    sequence: item['693a62040f64427fac25ae80'],
+    hourlyoutput: item['693a879a0f64427fac25da92'],
   }))
   processList.value = newProcessList.map(item => ({ ...item }))
 
@@ -600,8 +601,8 @@ const openProcessModal = (item, process) => {
   mold.value = null
   processDispatchData.value = {
     employee: '',
-    quantity: 1,
-    time: process?.worktime || 0,
+    quantity: 0,
+    time: 0,
     machine: '',
     mold: ''
   }
@@ -613,7 +614,7 @@ const openProcessModal = (item, process) => {
 
 const closeProcessModal = () => {
   showProcessModal.value = false
-  processDispatchData.value = { employee: '', quantity: 1, time: 1, machine: '', mold: '' }
+  processDispatchData.value = { employee: '', quantity: 0, time: 0, machine: '', mold: '' }
   machine.value = null
   mold.value = null
   employeeList.value = []
@@ -626,8 +627,15 @@ const confirmProcessDispatch = async () => {
     uni.showToast({ title: '请填写有效的派工数量 (>0)', icon: 'none' })
     return
   }
+  
+  const hourlyOutput = selectedProcessData.value?.process?.hourlyoutput || 0
+  if (!hourlyOutput || hourlyOutput <= 0) {
+    uni.showToast({ title: '该工序的小时产量数据异常，无法计算派工工时', icon: 'none' })
+    return
+  }
+  
   if (!processDispatchData.value.time || processDispatchData.value.time <= 0) {
-    uni.showToast({ title: '请填写有效的派工时数 (>0)', icon: 'none' })
+    uni.showToast({ title: '派工工时计算错误，请检查派工数量', icon: 'none' })
     return
   }
   if (!machine.value?.code) {
@@ -853,15 +861,34 @@ const quit = () => {
 }
 
 // ==================== Watch监听器 ====================
+// 监听派工数量变化，验证并计算派工工时
 watch(() => processDispatchData.value.quantity, (newVal) => {
   const remaining = remainingQuantity.value
   if (newVal > remaining) {
     uni.showToast({ title: `数量不能超过剩余 ${remaining}`, icon: 'none' })
     processDispatchData.value.quantity = remaining
-  } else if (newVal < 1) {
-    processDispatchData.value.quantity = 1
+    return
+  } else if (newVal < 0) {
+    processDispatchData.value.quantity = 0
   }
+  
+  // 自动计算派工工时：派工数量 / 小时产量（从工序数据中获取）
+  calculateWorkTime()
 })
+
+// 计算派工工时
+const calculateWorkTime = () => {
+  const quantity = processDispatchData.value.quantity || 0
+  // 从工序数据中获取小时产量
+  const hourlyOutput = selectedProcessData.value?.process?.hourlyoutput || 0
+  
+  if (hourlyOutput > 0 && quantity > 0) {
+    // 保留2位小数
+    processDispatchData.value.time = parseFloat((quantity / hourlyOutput).toFixed(2))
+  } else {
+    processDispatchData.value.time = 0
+  }
+}
 
 // ==================== 生命周期钩子 ====================
 onLoad(() => {
@@ -1362,6 +1389,12 @@ onUnload(() => {
     background: #f9f9f9;
     font-size: px2vw(30px);
     box-sizing: border-box;
+
+    &[readonly] {
+      background: #f5f5f5;
+      color: #666;
+      cursor: not-allowed;
+    }
   }
 }
 
