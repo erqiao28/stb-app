@@ -205,11 +205,11 @@
           <view class="processes-section" v-if="item.processes && item.processes.length > 0" :key="`processes-${item.orderCode}-${listKey}`">
             <view class="processes-container" :key="`container-${item.orderCode}-${listKey}`">
               <view v-for="(process, index) in item.processes" :key="`${item.orderCode}-${process.processName}-${index}-${listKey}`" class="process-wrapper">
-                <view class="process-item">
+                <view class="process-item" :class="{ 'process-selected': isProcessSelected(item, process) }">
                   <view class="process-sequence">{{ process.sequence || '' }}</view>
                   <view class="progress-circle"
                     :style="{ '--percent': Math.round((process.finishCount / process.needCount) * 100) + '%' }"
-                    @click="openProcessModal(item, process)">
+                    @click="selectProcess(item, process)">
                     <view class="progress-inner">
                       <view class="progress-text">{{ process.finishCount }}/{{ process.needCount }}</view>
                     </view>
@@ -278,6 +278,7 @@ const currentImageUrl = ref('')
 // ---------- 工序模态相关 ----------
 const showProcessModal = ref(false)
 const selectedProcessData = ref(null)
+const selectedProcess = ref(null) // 当前选中的工序 { item, process }
 const processDispatchData = ref({
   employee: '',
   quantity: 1,
@@ -436,6 +437,9 @@ const getBillsListRaw = async (searchVal = '') => {
 }
 
 const search = async () => {
+  // 清除选中状态
+  selectedProcess.value = null
+  
   if (!searchValue.value || !searchValue.value.trim()) {
     billsList.value = []
     processList.value = []
@@ -572,6 +576,24 @@ const handleImageLoad = () => {
 }
 
 // ---------- 工序模态相关方法 ----------
+// 选择工序
+const selectProcess = (item, process) => {
+  // 如果点击的是已选中的工序，则取消选中
+  if (isProcessSelected(item, process)) {
+    selectedProcess.value = null
+  } else {
+    selectedProcess.value = { item, process }
+  }
+}
+
+// 判断工序是否被选中
+const isProcessSelected = (item, process) => {
+  if (!selectedProcess.value) return false
+  return selectedProcess.value.item.orderCode === item.orderCode && 
+         selectedProcess.value.process.processName === process.processName
+}
+
+// 打开工序派工模态框
 const openProcessModal = (item, process) => {
   selectedProcessData.value = { item, process }
   machine.value = null
@@ -596,6 +618,7 @@ const closeProcessModal = () => {
   mold.value = null
   employeeList.value = []
   selectedEmployee.value = []
+  // 关闭模态框后不清空选中状态，保持选中以便再次派工
 }
 
 const confirmProcessDispatch = async () => {
@@ -794,7 +817,20 @@ const addProcess = async (item) => {
 }
 
 const dispatchWork = (item) => {
-  // 插入工序功能
+  // 检查是否有选中的工序
+  if (!selectedProcess.value) {
+    uni.showToast({ title: '请先选择一个工序', icon: 'none' })
+    return
+  }
+  
+  // 检查选中的工序是否属于当前订单
+  if (selectedProcess.value.item.orderCode !== item.orderCode) {
+    uni.showToast({ title: '请选择当前订单的工序', icon: 'none' })
+    return
+  }
+  
+  // 打开派工模态框
+  openProcessModal(selectedProcess.value.item, selectedProcess.value.process)
 }
 
 const quit = () => {
@@ -1100,6 +1136,28 @@ onUnload(() => {
           align-items: center;
           margin-right: 0;
           position: relative;
+          padding: px2vw(8px);
+          border-radius: px2vw(12px);
+          transition: all 0.3s ease;
+
+          &.process-selected {
+            background-color: #e3f2fd;
+            border: px2vw(3px) solid #5884f1;
+            box-shadow: 0 px2vw(4px) px2vw(12px) rgba(88, 132, 241, 0.3);
+
+            .progress-circle {
+              box-shadow: 0 0 px2vw(8px) rgba(88, 132, 241, 0.5);
+            }
+
+            .process-name {
+              color: #5884f1;
+              font-weight: bold;
+            }
+
+            .process-sequence {
+              color: #2755f1;
+            }
+          }
         }
 
         .process-sequence {
@@ -1122,6 +1180,8 @@ onUnload(() => {
           align-items: center;
           justify-content: center;
           position: relative;
+          cursor: pointer;
+          transition: all 0.3s ease;
         }
 
         .progress-inner {
