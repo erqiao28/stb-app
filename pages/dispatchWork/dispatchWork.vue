@@ -179,8 +179,8 @@
               <view class="order-number">{{ item.orderCode }}</view>
             </view>
             <view class="buttons">
-              <button class="btn-dispatch" @click="dispatchOrder(item)">查看图片</button>
-              <button class="btn-detail" @click="viewDetail(item)">插入工序</button>
+              <button class="btn-dispatch" @click="lookImage(item)">查看图片</button>
+              <button class="btn-detail" @click="dispatchWork(item)">派工</button>
               <button class="btn-delete" @click="addProcess(item)">添加工序</button>
             </view>
           </view>
@@ -206,6 +206,7 @@
             <view class="processes-container" :key="`container-${item.orderCode}-${listKey}`">
               <view v-for="(process, index) in item.processes" :key="`${item.orderCode}-${process.processName}-${index}-${listKey}`" class="process-wrapper">
                 <view class="process-item">
+                  <view class="process-sequence">{{ process.sequence || '' }}</view>
                   <view class="progress-circle"
                     :style="{ '--percent': Math.round((process.finishCount / process.needCount) * 100) + '%' }"
                     @click="openProcessModal(item, process)">
@@ -451,7 +452,8 @@ const search = async () => {
     needCount: item['68099ac75d6fc47331574e82'],
     finishCount: item['669b71152503723eec1b52d7'],
     processOrder: item['6593b07ae97eb866a50eeba1'],
-    worktime: item['69211dac21066a9f124f62df']
+    worktime: item['69211dac21066a9f124f62df'],
+    sequence: item['693a62040f64427fac25ae80']
   }))
   processList.value = newProcessList.map(item => ({ ...item }))
 
@@ -464,6 +466,12 @@ const search = async () => {
     const orderGoods = item['691c47ee1c02c451c72a81c5']
     const orderCode = item['655e1cbbbd2094b316347f92']
     const processes = processList.value.filter(p => p.processOrder === orderCode)
+      .sort((a, b) => {
+        // 按sequence字段从小到大排序
+        const seqA = a.sequence || 0
+        const seqB = b.sequence || 0
+        return seqA - seqB
+      })
     
     let imageData = item['6683a0448d2110bec155ac64']
     if (typeof imageData === 'string' && imageData.trim()) {
@@ -514,7 +522,7 @@ const loadAllData = async (retryCount = 0) => {
 }
 
 // ---------- 图片预览相关方法 ----------
-const dispatchOrder = (item) => {
+const lookImage = (item) => {
   let imageData = item?.image
   
   if (!imageData) {
@@ -785,7 +793,7 @@ const addProcess = async (item) => {
   })
 }
 
-const viewDetail = (item) => {
+const dispatchWork = (item) => {
   // 插入工序功能
 }
 
@@ -1091,6 +1099,18 @@ onUnload(() => {
           flex-direction: column;
           align-items: center;
           margin-right: 0;
+          position: relative;
+        }
+
+        .process-sequence {
+          font-size: px2vw(24px);
+          font-weight: bold;
+          color: #5884f1;
+          margin-bottom: px2vw(5px);
+          min-height: px2vw(30px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .progress-circle {
