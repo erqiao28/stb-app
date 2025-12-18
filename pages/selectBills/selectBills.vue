@@ -77,7 +77,7 @@
 					<view class="processes-section" v-if="item.processes && item.processes.length > 0">
 						<view class="processes-container">
 							<view v-for="(process, index) in item.processes" :key="index" class="process-wrapper">
-								<view class="process-item">
+								<view class="process-item" :class="{ 'process-over': process.isOver == 1 }">
 									<view class="progress-circle"
 										:style="{ '--percent': Math.round((process.finishCount / process.needCount) * 100) + '%' }">
 										<view class="progress-inner">
@@ -182,6 +182,7 @@ const search = async () => {
 				finishCount: item['690c794ccf407aa3d938ba28'],
 				processOrder: item['6593b07ae97eb866a50eeba1'],
 				sequence: item['693a62040f64427fac25ae80'],
+				isOver: item['6940f719c81c746aae8ede5d']
 			}
 		})
 		console.log(processList.value)
@@ -490,7 +491,23 @@ const selectOrder = (orderCode) => {
 					flex-direction: column;
 					align-items: center;
 					margin-right: 0;
-					/* 移除margin-right，由gap控制 */
+					position: relative;
+					padding: px2vw(8px);
+					border-radius: px2vw(12px);
+
+					&.process-over {
+						.progress-circle {
+							background: conic-gradient(#f44336 0%, #f44336 var(--percent), #E0E0E0 var(--percent), #E0E0E0 100%) !important;
+						}
+
+						.progress-text {
+							color: #f44336 !important;
+						}
+
+						.process-name {
+							color: #f44336 !important;
+						}
+					}
 				}
 
 				/* 更新进程CSS：增大圆圈并调整横线位置 */
@@ -504,6 +521,7 @@ const selectOrder = (orderCode) => {
 					align-items: center;
 					justify-content: center;
 					position: relative;
+					cursor: pointer;
 				}
 
 				.progress-inner {
@@ -515,15 +533,13 @@ const selectOrder = (orderCode) => {
 					display: flex;
 					align-items: center;
 					justify-content: center;
-					font-size: px2vw(20px);
-					/* 增大字体适应大圆 */
+					font-size: px2vw(12px);
 					top: 10%;
 					left: 10%;
 				}
 
 				.progress-text {
 					font-size: px2vw(20px);
-					/* 增大文本 */
 					font-weight: bold;
 					color: #333;
 					text-align: center;
