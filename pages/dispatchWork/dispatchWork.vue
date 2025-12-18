@@ -59,7 +59,7 @@
               <text class="value">{{ selectedProcessData?.process?.finishCount }}</text>
             </view>
             <view class="form-group">
-              <text class="label">待派工数量：</text>
+              <text class="label">需派工数量：</text>
               <text class="value">{{ selectedProcessData?.process?.needCount }}</text>
             </view>
           </view>
@@ -93,6 +93,18 @@
               </view>
             </view>
           </view>
+          
+          <!-- 日期选择 -->
+          <view class="row-group">
+            <view class="form-group full">
+              <text class="label">派工日期：</text>
+              <picker mode="date" :value="processDispatchData.date" @change="onDateChange">
+                <view class="value">
+                  {{ processDispatchData.date || '请选择日期' }}
+                </view>
+              </picker>
+            </view>
+          </view>
         </view>
         
         <!-- 员工选择表格 -->
@@ -120,7 +132,7 @@
           <button class="btn-cancel" @click="closeProcessModal">取消</button>
           <button class="btn-confirm" @click="addEmployee">添加员工</button>
           <button class="btn-confirm" @click="goOrderDetail">工单明细</button>
-          <button class="btn-confirm" @click="confirmProcessDispatch">确认派工</button>
+          <button class="btn-confirm" @click="confirmProcessDispatch" :disabled="!canDispatch">确认派工</button>
         </view>
       </view>
     </view>
@@ -182,7 +194,7 @@
             </view>
             <view class="buttons">
               <button class="btn-dispatch" @click="lookImage(item)">查看图片</button>
-              <button class="btn-detail" @click="dispatchWork(item)">派工</button>
+              <button class="btn-detail" @click="dispatchWork(item)">操作</button>
               <button class="btn-delete" @click="addProcess(item)">添加工序</button>
             </view>
           </view>
@@ -286,7 +298,8 @@ const processDispatchData = ref({
   quantity: 0,
   time: 0,
   machine: '',
-  mold: ''
+  mold: '',
+  date: ''
 })
 
 // ---------- 员工相关 ----------
@@ -300,6 +313,13 @@ const allEmployeesMap = ref({})
 // ==================== 计算属性 ====================
 const remainingQuantity = computed(() => {
   return selectedProcessData.value?.process?.needCount - selectedProcessData.value?.process?.finishCount || 0
+})
+
+// 判断是否可以派工：已派工数量必须小于需派工数量
+const canDispatch = computed(() => {
+  const finishCount = selectedProcessData.value?.process?.finishCount || 0
+  const needCount = selectedProcessData.value?.process?.needCount || 0
+  return finishCount < needCount
 })
 
 // ==================== 方法定义 ====================
@@ -599,12 +619,20 @@ const openProcessModal = (item, process) => {
   selectedProcessData.value = { item, process }
   machine.value = null
   mold.value = null
+  // 初始化日期为今天，格式：YYYY-MM-DD
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+  const todayStr = `${year}-${month}-${day}`
+  
   processDispatchData.value = {
     employee: '',
     quantity: 0,
     time: 0,
     machine: '',
-    mold: ''
+    mold: '',
+    date: todayStr
   }
   selectedEmployee.value = []
   employeeList.value = []
@@ -614,7 +642,7 @@ const openProcessModal = (item, process) => {
 
 const closeProcessModal = () => {
   showProcessModal.value = false
-  processDispatchData.value = { employee: '', quantity: 0, time: 0, machine: '', mold: '' }
+  processDispatchData.value = { employee: '', quantity: 0, time: 0, machine: '', mold: '', date: '' }
   machine.value = null
   mold.value = null
   employeeList.value = []
@@ -622,9 +650,27 @@ const closeProcessModal = () => {
   // 关闭模态框后不清空选中状态，保持选中以便再次派工
 }
 
+// 日期选择变化处理
+const onDateChange = (e) => {
+  processDispatchData.value.date = e.detail.value
+}
+
 const confirmProcessDispatch = async () => {
+  // 检查是否可以派工
+  if (!canDispatch.value) {
+    uni.showToast({ title: '该工序已完成，无法继续派工', icon: 'none' })
+    return
+  }
+  
   if (!processDispatchData.value.quantity || processDispatchData.value.quantity <= 0) {
     uni.showToast({ title: '请填写有效的派工数量 (>0)', icon: 'none' })
+    return
+  }
+  
+  // 检查派工数量是否超过剩余数量
+  const remaining = remainingQuantity.value
+  if (processDispatchData.value.quantity > remaining) {
+    uni.showToast({ title: `派工数量不能超过剩余数量 ${remaining}`, icon: 'none' })
     return
   }
   
@@ -650,6 +696,10 @@ const confirmProcessDispatch = async () => {
     uni.showToast({ title: '请至少选择一个员工', icon: 'none' })
     return
   }
+  if (!processDispatchData.value.date) {
+    uni.showToast({ title: '请选择派工日期', icon: 'none' })
+    return
+  }
 
   const selectedEmployees = employeeList.value.filter(emp => selectedEmployee.value.includes(emp.id))
   const selectedEmployeeNames = selectedEmployees.map(emp => emp.name).join('、')
@@ -668,7 +718,8 @@ const confirmProcessDispatch = async () => {
     machine: machine.value?.code || '',
     mold: mold.value?.code || '',
     workshop: workshop.value || '',
-    rowid: selectedProcessData.value?.process?.rowid || ''
+    rowid: selectedProcessData.value?.process?.rowid || '',
+    date: processDispatchData.value.date || ''
   }
 
   const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjkyMTJlNzdhOWE4ZGM2YmMxZjczYzlk', dispatchData)
@@ -871,7 +922,7 @@ const quit = () => {
 watch(() => processDispatchData.value.quantity, (newVal) => {
   const remaining = remainingQuantity.value
   if (newVal > remaining) {
-    uni.showToast({ title: `数量不能超过剩余 ${remaining}`, icon: 'none' })
+    uni.showToast({ title: `数量不能超过剩余数量 ${remaining}`, icon: 'none' })
     processDispatchData.value.quantity = remaining
     return
   } else if (newVal < 0) {
@@ -1382,6 +1433,13 @@ onUnload(() => {
     display: flex;
     align-items: center;
     box-sizing: border-box;
+    cursor: pointer;
+  }
+  
+  picker {
+    flex: none;
+    display: flex;
+    width: px2vw(400px);
   }
 
   .input-field {
@@ -1430,6 +1488,13 @@ onUnload(() => {
   .btn-confirm {
     background: #5884f1;
     color: white;
+    
+    &:disabled {
+      background: #ccc;
+      color: #999;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
   }
 }
 
