@@ -96,13 +96,16 @@
           
           <!-- 日期选择 -->
           <view class="row-group">
-            <view class="form-group full">
+            <view class="form-group">
               <text class="label">派工日期：</text>
               <picker mode="date" :value="processDispatchData.date" @change="onDateChange">
                 <view class="value">
                   {{ processDispatchData.date || '请选择日期' }}
                 </view>
               </picker>
+            </view>
+            <view class="form-group">
+              <!-- 占位，保持布局一致 -->
             </view>
           </view>
         </view>
@@ -890,9 +893,11 @@ const addProcess = async (item) => {
   
   // 获取选中工序的顺序，用于计算新工序的顺序
   const selectedSequence = selectedProcess.value.process.sequence || 0
+  // 获取选中工序的rowid
+  const rowid = selectedProcess.value.process.rowid || ''
   
   uni.navigateTo({
-    url: `/pages/addProcess/addProcess?orderCode=${encodeURIComponent(item.orderCode || '')}&productCode=${encodeURIComponent(item.productCode || '')}&workshop=${workshop.value}&selectedSequence=${selectedSequence}`
+    url: `/pages/addProcess/addProcess?orderCode=${encodeURIComponent(item.orderCode || '')}&productCode=${encodeURIComponent(item.productCode || '')}&workshop=${workshop.value}&selectedSequence=${selectedSequence}&rowid=${encodeURIComponent(rowid)}`
   })
 }
 

@@ -82,6 +82,7 @@ const orderData = ref({
 	productcode: '',
 	workshop: '',
 	selectedSequence: 0, // 从派工页面传过来的选中工序顺序
+	rowid: '' // 从派工页面传过来的选中工序rowid
 })
 
 const tableData = ref([])
@@ -115,6 +116,7 @@ onLoad((options) => {
 	orderData.value.productcode = decodeURIComponent(options.productCode || '');
 	orderData.value.workshop = options.workshop || '';
 	orderData.value.selectedSequence = parseFloat(options.selectedSequence || 0);
+	orderData.value.rowid = decodeURIComponent(options.rowid || '');
 	// 如果有传过来的顺序，设置生产顺序为选中顺序+0.01
 	if (orderData.value.selectedSequence > 0) {
 		productionSequence.value = (orderData.value.selectedSequence + 0.01).toFixed(2)
@@ -232,7 +234,8 @@ const addProcess = async () => {
 		workshop: orderData.value.workshop,
 		processName: processName,
 		isNew: isNewProcess.value,
-		sequence: parseFloat(productionSequence.value) || 0
+		sequence: parseFloat(productionSequence.value) || 0,
+		rowid: orderData.value.rowid
 	})
 	console.log('保存响应:', res)
 	showToast('添加成功')
