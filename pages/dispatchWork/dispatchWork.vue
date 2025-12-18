@@ -36,106 +36,111 @@
       <view class="process-content" @click.stop>
         <view class="modal-header">
           <text class="modal-title">{{ selectedProcessData?.process?.processName }}(工序派工)</text>
+          <view class="modal-close" @click="closeProcessModal">×</view>
         </view>
         
-        <!-- 表单信息区域 -->
-        <view class="modal-body">
-          <!-- 订单编号和工序名称 -->
-          <view class="row-group">
-            <view class="form-group">
-              <text class="label">订单编号：</text>
-              <text class="value">{{ selectedProcessData?.item?.orderCode }}</text>
-            </view>
-            <view class="form-group">
-              <text class="label">工序：</text>
-              <text class="value">{{ selectedProcessData?.process?.processName }}</text>
-            </view>
-          </view>
-          
-          <!-- 已派工数量和待派工数量 -->
-          <view class="row-group">
-            <view class="form-group">
-              <text class="label">已派工数量：</text>
-              <text class="value">{{ selectedProcessData?.process?.finishCount }}</text>
-            </view>
-            <view class="form-group">
-              <text class="label">需派工数量：</text>
-              <text class="value">{{ selectedProcessData?.process?.needCount }}</text>
-            </view>
-          </view>
-          
-          <!-- 本次派工数量和时数 -->
-          <view class="row-group">
-            <view class="form-group">
-              <text class="label">派工数量：</text>
-              <input v-model.number="processDispatchData.quantity" type="number" placeholder="请输入数量"
-                :max="remainingQuantity" min="0" class="input-field" />
-            </view>
-            <view class="form-group">
-              <text class="label">派工工时：</text>
-              <input v-model.number="processDispatchData.time" type="number" placeholder="自动计算" 
-                class="input-field" readonly />
-            </view>
-          </view>
-          
-          <!-- 机台和模具选择 -->
-          <view class="row-group">
-            <view class="form-group">
-              <text class="label">机台：</text>
-              <view class="value" @click="getMachineList">
-                {{ machine?.name || '请选择机台' }}
+        <!-- 可滚动内容区域（包含表单信息和员工表格） -->
+        <scroll-view scroll-y class="modal-scroll-content">
+          <!-- 表单信息区域 -->
+          <view class="modal-body">
+            <!-- 订单编号和工序名称 -->
+            <view class="row-group">
+              <view class="form-group">
+                <text class="label">订单编号：</text>
+                <text class="value">{{ selectedProcessData?.item?.orderCode }}</text>
+              </view>
+              <view class="form-group">
+                <text class="label">工序：</text>
+                <text class="value">{{ selectedProcessData?.process?.processName }}</text>
               </view>
             </view>
-            <view class="form-group">
-              <text class="label">模具：</text>
-              <view class="value" @click="getMoldList">
-                {{ mold?.name || '请选择模具' }}
+            
+            <!-- 已派工数量和待派工数量 -->
+            <view class="row-group">
+              <view class="form-group">
+                <text class="label">已派工数量：</text>
+                <text class="value">{{ selectedProcessData?.process?.finishCount }}</text>
+              </view>
+              <view class="form-group">
+                <text class="label">需派工数量：</text>
+                <text class="value">{{ selectedProcessData?.process?.needCount }}</text>
               </view>
             </view>
-          </view>
-          
-          <!-- 日期选择 -->
-          <view class="row-group">
-            <view class="form-group">
-              <text class="label">派工日期：</text>
-              <picker mode="date" :value="processDispatchData.date" @change="onDateChange">
-                <view class="value">
-                  {{ processDispatchData.date || '请选择日期' }}
+            
+            <!-- 本次派工数量和时数 -->
+            <view class="row-group">
+              <view class="form-group">
+                <text class="label">派工数量：</text>
+                <input v-model.number="processDispatchData.quantity" type="number" placeholder="请输入数量"
+                  :max="remainingQuantity" min="0" class="input-field" />
+              </view>
+              <view class="form-group">
+                <text class="label">派工工时：</text>
+                <input v-model.number="processDispatchData.time" type="number" placeholder="自动计算" 
+                  class="input-field" readonly />
+              </view>
+            </view>
+            
+            <!-- 机台和模具选择 -->
+            <view class="row-group">
+              <view class="form-group">
+                <text class="label">机台：</text>
+                <view class="value" @click="getMachineList">
+                  {{ machine?.name || '请选择机台' }}
                 </view>
-              </picker>
-            </view>
-            <view class="form-group">
-              <!-- 占位，保持布局一致 -->
-            </view>
-          </view>
-        </view>
-        
-        <!-- 员工选择表格 -->
-        <view class="employee-section">
-          <view class="table-header">
-            <view class="col selected">选中</view>
-            <view class="col name">姓名</view>
-            <view class="col totalHours">总工时数</view>
-            <view class="col unrecordedHours">未派工时</view>
-          </view>
-          <checkbox-group @change="onEmployeeCheckboxChange" class="employee-table">
-            <label v-for="emp in employeeList" :key="emp.id" class="table-row">
-              <view class="col selected">
-                <checkbox :value="emp.id" :checked="isEmployeeSelected(emp.id)" />
               </view>
-              <view class="col name">{{ emp.name }}</view>
-              <view class="col totalHours">{{ emp.totalHours }} 时</view>
-              <view class="col unrecordedHours">{{ emp.unrecordedHours }} 时</view>
-            </label>
-          </checkbox-group>
-        </view>
+              <view class="form-group">
+                <text class="label">模具：</text>
+                <view class="value" @click="getMoldList">
+                  {{ mold?.name || '请选择模具' }}
+                </view>
+              </view>
+            </view>
+            
+            <!-- 日期选择 -->
+            <view class="row-group">
+              <view class="form-group">
+                <text class="label">派工日期：</text>
+                <picker mode="date" :value="processDispatchData.date" @change="onDateChange">
+                  <view class="value">
+                    {{ processDispatchData.date || '请选择日期' }}
+                  </view>
+                </picker>
+              </view>
+              <view class="form-group">
+                <!-- 占位，保持布局一致 -->
+              </view>
+            </view>
+          </view>
+          
+          <!-- 员工选择表格 -->
+          <view class="employee-section">
+            <view class="table-header">
+              <view class="col selected">选中</view>
+              <view class="col name">姓名</view>
+              <view class="col totalHours">总工时数</view>
+              <view class="col unrecordedHours">未派工时</view>
+            </view>
+            <checkbox-group @change="onEmployeeCheckboxChange" class="employee-table">
+              <label v-for="emp in employeeList" :key="emp.id" class="table-row">
+                <view class="col selected">
+                  <checkbox :value="emp.id" :checked="isEmployeeSelected(emp.id)" />
+                </view>
+                <view class="col name">{{ emp.name }}</view>
+                <view class="col totalHours">{{ emp.totalHours }} 时</view>
+                <view class="col unrecordedHours">{{ emp.unrecordedHours }} 时</view>
+              </label>
+            </checkbox-group>
+          </view>
+        </scroll-view>
         
         <!-- 模态框底部按钮 -->
         <view class="modal-footer">
-          <button class="btn-cancel" @click="closeProcessModal">取消</button>
           <button class="btn-confirm" @click="addEmployee">添加员工</button>
-          <button class="btn-confirm" @click="goOrderDetail">工单明细</button>
           <button class="btn-confirm" @click="confirmProcessDispatch" :disabled="!canDispatch">确认派工</button>
+          <button class="btn-confirm">终止</button>
+          <button class="btn-confirm">转派</button>
+          <button class="btn-confirm">修改</button>
         </view>
       </view>
     </view>
@@ -877,12 +882,6 @@ const goSelectBills = () => {
   })
 }
 
-const goOrderDetail = () => {
-  uni.navigateTo({
-    url: '/pages/orderDetail/orderDetail'
-  })
-}
-
 const addProcess = async (item) => {
   // 检查是否有选中的工序
   if (!selectedProcess.value) {
@@ -1361,12 +1360,14 @@ onUnload(() => {
 
     .modal-header {
       display: flex;
-      justify-content: center;
+      justify-content: space-between;
       align-items: center;
       padding: px2vw(30px) px2vw(40px);
       border-bottom: px2vw(2px) solid #eee;
       font-size: px2vw(35px);
       color: #333;
+      position: relative;
+      flex-shrink: 0;
     }
   }
 }
@@ -1375,11 +1376,46 @@ onUnload(() => {
   font-weight: bold;
   font-size: px2vw(35px);
   color: #333;
+  flex: 1;
+  text-align: center;
+}
+
+.modal-close {
+  position: absolute;
+  right: px2vw(40px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: px2vw(60px);
+  height: px2vw(60px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: px2vw(50px);
+  color: #999;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+  line-height: 1;
+  
+  &:hover {
+    background-color: #f5f5f5;
+    color: #333;
+  }
+  
+  &:active {
+    background-color: #e0e0e0;
+  }
+}
+
+/* 可滚动内容区域 */
+.modal-scroll-content {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* 模态主体样式 */
 .modal-body {
-  flex: 0 0 auto;
   padding: px2vw(20px) px2vw(20px) px2vw(10px) px2vw(20px);
   display: flex;
   flex-direction: column;
@@ -1513,8 +1549,7 @@ onUnload(() => {
 /* 员工选择表格样式 */
 .employee-section {
   margin-top: px2vw(10px);
-  flex: 1;
-  overflow-y: auto;
+  padding: 0 px2vw(20px) px2vw(20px);
 
   .table-header {
     display: flex;
@@ -1562,9 +1597,6 @@ onUnload(() => {
   }
 
   .employee-table {
-    max-height: px2vw(250px);
-    overflow-y: auto;
-
     .table-row {
       display: flex;
       align-items: center;
