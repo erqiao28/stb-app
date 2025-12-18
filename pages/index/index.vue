@@ -103,13 +103,6 @@ const checkUpdate = async () => {
 		// 获取当前版本（从 pinia 读取）
 		const currentVersion = userStore.appVersion || ''
 		
-		// 调试信息
-		console.log('fileList 原始数据:', fileList)
-		console.log('fileList 类型:', typeof fileList)
-		console.log('是否为数组:', Array.isArray(fileList))
-		console.log('当前版本（pinia）:', currentVersion)
-		console.log('新版本（接口）:', newVersion)
-		
 		// 如果 fileList 是字符串，尝试解析为 JSON
 		if (typeof fileList === 'string') {
 			try {
@@ -160,10 +153,6 @@ const checkUpdate = async () => {
 
 		// 4. 获取第一个文件（最新版本）
 		const fileData = fileList[0]
-		console.log('fileData:', fileData)
-		console.log('fileData.DownloadUrl:', fileData?.DownloadUrl)
-		console.log('fileData.file_path:', fileData?.file_path)
-		console.log('fileData.file_name:', fileData?.file_name)
 
 		// 5. 提取下载地址（优先使用 DownloadUrl，其次使用 file_path + file_name）
 		const wgtUrl = fileData.DownloadUrl || (fileData.file_path + fileData.file_name)

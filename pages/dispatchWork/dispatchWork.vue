@@ -138,7 +138,7 @@
         <view class="modal-footer">
           <button class="btn-confirm" @click="addEmployee">添加员工</button>
           <button class="btn-confirm" @click="confirmProcessDispatch" :disabled="!canDispatch">确认派工</button>
-          <button class="btn-confirm">终止</button>
+          <button class="btn-confirm" :disabled="isProcessOver">终止</button>
           <button class="btn-confirm">转派</button>
           <button class="btn-confirm">修改</button>
         </view>
@@ -227,7 +227,7 @@
           <view class="processes-section" v-if="item.processes && item.processes.length > 0" :key="`processes-${item.orderCode}-${listKey}`">
             <view class="processes-container" :key="`container-${item.orderCode}-${listKey}`">
               <view v-for="(process, index) in item.processes" :key="`${item.orderCode}-${process.processName}-${index}-${listKey}`" class="process-wrapper">
-                <view class="process-item" :class="{ 'process-selected': isProcessSelected(item, process) }">
+                <view class="process-item" :class="{ 'process-selected': isProcessSelected(item, process), 'process-over': process.isOver == 1 }">
                   <view class="process-sequence">{{ process.sequence || '' }}</view>
                   <view class="progress-circle"
                     :style="{ '--percent': Math.round((process.finishCount / process.needCount) * 100) + '%' }"
@@ -328,6 +328,11 @@ const canDispatch = computed(() => {
   const finishCount = selectedProcessData.value?.process?.finishCount || 0
   const needCount = selectedProcessData.value?.process?.needCount || 0
   return finishCount < needCount
+})
+
+// 判断当前工序是否已终止
+const isProcessOver = computed(() => {
+  return selectedProcessData.value?.process?.isOver === 1
 })
 
 // ==================== 方法定义 ====================
@@ -490,6 +495,7 @@ const search = async () => {
     sequence: item['693a62040f64427fac25ae80'],
     hourlyoutput: item['693a879a0f64427fac25da92'],
     rowid: item['rowid'],
+    isOver: item['6940f719c81c746aae8ede5d']
   }))
   processList.value = newProcessList.map(item => ({ ...item }))
 
@@ -1246,24 +1252,40 @@ onUnload(() => {
           position: relative;
           padding: px2vw(8px);
           border-radius: px2vw(12px);
-          transition: all 0.3s ease;
 
           &.process-selected {
-            background-color: #e3f2fd;
-            border: px2vw(3px) solid #5884f1;
-            box-shadow: 0 px2vw(4px) px2vw(12px) rgba(88, 132, 241, 0.3);
+            border: px2vw(3px) solid #4CAF50;
+          }
+
+          &.process-selected.process-over {
+            border-color: #f44336;
+          }
+
+          &.process-over {
+            .process-sequence {
+              color: #f44336 !important;
+            }
 
             .progress-circle {
-              box-shadow: 0 0 px2vw(8px) rgba(88, 132, 241, 0.5);
+              background: conic-gradient(#f44336 0%, #f44336 var(--percent), #E0E0E0 var(--percent), #E0E0E0 100%) !important;
+            }
+
+            .progress-text {
+              color: #f44336 !important;
             }
 
             .process-name {
-              color: #5884f1;
-              font-weight: bold;
+              color: #f44336 !important;
             }
 
-            .process-sequence {
-              color: #2755f1;
+            &.process-selected {
+              .process-sequence {
+                color: #f44336 !important;
+              }
+
+              .process-name {
+                color: #f44336 !important;
+              }
             }
           }
         }
@@ -1271,7 +1293,7 @@ onUnload(() => {
         .process-sequence {
           font-size: px2vw(24px);
           font-weight: bold;
-          color: #5884f1;
+          color: #4CAF50;
           margin-bottom: px2vw(5px);
           min-height: px2vw(30px);
           display: flex;
@@ -1289,7 +1311,6 @@ onUnload(() => {
           justify-content: center;
           position: relative;
           cursor: pointer;
-          transition: all 0.3s ease;
         }
 
         .progress-inner {
