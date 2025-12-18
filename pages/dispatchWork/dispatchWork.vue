@@ -100,7 +100,8 @@
           <view class="table-header">
             <view class="col selected">选中</view>
             <view class="col name">姓名</view>
-            <view class="col hours">已派未记时数量</view>
+            <view class="col totalHours">总工时数</view>
+            <view class="col unrecordedHours">未派工时</view>
           </view>
           <checkbox-group @change="onEmployeeCheckboxChange" class="employee-table">
             <label v-for="emp in employeeList" :key="emp.id" class="table-row">
@@ -108,7 +109,8 @@
                 <checkbox :value="emp.id" :checked="isEmployeeSelected(emp.id)" />
               </view>
               <view class="col name">{{ emp.name }}</view>
-              <view class="col hours">{{ emp.unrecordedHours }} 时</view>
+              <view class="col totalHours">{{ emp.totalHours }} 时</view>
+              <view class="col unrecordedHours">{{ emp.unrecordedHours }} 时</view>
             </label>
           </checkbox-group>
         </view>
@@ -453,12 +455,13 @@ const search = async () => {
 
   const newProcessList = processRes.data.map(item => ({
     processName: item['656ffd1bba5ef3863bf3ec1e'],
-    needCount: item['68099ac75d6fc47331574e82'],
-    finishCount: item['669b71152503723eec1b52d7'],
+    needCount: item['682c20a1c469e794f9db10e1'],
+    finishCount: item['690c794ccf407aa3d938ba28'],
     processOrder: item['6593b07ae97eb866a50eeba1'],
     worktime: item['69211dac21066a9f124f62df'],
     sequence: item['693a62040f64427fac25ae80'],
     hourlyoutput: item['693a879a0f64427fac25da92'],
+    rowid: item['rowid'],
   }))
   processList.value = newProcessList.map(item => ({ ...item }))
 
@@ -502,10 +505,7 @@ const search = async () => {
   
   billsList.value = []
   await nextTick()
-  billsList.value = newBillsList.map(item => ({
-    ...item,
-    processes: item.processes.map(p => ({ ...p }))
-  }))
+  billsList.value = newBillsList
   listKey.value = Date.now()
   await nextTick()
 }
@@ -665,9 +665,10 @@ const confirmProcessDispatch = async () => {
     time: processDispatchData.value.time,
     employee: processDispatchData.value.employee,
     employees: selectedEmployees,
-    machine: machine.value?.name || '',
-    mold: mold.value?.name || '',
-    workshop: workshop.value || ''
+    machine: machine.value?.code || '',
+    mold: mold.value?.code || '',
+    workshop: workshop.value || '',
+    rowid: selectedProcessData.value?.process?.rowid || ''
   }
 
   const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjkyMTJlNzdhOWE4ZGM2YmMxZjczYzlk', dispatchData)
@@ -697,12 +698,15 @@ const loadEmployees = async () => {
       const mappedEmployees = res.data.map(item => ({
         id: item['692113fb21066a9f124f5fe2'] || '',
         name: item['6938db8bda0981f67b352af3'] || '',
-        unrecordedHours: item['6921135b21066a9f124f5f79'] || 0
+        totalHours: item['693bcaa5f15635c61ac3507a'] || 0,
+        unrecordedHours: item['693bcaa5f15635c61ac3507c'] || 0
       })).filter(emp => emp.id)
       
       allEmployeesOptions.value = mappedEmployees.map(emp => ({
         label: emp.name,
-        value: emp.id
+        value: emp.id,
+        totalHours: emp.totalHours || 0,
+        unrecordedHours: emp.unrecordedHours || 0
       }))
       
       allEmployeesMap.value = {}
@@ -747,6 +751,7 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
         employeeList.value.push({
           id: fullEmployee.id,
           name: fullEmployee.name,
+          totalHours: fullEmployee.totalHours || 0,
           unrecordedHours: fullEmployee.unrecordedHours || 0
         })
         addedCount++
@@ -756,6 +761,7 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
           employeeList.value.push({
             id: option.value,
             name: option.label,
+            totalHours: 0,
             unrecordedHours: 0
           })
           addedCount++
@@ -1460,6 +1466,18 @@ onUnload(() => {
         padding-left: px2vw(20px);
       }
 
+      &.totalHours {
+        flex: 1;
+        text-align: right;
+        padding-right: px2vw(15px);
+      }
+
+      &.unrecordedHours {
+        flex: 1;
+        text-align: right;
+        padding-right: px2vw(15px);
+      }
+
       &.hours {
         flex: 1;
         text-align: right;
@@ -1501,6 +1519,20 @@ onUnload(() => {
         &.name {
           flex: 2;
           padding-left: px2vw(20px);
+        }
+
+        &.totalHours {
+          flex: 1;
+          text-align: right;
+          justify-content: flex-end;
+          padding-right: px2vw(15px);
+        }
+
+        &.unrecordedHours {
+          flex: 1;
+          text-align: right;
+          justify-content: flex-end;
+          padding-right: px2vw(15px);
         }
 
         &.hours {

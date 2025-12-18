@@ -178,8 +178,8 @@ const search = async () => {
 		processList.value = processRes.data.map(item => {
 			return {
 				processName: item['656ffd1bba5ef3863bf3ec1e'],
-				needCount: item['68099ac75d6fc47331574e82'],
-				finishCount: item['669b71152503723eec1b52d7'],
+				needCount: item['682c20a1c469e794f9db10e1'],
+				finishCount: item['690c794ccf407aa3d938ba28'],
 				processOrder: item['6593b07ae97eb866a50eeba1'],
 				sequence: item['693a62040f64427fac25ae80'],
 			}

@@ -5,11 +5,21 @@
           <text class="modal-title">{{ title }}</text>
         </view>
         <view class="modal-body">
+          <view class="employee-table-header">
+            <view class="col-checkbox"></view>
+            <view class="col-name">姓名</view>
+            <view class="col-hours">总工时数</view>
+            <view class="col-hours">未派工时</view>
+          </view>
           <view class="checkbox-group">
             <checkbox-group @change="onCheckboxChange">
               <label v-for="option in processedOptions" :key="option.value" class="checkbox-label">
-                <checkbox :value="option.value" :checked="isChecked(option.value)" />
-                <text>{{ option.label }}</text>
+                <view class="col-checkbox">
+                  <checkbox :value="option.value" :checked="isChecked(option.value)" />
+                </view>
+                <view class="col-name">{{ option.label }}</view>
+                <view class="col-hours">{{ option.totalHours || 0 }} 时</view>
+                <view class="col-hours">{{ option.unrecordedHours || 0 }} 时</view>
               </label>
             </checkbox-group>
           </view>
@@ -165,10 +175,39 @@ const onCheckboxChange = (e) => {
   min-height: 0;
 }
 
+.employee-table-header {
+  display: flex;
+  background-color: #f5f5f5;
+  font-weight: bold;
+  padding: px2vw(15px);
+  border-bottom: px2vw(2px) solid #eee;
+  align-items: center;
+  flex-shrink: 0;
+
+  .col-checkbox {
+    width: px2vw(80px);
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .col-name {
+    flex: 2;
+    font-size: px2vw(30px);
+    padding-left: px2vw(20px);
+  }
+
+  .col-hours {
+    flex: 1;
+    font-size: px2vw(30px);
+    text-align: right;
+    padding-right: px2vw(15px);
+  }
+}
+
 .checkbox-group {
   display: flex;
   flex-direction: column;
-  gap: px2vw(10px);
+  gap: px2vw(0px);
   flex: 1;
   overflow-y: auto;
   min-height: 0;
@@ -178,22 +217,39 @@ const onCheckboxChange = (e) => {
   display: flex;
   align-items: center;
   cursor: pointer;
-  padding: px2vw(10px);
+  padding: px2vw(15px);
   border-bottom: px2vw(1px) solid #eee;
   border-radius: 0;
-}
 
-.checkbox-label text {
-  font-size: px2vw(30px);
-  margin-left: px2vw(10px);
-}
+  &:hover {
+    background-color: #f5f5f5;
+  }
 
-.checkbox-label:hover {
-  background-color: #f5f5f5;
-}
+  .col-checkbox {
+    width: px2vw(80px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-shrink: 0;
+  }
 
-.checkbox-label checkbox {
-  margin-right: px2vw(10px);
+  .col-name {
+    flex: 2;
+    font-size: px2vw(30px);
+    padding-left: px2vw(20px);
+    display: flex;
+    align-items: center;
+  }
+
+  .col-hours {
+    flex: 1;
+    font-size: px2vw(30px);
+    text-align: right;
+    padding-right: px2vw(15px);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
 }
 
 .modal-footer {
