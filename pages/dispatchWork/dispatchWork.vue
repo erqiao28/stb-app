@@ -729,7 +729,12 @@ const confirmProcessDispatch = async () => {
   if (res.status === 1) {
     uni.showToast({ title: '派工成功' })
     showProcessModal.value = false
-    search()
+    // 使用 loadAllData 刷新数据，确保进度条更新（与添加工序后的刷新逻辑一致）
+    if (searchValue.value && searchValue.value.trim()) {
+      setTimeout(() => {
+        loadAllData(0)
+      }, 500)
+    }
   } else {
     uni.showToast({ title: res.message })
   }
