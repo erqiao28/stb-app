@@ -8,7 +8,7 @@
 			</view>
 
 			<view class="btn-box">
-				<view class="btn-one">
+				<view class="btn-one" @click="userStore?.logout()">
 					<image src="/static/Quit.svg"></image>
 					<text>切换</text>
 				</view>
@@ -25,11 +25,17 @@
 				<uni-table stripe style="width: 100%;">
 					<uni-tr class="table-header-row">
 						<uni-th align="center" class="table-header-cell">员工</uni-th>
-						<uni-th align="center" class="table-header-cell">已派未记工时</uni-th>
+						<uni-th align="center" class="table-header-cell">总工时</uni-th>
+						<uni-th align="center" class="table-header-cell">已记工时</uni-th>
+						<uni-th align="center" class="table-header-cell">未记工时</uni-th>
+						<uni-th align="center" class="table-header-cell">剩余工时</uni-th>
 					</uni-tr>
 					<uni-tr v-for="item in tableData" :key="item.staff" class="table-body-row">
 						<uni-td align="center" class="table-data-cell">{{ item.staff }}</uni-td>
-						<uni-td align="center" class="table-data-cell">{{ item.worktime }}</uni-td>
+						<uni-td align="center" class="table-data-cell">{{ item.allWorktime }}</uni-td>
+						<uni-td align="center" class="table-data-cell">{{ item.recordedWorktime }}</uni-td>
+						<uni-td align="center" class="table-data-cell">{{ item.unrecordedWorktime }}</uni-td>
+						<uni-td align="center" class="table-data-cell">{{ item.remainWorktime }}</uni-td>
 					</uni-tr>
 					<!-- 加载更多提示 -->
 					<uni-tr v-if="loading && tableData.length > 0" class="loading-row">
@@ -54,6 +60,8 @@ import {
 	onReachBottom
 } from '@dcloudio/uni-app'
 import { useStatusBar } from '../../composables/useStatusBar'
+import { useUserStore } from '../../store/user.store'
+const userStore = useUserStore()
 const { statusBarHeight } = useStatusBar()
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 
@@ -93,8 +101,11 @@ const getWorkloadList = async (pageNum, isRefresh = false) => {
 	}, pageSize.value, pageNum)
 	
 	const mappedData = res.data.map(item => ({
-		staff: item['692112b021066a9f124f5ca0'],
-		worktime: item['6921135b21066a9f124f5f79'],
+		staff: item['6938db8bda0981f67b352af3'],
+		allWorktime: item['693bcaa5f15635c61ac3507a'],
+		recordedWorktime: item['693bcaa5f15635c61ac3507b'],
+		unrecordedWorktime: item['693bc9b7f15635c61ac35050'],
+		remainWorktime: item['693bcaa5f15635c61ac3507c'],
 	}))
 	
 	if (isRefresh) {
@@ -187,7 +198,7 @@ const quit = () => {
 ::v-deep .table-header-row,
 ::v-deep .table-body-row {
 	display: grid;
-	grid-template-columns: repeat(2, 1fr);
+	grid-template-columns: repeat(5, 1fr);
 	width: 100%;
 }
 
@@ -251,7 +262,7 @@ const quit = () => {
 	background-color: #f5f5f5 !important;
 	min-height: px2vw(80px);
 	display: grid;
-	grid-template-columns: repeat(2, 1fr);
+	grid-template-columns: repeat(5, 1fr);
 	width: 100%;
 }
 

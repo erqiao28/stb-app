@@ -76,12 +76,12 @@
 						<text class="worktime">工时：{{ item.worktime }}</text>
 					</view>
 				</view>
-				<view class="dispatchInquiry-item-btn">
+				<!-- <view class="dispatchInquiry-item-btn">
 					<button class="btn-item">终止</button>
 					<button class="btn-item">转派</button>
 					<button class="btn-item">修改</button>
 					<button class="btn-item">删除</button>
-				</view>
+				</view> -->
 			</view>
 		</view>
 	</view>
@@ -143,16 +143,16 @@ const getDispatchInquiryList = async () => {
     ]
   })
   dispatchInquiryList.value = res.data.map(item => ({
-    goodsName: item['69215aba21066a9f124f6f37'],
+    goodsName: item['6944facfdc7b13304885b3ad'],
     goodsCode: item['6921596021066a9f124f6e63'],
-    processName: item['65800044bf6345a698c1c18b'],
+    processName: item['6945061adc7b13304885b92a'],
     date: item['690d9ae28d797ee211e7e6a4'],
     orderCode: item['6593b04a666735003d33ba61'],
     productionOrder: item['6921596021066a9f124f6e61'],
-    worker: item['655d9e5cbd2094b3163399e1'],
+    worker: item['6938dcf1da0981f67b352b55'],
     dispatchCount: item['655d9cd8cc4f25a27fb3e858'],
-    finishCount: item['6901c7997a33416aedfd6b9f'],
-    worktime: item['6921260721066a9f124f643b'],
+    finishCount: item['693fe07b284b84255a6ebda5'],
+    worktime: item['693a7d580f64427fac25d070'],
   }))
 }
 
