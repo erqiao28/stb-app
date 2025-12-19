@@ -77,7 +77,10 @@
 					<view class="processes-section" v-if="item.processes && item.processes.length > 0">
 						<view class="processes-container">
 							<view v-for="(process, index) in item.processes" :key="index" class="process-wrapper">
-								<view class="process-item" :class="{ 'process-over': process.isOver == 1 }">
+								<view class="process-item" :class="{ 
+									'process-over': process.isOver == 1,
+									'process-abnormal': process.abnormal == 1 && process.isOver != 1
+								}">
 									<view class="progress-circle"
 										:style="{ '--percent': Math.round((process.finishCount / process.needCount) * 100) + '%' }">
 										<view class="progress-inner">
@@ -182,7 +185,8 @@ const search = async () => {
 				finishCount: item['690c794ccf407aa3d938ba28'],
 				processOrder: item['6593b07ae97eb866a50eeba1'],
 				sequence: item['693a62040f64427fac25ae80'],
-				isOver: item['6940f719c81c746aae8ede5d']
+				isOver: item['6940f719c81c746aae8ede5d'],
+				abnormal: item['6944bac4dc7b1330488591fb']
 			}
 		})
 		console.log(processList.value)
@@ -494,6 +498,20 @@ const selectOrder = (orderCode) => {
 					position: relative;
 					padding: px2vw(8px);
 					border-radius: px2vw(12px);
+
+					&.process-abnormal {
+						.progress-circle {
+							background: conic-gradient(#ff9800 0%, #ff9800 var(--percent), #E0E0E0 var(--percent), #E0E0E0 100%) !important;
+						}
+
+						.progress-text {
+							color: #ff9800 !important;
+						}
+
+						.process-name {
+							color: #ff9800 !important;
+						}
+					}
 
 					&.process-over {
 						.progress-circle {

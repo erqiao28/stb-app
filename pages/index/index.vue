@@ -327,6 +327,7 @@ const login = async () => {
 	}
 	// 将登录名称覆盖
 	userStore.loginName = res.username
+	userStore.loginCode = res.code
 	// 清空输入框
 	if (userStore.rememberPassword === false) {
 		loginform.value.username = ''

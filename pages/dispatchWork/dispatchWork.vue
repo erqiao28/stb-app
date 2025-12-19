@@ -31,6 +31,30 @@
       />
     </view>
     
+    <!-- 终止派工模态框 -->
+    <view class="terminate-modal" v-if="showTerminateModal" @click.self="closeTerminateModal">
+      <view class="terminate-content" @click.stop>
+        <view class="terminate-body">
+          <view class="terminate-tip">
+            确定要终止工序“{{ selectedProcessData?.process?.processName || '' }}”吗？
+          </view>
+          <view class="form-group">
+            <text class="label">终止原因：</text>
+            <textarea 
+              v-model="terminateReason" 
+              placeholder="请输入终止原因" 
+              class="terminate-textarea"
+              maxlength="200"
+            />
+          </view>
+        </view>
+        <view class="terminate-footer">
+          <button class="btn-cancel" @click="closeTerminateModal">取消</button>
+          <button class="btn-confirm" @click="confirmTerminate" :disabled="!terminateReason || !terminateReason.trim()">确定</button>
+        </view>
+      </view>
+    </view>
+    
     <!-- 工序派工模态框 -->
     <view class="process-modal" v-if="showProcessModal" @click.self="closeProcessModal">
       <view class="process-content" @click.stop>
@@ -138,7 +162,7 @@
         <view class="modal-footer">
           <button class="btn-confirm" @click="addEmployee">添加员工</button>
           <button class="btn-confirm" @click="confirmProcessDispatch" :disabled="!canDispatch">确认派工</button>
-          <button class="btn-confirm" :disabled="isProcessOver">终止</button>
+          <button class="btn-confirm" :disabled="isProcessOver" @click="overProcess">终止</button>
           <button class="btn-confirm">转派</button>
           <button class="btn-confirm">修改</button>
         </view>
@@ -200,6 +224,20 @@
               <view class="order-label">订单</view>
               <view class="order-number">{{ item.orderCode }}</view>
             </view>
+            <view class="status-indicator">
+              <view class="status-item">
+                <view class="status-color normal"></view>
+                <text class="status-text">正常</text>
+              </view>
+              <view class="status-item">
+                <view class="status-color abnormal"></view>
+                <text class="status-text">异常</text>
+              </view>
+              <view class="status-item">
+                <view class="status-color terminated"></view>
+                <text class="status-text">已终止</text>
+              </view>
+            </view>
             <view class="buttons">
               <button class="btn-dispatch" @click="lookImage(item)">查看图片</button>
               <button class="btn-detail" @click="dispatchWork(item)">操作</button>
@@ -227,7 +265,11 @@
           <view class="processes-section" v-if="item.processes && item.processes.length > 0" :key="`processes-${item.orderCode}-${listKey}`">
             <view class="processes-container" :key="`container-${item.orderCode}-${listKey}`">
               <view v-for="(process, index) in item.processes" :key="`${item.orderCode}-${process.processName}-${index}-${listKey}`" class="process-wrapper">
-                <view class="process-item" :class="{ 'process-selected': isProcessSelected(item, process), 'process-over': process.isOver == 1 }">
+                <view class="process-item" :class="{ 
+                  'process-selected': isProcessSelected(item, process), 
+                  'process-over': process.isOver == 1,
+                  'process-abnormal': process.abnormal == 1 && process.isOver != 1
+                }">
                   <view class="process-sequence">{{ process.sequence || '' }}</view>
                   <view class="progress-circle"
                     :style="{ '--percent': Math.round((process.finishCount / process.needCount) * 100) + '%' }"
@@ -310,6 +352,10 @@ const processDispatchData = ref({
   date: ''
 })
 
+// ---------- 终止派工模态相关 ----------
+const showTerminateModal = ref(false)
+const terminateReason = ref('')
+
 // ---------- 员工相关 ----------
 const employeeList = ref([])
 const selectedEmployee = ref([])
@@ -334,6 +380,57 @@ const canDispatch = computed(() => {
 const isProcessOver = computed(() => {
   return selectedProcessData.value?.process?.isOver === 1
 })
+
+// 打开终止派工模态框
+const overProcess = () => {
+  if (selectedProcessData.value?.process?.isOver === 1) {
+    uni.showToast({ title: '该工序已终止', icon: 'none' })
+    return
+  }
+  
+  // 重置终止原因
+  terminateReason.value = ''
+  // 打开终止模态框
+  showTerminateModal.value = true
+}
+
+// 关闭终止派工模态框
+const closeTerminateModal = () => {
+  showTerminateModal.value = false
+  terminateReason.value = ''
+}
+
+// 确认终止工序
+const confirmTerminate = async () => {
+  // 验证终止原因
+  if (!terminateReason.value || !terminateReason.value.trim()) {
+    uni.showToast({ title: '请输入终止原因', icon: 'none' })
+    return
+  }
+  
+  try {
+    const result = await http.post('https://www.dachen.vip/api/workflow/hooks/Njk0NGRjYTI0NDUzNWFkMTg3ZWFiZmFj', {
+      rowid: selectedProcessData.value?.process?.rowid || '',
+      terminateReason: terminateReason.value.trim(),
+      loginCode: userStore.loginCode || ''
+    })
+    
+    if (result.status === 1) {
+      uni.showToast({ title: '终止失败', icon: 'none' })
+      return
+    }
+    
+    uni.showToast({ title: '终止成功' })
+    showTerminateModal.value = false
+    showProcessModal.value = false
+    terminateReason.value = ''
+    // 刷新数据
+    search()
+  } catch (error) {
+    console.error('终止工序失败:', error)
+    uni.showToast({ title: '终止失败：' + (error.message || '未知错误'), icon: 'none' })
+  }
+}
 
 // ==================== 方法定义 ====================
 
@@ -495,7 +592,8 @@ const search = async () => {
     sequence: item['693a62040f64427fac25ae80'],
     hourlyoutput: item['693a879a0f64427fac25da92'],
     rowid: item['rowid'],
-    isOver: item['6940f719c81c746aae8ede5d']
+    isOver: item['6940f719c81c746aae8ede5d'],
+    abnormal: item['6944bac4dc7b1330488591fb']
   }))
   processList.value = newProcessList.map(item => ({ ...item }))
 
@@ -754,6 +852,10 @@ const confirmProcessDispatch = async () => {
 // ---------- 员工相关方法 ----------
 const loadEmployees = async () => {
   try {
+    // 先重置数据
+    allEmployeesOptions.value = []
+    allEmployeesMap.value = {}
+    
     const res = await callWorkflowListAPIPaged({
       worksheetId: 'yggs',
       filters: [{
@@ -764,6 +866,7 @@ const loadEmployees = async () => {
         "values": [workshop.value]
       }]
     })
+    
     if (res.data && res.data.length > 0) {
       const mappedEmployees = res.data.map(item => ({
         id: item['692113fb21066a9f124f5fe2'] || '',
@@ -779,20 +882,27 @@ const loadEmployees = async () => {
         unrecordedHours: emp.unrecordedHours || 0
       }))
       
-      allEmployeesMap.value = {}
       mappedEmployees.forEach(emp => {
         allEmployeesMap.value[emp.id] = emp
       })
+    } else {
+      console.warn('未获取到员工数据')
     }
   } catch (error) {
     console.error('加载员工失败:', error)
+    uni.showToast({ title: '加载员工数据失败', icon: 'none' })
   }
 }
 
 const addEmployee = async () => {
+  // 强制重新加载员工数据，确保数据是最新的
+  await loadEmployees()
+  
   if (allEmployeesOptions.value.length === 0) {
-    await loadEmployees()
+    uni.showToast({ title: '暂无员工数据', icon: 'none' })
+    return
   }
+  
   selectedEmployeesForAdd.value = []
   showAddEmployeeModal.value = true
 }
@@ -1180,6 +1290,42 @@ onUnload(() => {
             background: white;
           }
 
+          .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: px2vw(20px);
+            margin: 0 px2vw(20px);
+
+            .status-item {
+              display: flex;
+              align-items: center;
+              gap: px2vw(8px);
+
+              .status-color {
+                width: px2vw(20px);
+                height: px2vw(20px);
+                border-radius: px2vw(4px);
+
+                &.normal {
+                  background-color: #4CAF50;
+                }
+
+                &.abnormal {
+                  background-color: #ff9800;
+                }
+
+                &.terminated {
+                  background-color: #f44336;
+                }
+              }
+
+              .status-text {
+                font-size: px2vw(22px);
+                color: #333;
+              }
+            }
+          }
+
           .buttons {
             display: flex;
             gap: px2vw(10px);
@@ -1259,6 +1405,36 @@ onUnload(() => {
 
           &.process-selected.process-over {
             border-color: #f44336;
+          }
+
+          &.process-abnormal {
+            .process-sequence {
+              color: #ff9800 !important;
+            }
+
+            .progress-circle {
+              background: conic-gradient(#ff9800 0%, #ff9800 var(--percent), #E0E0E0 var(--percent), #E0E0E0 100%) !important;
+            }
+
+            .progress-text {
+              color: #ff9800 !important;
+            }
+
+            .process-name {
+              color: #ff9800 !important;
+            }
+
+            &.process-selected {
+              border-color: #ff9800;
+              
+              .process-sequence {
+                color: #ff9800 !important;
+              }
+
+              .process-name {
+                color: #ff9800 !important;
+              }
+            }
           }
 
           &.process-over {
@@ -1350,6 +1526,122 @@ onUnload(() => {
           margin: 0 px2vw(8px) 0 px2vw(10px);
           position: relative;
           top: px2vw(-10px);
+        }
+      }
+    }
+  }
+}
+
+/* 终止派工模态框样式 */
+.terminate-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 200;
+  padding: px2vw(20px);
+  box-sizing: border-box;
+
+  .terminate-content {
+    background: white;
+    border-radius: px2vw(18px); 
+    width: 90%;
+    max-width: px2vw(900px);
+    height: auto;
+    max-height: 90vh;
+    box-shadow: 0 px2vw(5px) px2vw(15px) rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+
+    .terminate-body {
+      padding: px2vw(40px) px2vw(30px) px2vw(20px);
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+
+      .terminate-tip {
+        font-size: px2vw(32px);
+        color: #333;
+        margin-bottom: px2vw(30px);
+        text-align: center;
+        font-weight: bold;
+        line-height: 1.5;
+        word-break: break-word;
+      }
+
+      .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: px2vw(15px);
+
+        .label {
+          font-size: px2vw(30px);
+          color: #333;
+          font-weight: bold;
+        }
+
+        .terminate-textarea {
+          width: 100%;
+          min-height: px2vw(120px);
+          padding: px2vw(15px);
+          border: px2vw(2px) solid #ddd;
+          border-radius: px2vw(8px);
+          font-size: px2vw(28px);
+          box-sizing: border-box;
+          resize: none;
+          line-height: 1.5;
+
+          &:focus {
+            border-color: #5884f1;
+            outline: none;
+          }
+
+          &::placeholder {
+            color: #999;
+          }
+        }
+      }
+    }
+
+    .terminate-footer {
+      display: flex;
+      justify-content: center;
+      gap: px2vw(20px);
+      padding: px2vw(20px) px2vw(30px);
+      border-top: px2vw(1px) solid #eee;
+      flex-shrink: 0;
+
+      .btn-cancel,
+      .btn-confirm {
+        flex: 1;
+        max-width: px2vw(250px);
+        height: px2vw(70px);
+        border-radius: px2vw(18px);
+        font-size: px2vw(30px);
+        border: none;
+        cursor: pointer;
+      }
+
+      .btn-cancel {
+        background: #f5f5f5;
+        color: #666;
+      }
+
+      .btn-confirm {
+        background: #5884f1;
+        color: white;
+        
+        &:disabled {
+          background: #ccc;
+          color: #999;
+          cursor: not-allowed;
+          opacity: 0.6;
         }
       }
     }
