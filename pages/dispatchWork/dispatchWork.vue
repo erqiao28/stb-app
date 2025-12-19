@@ -852,10 +852,6 @@ const confirmProcessDispatch = async () => {
 // ---------- 员工相关方法 ----------
 const loadEmployees = async () => {
   try {
-    // 先重置数据
-    allEmployeesOptions.value = []
-    allEmployeesMap.value = {}
-    
     const res = await callWorkflowListAPIPaged({
       worksheetId: 'yggs',
       filters: [{
@@ -868,12 +864,17 @@ const loadEmployees = async () => {
     })
     
     if (res.data && res.data.length > 0) {
-      const mappedEmployees = res.data.map(item => ({
-        id: item['692113fb21066a9f124f5fe2'] || '',
-        name: item['6938db8bda0981f67b352af3'] || '',
-        totalHours: item['693bcaa5f15635c61ac3507a'] || 0,
-        unrecordedHours: item['693bcaa5f15635c61ac3507c'] || 0
-      })).filter(emp => emp.id)
+      const mappedEmployees = res.data.map(item => {
+        const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
+        const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
+        
+        return {
+          id: item['6943bd902161a0fc58bad5ab'] || '',
+          name: item['6938db8bda0981f67b352af3'] || '',
+          totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
+          unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0
+        }
+      }).filter(emp => emp.id)
       
       allEmployeesOptions.value = mappedEmployees.map(emp => ({
         label: emp.name,
@@ -882,25 +883,24 @@ const loadEmployees = async () => {
         unrecordedHours: emp.unrecordedHours || 0
       }))
       
+      allEmployeesMap.value = {}
       mappedEmployees.forEach(emp => {
         allEmployeesMap.value[emp.id] = emp
       })
     } else {
-      console.warn('未获取到员工数据')
+      allEmployeesOptions.value = []
+      allEmployeesMap.value = {}
     }
   } catch (error) {
     console.error('加载员工失败:', error)
-    uni.showToast({ title: '加载员工数据失败', icon: 'none' })
+    allEmployeesOptions.value = []
+    allEmployeesMap.value = {}
   }
 }
 
 const addEmployee = async () => {
-  // 强制重新加载员工数据，确保数据是最新的
-  await loadEmployees()
-  
   if (allEmployeesOptions.value.length === 0) {
-    uni.showToast({ title: '暂无员工数据', icon: 'none' })
-    return
+    await loadEmployees()
   }
   
   selectedEmployeesForAdd.value = []
