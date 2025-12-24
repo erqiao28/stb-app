@@ -109,6 +109,8 @@ import { ref } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 const { statusBarHeight } = useStatusBar()
 const workshop = ref('')
+const billType = ref('正常排产')  // 单据类型：正常排产、返工排产
+const processTypeParam = ref('0')  // 工序类型参数：0-正常排产，1-返工排产
 const billsList = ref([])  // 单据列表
 const processList = ref([])  // 工序列表
 const searchValue = ref({
@@ -124,6 +126,12 @@ const getProcessRaw = async () => {
 		"spliceType": 1,
 		"filterType": 2,
 		"values": [workshop.value]
+	}, {
+		"controlId": "694ba3d9dc025d98887fd8e9",
+		"dataType": 30,
+		"spliceType": 1,
+		"filterType": 2,
+		"values": [processTypeParam.value]
 	}]
 	// 添加订单物品过滤 (假设 orderItem 对应 processOrder)
 	if (searchValue.value.orderItem) {
@@ -146,6 +154,12 @@ onLoad((options) => {
 	if (options.workshop) {
 		workshop.value = options.workshop
 	}
+	if (options.type) {
+		const type = decodeURIComponent(options.type)  // 接收单据类型参数：正常排产 或 返工排产
+		billType.value = type
+		// 根据类型设置工序参数：正常排产=0，返工排产=1
+		processTypeParam.value = type === '返工排产' ? '1' : '0'
+	}
 	search()  // 默认加载时搜索
 })
 
@@ -156,7 +170,15 @@ const getBillsListRaw = async () => {
 		"spliceType": 1,
 		"filterType": 2,
 		"values": [workshop.value]
-	}]
+	},
+	{
+		"controlId": "694a3954687045435008a7c3",
+		"dataType": 30,
+		"spliceType": 1,
+		"filterType": 2,
+		"values": [billType.value]
+	}
+]
 	// 添加搜索过滤 (假设 salesOrder 对应订单编号 '655e1cbbbd2094b316347f92')
 	if (searchValue.value.salesOrder) {
 		filters.push({
@@ -180,7 +202,7 @@ const search = async () => {
 		processList.value = processRes.data.map(item => {
 			return {
 				processName: item['656ffd1bba5ef3863bf3ec1e'],
-				needCount: item['682c20a1c469e794f9db10e1'],
+				needCount: item['690dc19f8d797ee211e7fc60'],
 				finishCount: item['690c794ccf407aa3d938ba28'],
 				processOrder: item['6593b07ae97eb866a50eeba1'],
 				sequence: item['693a62040f64427fac25ae80'],
@@ -453,7 +475,7 @@ const selectOrder = (orderCode) => {
 				}
 
 				.problemDescription {
-					width: px2vw(400px);
+					width: px2vw(600px);
 					display: flex;
 					margin: px2vw(30px);
 					font-size: px2vw(25px);

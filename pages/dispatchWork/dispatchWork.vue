@@ -203,7 +203,8 @@
           {{ workshop }}
         </view>
       </view>
-      <view class="selectDocument" @click="goSelectBills">选择单据</view>
+      <view class="selectDocument" @click="goSelectBills">选择正常单据</view>
+      <view class="selectDocument" @click="goSelectReworkBills">选择返工单据</view>
       <view class="device">
         <view class="input-box">
           <input type="text" v-model="searchValue" placeholder="请输入客户或单据编码" @input="search" />
@@ -332,6 +333,8 @@ const showMoldModal = ref(false)
 
 // ---------- 搜索和列表相关 ----------
 const searchValue = ref('')
+const billType = ref('正常排产')  // 单据类型：正常排产、返工排产
+const processTypeParam = ref('0')  // 工序类型参数：0-正常排产，1-返工排产
 const billsList = ref([])
 const processList = ref([])
 const listKey = ref(0)
@@ -528,6 +531,12 @@ const getProcessRaw = async (searchVal = '') => {
     "spliceType": 1,
     "filterType": 2,
     "values": [workshop.value]
+  }, {
+    "controlId": "694ba3d9dc025d98887fd8e9",
+    "dataType": 30,
+    "spliceType": 1,
+    "filterType": 2,
+    "values": [processTypeParam.value]
   }]
   if (searchVal) {
     filters.push({
@@ -552,6 +561,12 @@ const getBillsListRaw = async (searchVal = '') => {
     "spliceType": 1,
     "filterType": 2,
     "values": [workshop.value]
+  },{
+    "controlId": "694a3954687045435008a7c3",
+    "dataType": 30,
+    "spliceType": 1,
+    "filterType": 2,
+    "values": [billType.value]
   }]
   if (searchVal) {
     filters.push({
@@ -586,7 +601,7 @@ const search = async () => {
 
   const newProcessList = processRes.data.map(item => ({
     processName: item['656ffd1bba5ef3863bf3ec1e'],
-    needCount: item['682c20a1c469e794f9db10e1'],
+    needCount: item['690dc19f8d797ee211e7fc60'],
     finishCount: item['690c794ccf407aa3d938ba28'],
     processOrder: item['6593b07ae97eb866a50eeba1'],
     worktime: item['69211dac21066a9f124f62df'],
@@ -994,8 +1009,18 @@ const goWorkGuide = () => {
 }
 
 const goSelectBills = () => {
+  billType.value = '正常排产'
+  processTypeParam.value = '0'  // 正常排产参数为0
   uni.navigateTo({
-    url: `/pages/selectBills/selectBills?workshop=${workshop.value}`
+    url: `/pages/selectBills/selectBills?workshop=${workshop.value}&type=${encodeURIComponent('正常排产')}`
+  })
+}
+
+const goSelectReworkBills = () => {
+  billType.value = '返工排产'
+  processTypeParam.value = '1'  // 返工排产参数为1
+  uni.navigateTo({
+    url: `/pages/selectBills/selectBills?workshop=${workshop.value}&type=${encodeURIComponent('返工排产')}`
   })
 }
 
@@ -1190,7 +1215,7 @@ onUnload(() => {
       align-items: center;
 
       .input-box {
-        width: px2vw(1200px);
+        width: px2vw(1100px);
         height: px2vw(80px);
         margin-right: px2vw(10px);
         border: px2vw(3px) solid #5884f1;
@@ -1370,7 +1395,7 @@ onUnload(() => {
           margin: px2vw(10px) px2vw(20px);
           font-size: px2vw(25px);
           color: #f44336;
-          width: px2vw(400px);
+          width: px2vw(800px);
           
           view:first-child {
             font-weight: bold;
