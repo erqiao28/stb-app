@@ -230,10 +230,6 @@
                 <text class="status-text">正常</text>
               </view>
               <view class="status-item">
-                <view class="status-color abnormal"></view>
-                <text class="status-text">异常</text>
-              </view>
-              <view class="status-item">
                 <view class="status-color terminated"></view>
                 <text class="status-text">已终止</text>
               </view>
@@ -261,14 +257,19 @@
             </view>
           </view>
           
+          <!-- 问题描述 -->
+          <view class="problemDescription" v-if="item.problemDescription && item.problemDescription.trim()">
+            <view>问题描述：</view>
+            <view>{{ item.problemDescription }}</view>
+          </view>
+          
           <!-- 工序进度展示 -->
           <view class="processes-section" v-if="item.processes && item.processes.length > 0" :key="`processes-${item.orderCode}-${listKey}`">
             <view class="processes-container" :key="`container-${item.orderCode}-${listKey}`">
               <view v-for="(process, index) in item.processes" :key="`${item.orderCode}-${process.processName}-${index}-${listKey}`" class="process-wrapper">
                 <view class="process-item" :class="{ 
                   'process-selected': isProcessSelected(item, process), 
-                  'process-over': process.isOver == 1,
-                  'process-abnormal': process.abnormal == 1 && process.isOver != 1
+                  'process-over': process.isOver == 1
                 }">
                   <view class="process-sequence">{{ process.sequence || '' }}</view>
                   <view class="progress-circle"
@@ -592,8 +593,7 @@ const search = async () => {
     sequence: item['693a62040f64427fac25ae80'],
     hourlyoutput: item['693a879a0f64427fac25da92'],
     rowid: item['rowid'],
-    isOver: item['6940f719c81c746aae8ede5d'],
-    abnormal: item['6944bac4dc7b1330488591fb']
+    isOver: item['6940f719c81c746aae8ede5d']
   }))
   processList.value = newProcessList.map(item => ({ ...item }))
 
@@ -631,7 +631,8 @@ const search = async () => {
       completedProcess: processes.length > 0 ? `${processes.filter(p => p.finishCount === p.needCount).length}/${processes.length}` : '0',
       productCode: item['691d6336535b29cbd5c6c0ca'],
       processes: processes.map(p => ({ ...p })),
-      orderCode
+      orderCode,
+      problemDescription: item['694ba108dc025d98887fd782'] || '' // 问题描述字段
     }
   })
   
@@ -1310,10 +1311,6 @@ onUnload(() => {
                   background-color: #4CAF50;
                 }
 
-                &.abnormal {
-                  background-color: #ff9800;
-                }
-
                 &.terminated {
                   background-color: #f44336;
                 }
@@ -1361,9 +1358,29 @@ onUnload(() => {
           .productCode,
           .name {
             font-size: px2vw(25px);
+            margin: px2vw(10px) px2vw(20px);
             display: flex;
             align-items: center;
             width: px2vw(400px);
+          }
+        }
+
+        .problemDescription {
+          display: flex;
+          margin: px2vw(10px) px2vw(20px);
+          font-size: px2vw(25px);
+          color: #f44336;
+          width: px2vw(400px);
+          
+          view:first-child {
+            font-weight: bold;
+            margin-right: px2vw(10px);
+            white-space: nowrap;
+          }
+          
+          view:last-child {
+            flex: 1;
+            word-break: break-word;
           }
         }
 
@@ -1405,36 +1422,6 @@ onUnload(() => {
 
           &.process-selected.process-over {
             border-color: #f44336;
-          }
-
-          &.process-abnormal {
-            .process-sequence {
-              color: #ff9800 !important;
-            }
-
-            .progress-circle {
-              background: conic-gradient(#ff9800 0%, #ff9800 var(--percent), #E0E0E0 var(--percent), #E0E0E0 100%) !important;
-            }
-
-            .progress-text {
-              color: #ff9800 !important;
-            }
-
-            .process-name {
-              color: #ff9800 !important;
-            }
-
-            &.process-selected {
-              border-color: #ff9800;
-              
-              .process-sequence {
-                color: #ff9800 !important;
-              }
-
-              .process-name {
-                color: #ff9800 !important;
-              }
-            }
           }
 
           &.process-over {

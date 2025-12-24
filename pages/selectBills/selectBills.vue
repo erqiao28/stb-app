@@ -65,21 +65,20 @@
 							<view>产品名称：</view>
 							<view>{{ item.name }}</view>
 						</view>
-						<view class="model">
-							<view class="model-text">规格型号：</view>
-							<view class="model-value">{{ item.model }}</view>
-						</view>
-						<view class="completedProcess">
-							<view>已完成工序：</view>
-							<view>{{ item.completedProcess }}</view>
-						</view>
+					<view class="model">
+						<view class="model-text">规格型号：</view>
+						<view class="model-value">{{ item.model }}</view>
 					</view>
+					<view class="problemDescription" v-if="item.problemDescription && item.problemDescription.trim()">
+						<view>问题描述：</view>
+						<view>{{ item.problemDescription }}</view>
+					</view>
+				</view>
 					<view class="processes-section" v-if="item.processes && item.processes.length > 0">
 						<view class="processes-container">
 							<view v-for="(process, index) in item.processes" :key="index" class="process-wrapper">
 								<view class="process-item" :class="{ 
-									'process-over': process.isOver == 1,
-									'process-abnormal': process.abnormal == 1 && process.isOver != 1
+									'process-over': process.isOver == 1
 								}">
 									<view class="progress-circle"
 										:style="{ '--percent': Math.round((process.finishCount / process.needCount) * 100) + '%' }">
@@ -185,11 +184,9 @@ const search = async () => {
 				finishCount: item['690c794ccf407aa3d938ba28'],
 				processOrder: item['6593b07ae97eb866a50eeba1'],
 				sequence: item['693a62040f64427fac25ae80'],
-				isOver: item['6940f719c81c746aae8ede5d'],
-				abnormal: item['6944bac4dc7b1330488591fb']
+				isOver: item['6940f719c81c746aae8ede5d']
 			}
 		})
-		console.log(processList.value)
 		billsList.value = billsRes.data.map(item => {
 			const orderCode = item['655e1cbbbd2094b316347f92']  // 旧订单编码 ID
 			const processes = processList.value.filter(p => p.processOrder === orderCode)  // 关联基于 orderCode
@@ -205,8 +202,8 @@ const search = async () => {
 				name: item['6937d255ff2b019b3cb34be3'],
 				model: item['6937d255ff2b019b3cb34be4'],
 				productionCode: item['691d6336535b29cbd5c6c0ca'],
-				completedProcess: '0',
-				processes
+				processes,
+				problemDescription: item['694ba108dc025d98887fd782'] || '' // 问题描述字段
 			}
 		})
 	})
@@ -450,19 +447,32 @@ const selectOrder = (orderCode) => {
 							white-space: nowrap;
 						}
 
-						.model-value {
-							flex: 1;
-						}
-					}
-
-					.completedProcess {
-						display: flex;
-						margin: px2vw(30px);
-						font-size: px2vw(25px);
+					.model-value {
+						flex: 1;
 					}
 				}
 
-				.processes-section {
+				.problemDescription {
+					width: px2vw(400px);
+					display: flex;
+					margin: px2vw(30px);
+					font-size: px2vw(25px);
+					color: #f44336;
+					
+					view:first-child {
+						font-weight: bold;
+						margin-right: px2vw(10px);
+						white-space: nowrap;
+					}
+					
+					view:last-child {
+						flex: 1;
+						word-break: break-word;
+					}
+				}
+			}
+
+			.processes-section {
 					width: 100%;
 					display: flex;
 					justify-content: center;
@@ -498,20 +508,6 @@ const selectOrder = (orderCode) => {
 					position: relative;
 					padding: px2vw(8px);
 					border-radius: px2vw(12px);
-
-					&.process-abnormal {
-						.progress-circle {
-							background: conic-gradient(#ff9800 0%, #ff9800 var(--percent), #E0E0E0 var(--percent), #E0E0E0 100%) !important;
-						}
-
-						.progress-text {
-							color: #ff9800 !important;
-						}
-
-						.process-name {
-							color: #ff9800 !important;
-						}
-					}
 
 					&.process-over {
 						.progress-circle {
