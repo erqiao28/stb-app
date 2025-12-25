@@ -206,12 +206,13 @@ const search = async () => {
 				finishCount: item['690c794ccf407aa3d938ba28'],
 				processOrder: item['6593b07ae97eb866a50eeba1'],
 				sequence: item['693a62040f64427fac25ae80'],
-				isOver: item['6940f719c81c746aae8ede5d']
+				isOver: item['6940f719c81c746aae8ede5d'],
+				sonoutput: item['66974d062503723eec1af614']
 			}
 		})
 		billsList.value = billsRes.data.map(item => {
 			const orderCode = item['655e1cbbbd2094b316347f92']  // 旧订单编码 ID
-			const processes = processList.value.filter(p => p.processOrder === orderCode)  // 关联基于 orderCode
+			const processes = processList.value.filter(p => p.processOrder === orderCode && p.sonoutput != null && p.sonoutput !== '')  // 关联基于 orderCode，过滤掉sonoutput为空的工序
 				.sort((a, b) => {
 					// 按sequence字段从小到大排序
 					const seqA = a.sequence || 0
