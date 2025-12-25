@@ -633,6 +633,7 @@ const search = async () => {
     rowid: item['rowid'],
     isOver: item['6940f719c81c746aae8ede5d'],
     price: item['657b282cd13eaaec2c6606b5'],
+    sonoutput: item['66974d062503723eec1af614']
   }))
   processList.value = newProcessList.map(item => ({ ...item }))
 
@@ -644,7 +645,7 @@ const search = async () => {
   const newBillsList = billsRes.data.map(item => {
     const orderGoods = item['691c47ee1c02c451c72a81c5']
     const orderCode = item['655e1cbbbd2094b316347f92']
-    const processes = processList.value.filter(p => p.processOrder === orderCode)
+    const processes = processList.value.filter(p => p.processOrder === orderCode && p.sonoutput != null && p.sonoutput !== '')
       .sort((a, b) => {
         // 按sequence字段从小到大排序
         const seqA = a.sequence || 0
@@ -1061,11 +1062,15 @@ const addProcess = async (item) => {
   
   let selectedSequence = 0
   
+  // 获取选中工序的rowid（如果选择了工序）
+  let processRowid = ''
+  
   // 计算新工序的顺序
   if (selectedProcess.value && selectedProcess.value.item.orderCode === item.orderCode) {
     // 情况1：如果选择了工序，选中工序的顺序 + 0.01
     const currentSequence = parseFloat(selectedProcess.value.process.sequence || 0)
     selectedSequence = parseFloat((currentSequence + 0.01).toFixed(2))
+    processRowid = selectedProcess.value.process.rowid || ''  // 获取选中工序的rowid
   } else if (item.processes && item.processes.length > 0) {
     // 情况2：如果工序列表有工序，但没有选择工序，取顺序最大的工序的顺序 + 1，并往下取整
     const maxSequence = Math.max(...item.processes.map(p => parseFloat(p.sequence || 0)))
@@ -1076,7 +1081,7 @@ const addProcess = async (item) => {
   }
   
   uni.navigateTo({
-    url: `/pages/addProcess/addProcess?orderCode=${encodeURIComponent(item.orderCode || '')}&productCode=${encodeURIComponent(item.productCode || '')}&workshop=${workshop.value}&selectedSequence=${selectedSequence}&billRowid=${encodeURIComponent(billRowid)}`
+    url: `/pages/addProcess/addProcess?orderCode=${encodeURIComponent(item.orderCode || '')}&productCode=${encodeURIComponent(item.productCode || '')}&workshop=${workshop.value}&selectedSequence=${selectedSequence}&billRowid=${encodeURIComponent(billRowid)}&processRowid=${encodeURIComponent(processRowid)}&billType=${encodeURIComponent(billType.value)}`
   })
 }
 

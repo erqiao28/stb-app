@@ -25,7 +25,7 @@
 						<view class="table-header-row">
 							<view class="table-header-cell">工序名称</view>
 						</view>
-						<view v-for="item in tableData" :key="item.processNumber" class="table-body-row" :class="{ selected: selectedProcess === item.processName }" @click="selectProcess(item)">
+						<view v-for="item in tableData" :key="item.processNumber" class="table-body-row" :class="{ selected: selectedProcess?.processName === item.processName }" @click="selectProcess(item)">
 							<view class="uni-table-td">{{ item.processName }}</view>
 						</view>
 						<!-- 加载更多提示 -->
@@ -99,7 +99,9 @@ const orderData = ref({
 	productcode: '',
 	workshop: '',
 	selectedSequence: 0, // 从派工页面传过来的计算好的工序顺序
-	billRowid: '' // 从派工页面传过来的单据rowid
+	billRowid: '', // 从派工页面传过来的单据rowid
+	processRowid: '', // 从派工页面传过来的选中工序的rowid
+	billType: '' // 从派工页面传过来的单据类型（正常排产、返工排产）
 })
 
 const tableData = ref([])
@@ -108,8 +110,8 @@ const pageSize = ref(10)
 const hasMore = ref(true)
 const loading = ref(false)
 
-// 选中的工序
-const selectedProcess = ref('')
+// 选中的工序（存储整个工序对象）
+const selectedProcess = ref(null)
 
 // 手动输入的工序名称
 const manualProcessName = ref('')
@@ -140,6 +142,8 @@ onLoad((options) => {
 	orderData.value.workshop = options.workshop || '';
 	orderData.value.selectedSequence = parseFloat(options.selectedSequence || 0);
 	orderData.value.billRowid = decodeURIComponent(options.billRowid || '');
+	orderData.value.processRowid = decodeURIComponent(options.processRowid || '');
+	orderData.value.billType = decodeURIComponent(options.billType || '');
 	// 设置生产顺序为传过来的计算好的顺序，统一保留两位小数
 	if (orderData.value.selectedSequence > 0) {
 		productionSequence.value = orderData.value.selectedSequence.toFixed(2)
@@ -218,6 +222,7 @@ const getProcessList = async (pageNum, isRefresh = false) => {
 	const mappedData = res.data.map(item => {
 		return {
 			processName: item['Name'],
+			rowid: item['rowid'] || ''
 		}
 	})
 	console.log(mappedData)
@@ -239,7 +244,7 @@ const getProcessList = async (pageNum, isRefresh = false) => {
 // 添加工序
 const addProcess = async () => {
 	// 确定工序名称：优先使用手动输入的，否则使用表格选择的
-	const processName = manualProcessName.value.trim() || selectedProcess.value
+	const processName = manualProcessName.value.trim() || selectedProcess.value?.processName || ''
 	
 	if (!processName) {
 		showToast('请选择工序或输入工序名称')
@@ -260,7 +265,9 @@ const addProcess = async () => {
 		sequence: parseFloat(productionSequence.value) || 0,
 		processPrice: parseFloat(processPrice.value) || 0,
 		plannedProductionDate: plannedProductionDate.value || '',
-		billRowid: orderData.value.billRowid
+		billRowid: orderData.value.billRowid,
+		processRowid: orderData.value.processRowid || '',
+		billType: orderData.value.billType || ''
 	})
 	console.log('保存响应:', res)
 	showToast('添加成功')
@@ -277,7 +284,7 @@ const addProcess = async () => {
 
 // 选中工序
 const selectProcess = (item) => {
-	selectedProcess.value = item.processName
+	selectedProcess.value = item  // 存储整个工序对象
 	manualProcessName.value = '' // 清空手动输入
 	isNewProcess.value = false // 从表格选择，不是新增
 	// 生产顺序保持使用跳转前选中的顺序+0.01，不需要重新计算
@@ -286,7 +293,7 @@ const selectProcess = (item) => {
 // 处理手动输入
 const handleManualInput = () => {
 	if (manualProcessName.value.trim()) {
-		selectedProcess.value = '' // 清空表格选择
+		selectedProcess.value = null // 清空表格选择
 		isNewProcess.value = true // 手动输入，是新增
 	}
 }
@@ -406,7 +413,7 @@ const quit = () => {
 	min-width: 0;
 	display: flex;
 	flex-direction: column;
-	gap: px2vw(30px);
+	gap: px2vw(10px);
 	padding: px2vw(20px);
 	background-color: #fff;
 	border-radius: px2vw(18px);
