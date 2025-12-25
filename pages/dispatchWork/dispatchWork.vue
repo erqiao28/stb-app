@@ -291,10 +291,10 @@
                 }">
                   <view class="process-sequence">{{ process.sequence || '' }}</view>
                   <view class="progress-circle"
-                    :style="{ '--percent': Math.round((process.finishCount / process.needCount) * 100) + '%' }"
+                    :style="{ '--percent': Math.round((process.finishCount / Math.max((parseFloat(process.needCount) || 0) + (parseFloat(process.finishCount) || 0), 1)) * 100) + '%' }"
                     @click="selectProcess(item, process)">
                     <view class="progress-inner">
-                      <view class="progress-text">{{ process.finishCount }}/{{ process.needCount }}</view>
+                      <view class="progress-text">{{ process.finishCount }}/{{ Math.round((parseFloat(process.needCount) || 0) + (parseFloat(process.finishCount) || 0)) }}</view>
                     </view>
                   </view>
                   <text class="process-name">{{ process.processName }}</text>

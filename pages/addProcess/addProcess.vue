@@ -68,6 +68,14 @@
 						v-model="processPrice"
 						step="0.01" />
 				</view>
+				<view class="input-group">
+					<view class="input-label">计划生产日期</view>
+					<picker mode="date" :value="plannedProductionDate" @change="onPlannedDateChange" class="picker-wrapper">
+						<view class="process-input date-picker">
+							{{ plannedProductionDate }}
+						</view>
+					</picker>
+				</view>
 				<button class="add-button" @click="addProcess">添加工序</button>
 			</view>
 		</view> 
@@ -111,6 +119,9 @@ const productionSequence = ref('')
 
 // 本工序工价
 const processPrice = ref('')
+
+// 计划生产日期
+const plannedProductionDate = ref('')
 
 // 是否新增状态（true=手动输入新增，false=从表格选择）
 const isNewProcess = ref(false)
@@ -248,6 +259,7 @@ const addProcess = async () => {
 		isNew: isNewProcess.value,
 		sequence: parseFloat(productionSequence.value) || 0,
 		processPrice: parseFloat(processPrice.value) || 0,
+		plannedProductionDate: plannedProductionDate.value || '',
 		billRowid: orderData.value.billRowid
 	})
 	console.log('保存响应:', res)
@@ -277,6 +289,11 @@ const handleManualInput = () => {
 		selectedProcess.value = '' // 清空表格选择
 		isNewProcess.value = true // 手动输入，是新增
 	}
+}
+
+// 计划生产日期选择变化处理
+const onPlannedDateChange = (e) => {
+	plannedProductionDate.value = e.detail.value
 }
 
 // 返回
@@ -353,6 +370,7 @@ const quit = () => {
 /* 左侧表格区域 */
 .table-section {
 	flex: 1;
+	min-width: 0;
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
@@ -384,7 +402,8 @@ const quit = () => {
 
 /* 右侧输入框和按钮区域 */
 .input-section {
-	width: 50%;
+	flex: 1;
+	min-width: 0;
 	display: flex;
 	flex-direction: column;
 	gap: px2vw(30px);
@@ -397,15 +416,15 @@ const quit = () => {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	gap: px2vw(15px);
-	margin-bottom: px2vw(15px);
+	gap: px2vw(8px);
+	margin-bottom: px2vw(2px);
 }
 
 .input-label {
 	font-size: px2vw(30px);
 	font-weight: bold;
 	color: #333;
-	width: px2vw(150px);
+	width: px2vw(200px);
 	flex-shrink: 0;
 	white-space: nowrap;
 }
@@ -423,6 +442,26 @@ const quit = () => {
 	&:focus {
 		border-color: #5884f1;
 		outline: none;
+	}
+}
+
+.picker-wrapper {
+	flex: 1;
+	min-width: 0;
+	width: 100%;
+}
+
+.date-picker {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	color: #333;
+	width: 100%;
+	
+	&:empty::before {
+		content: '请选择计划生产日期';
+		color: #999;
 	}
 }
 

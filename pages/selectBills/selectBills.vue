@@ -81,9 +81,9 @@
 									'process-over': process.isOver == 1
 								}">
 									<view class="progress-circle"
-										:style="{ '--percent': Math.round((process.finishCount / process.needCount) * 100) + '%' }">
+										:style="{ '--percent': Math.round((process.finishCount / Math.max((parseFloat(process.needCount) || 0) + (parseFloat(process.finishCount) || 0), 1)) * 100) + '%' }">
 										<view class="progress-inner">
-											<view class="progress-text">{{ process.finishCount }}/{{ process.needCount
+											<view class="progress-text">{{ process.finishCount }}/{{ Math.round((parseFloat(process.needCount) || 0) + (parseFloat(process.finishCount) || 0))
 												}}</view>
 										</view>
 									</view>
