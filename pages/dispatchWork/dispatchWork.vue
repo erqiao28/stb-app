@@ -135,6 +135,23 @@
                 <!-- 占位，保持布局一致 -->
               </view>
             </view>
+            
+            <!-- 计薪方式和工价 -->
+            <view class="row-group">
+              <view class="form-group">
+                <text class="label">计薪方式：</text>
+                <picker mode="selector" :range="salaryMethodOptions" :value="salaryMethodIndex" @change="onSalaryMethodChange">
+                  <view class="value">
+                    {{ processDispatchData.salaryMethod || '请选择计薪方式' }}
+                  </view>
+                </picker>
+              </view>
+              <view class="form-group">
+                <text class="label">工价：</text>
+                <input v-model.number="processDispatchData.price" type="number" placeholder="请输入工价"
+                  min="0" step="0.01" class="input-field" />
+              </view>
+            </view>
           </view>
           
           <!-- 员工选择表格 -->
@@ -353,8 +370,14 @@ const processDispatchData = ref({
   time: 0,
   machine: '',
   mold: '',
-  date: ''
+  date: '',
+  salaryMethod: '计件',  // 计薪方式：计件、计时，默认值为计件
+  price: 0  // 工价
 })
+
+// 计薪方式选项
+const salaryMethodOptions = ref(['计件', '计时'])
+const salaryMethodIndex = ref(0)  // 默认选中第一个选项（计件）
 
 // ---------- 终止派工模态相关 ----------
 const showTerminateModal = ref(false)
@@ -608,7 +631,8 @@ const search = async () => {
     sequence: item['693a62040f64427fac25ae80'],
     hourlyoutput: item['693a879a0f64427fac25da92'],
     rowid: item['rowid'],
-    isOver: item['6940f719c81c746aae8ede5d']
+    isOver: item['6940f719c81c746aae8ede5d'],
+    price: item['657b282cd13eaaec2c6606b5'],
   }))
   processList.value = newProcessList.map(item => ({ ...item }))
 
@@ -755,8 +779,11 @@ const openProcessModal = (item, process) => {
     time: 0,
     machine: '',
     mold: '',
-    date: todayStr
+    date: todayStr,
+    salaryMethod: '计件',  // 默认值为计件
+    price: process?.price || 0  // 将工序的工价赋值给派工模态框
   }
+  salaryMethodIndex.value = 0  // 默认选中第一个选项（计件）
   selectedEmployee.value = []
   employeeList.value = []
   loadEmployees()
@@ -765,17 +792,24 @@ const openProcessModal = (item, process) => {
 
 const closeProcessModal = () => {
   showProcessModal.value = false
-  processDispatchData.value = { employee: '', quantity: 0, time: 0, machine: '', mold: '', date: '' }
+  processDispatchData.value = { employee: '', quantity: 0, time: 0, machine: '', mold: '', date: '', salaryMethod: '计件', price: 0 }
   machine.value = null
   mold.value = null
   employeeList.value = []
   selectedEmployee.value = []
+  salaryMethodIndex.value = 0
   // 关闭模态框后不清空选中状态，保持选中以便再次派工
 }
 
 // 日期选择变化处理
 const onDateChange = (e) => {
   processDispatchData.value.date = e.detail.value
+}
+
+// 计薪方式选择变化处理
+const onSalaryMethodChange = (e) => {
+  salaryMethodIndex.value = e.detail.value
+  processDispatchData.value.salaryMethod = salaryMethodOptions.value[e.detail.value]
 }
 
 const confirmProcessDispatch = async () => {
@@ -842,7 +876,9 @@ const confirmProcessDispatch = async () => {
     mold: mold.value?.code || '',
     workshop: workshop.value || '',
     rowid: selectedProcessData.value?.process?.rowid || '',
-    date: processDispatchData.value.date || ''
+    date: processDispatchData.value.date || '',
+    salaryMethod: processDispatchData.value.salaryMethod || '',
+    price: processDispatchData.value.price || 0
   }
 
   const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjkyMTJlNzdhOWE4ZGM2YmMxZjczYzlk', dispatchData)
