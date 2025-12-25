@@ -622,6 +622,10 @@ const search = async () => {
     getProcessRaw(searchValue.value)
   ])
 
+  // 打印获取到的工序列表原始数据
+  console.log('获取工序列表原始数据:', processRes.data)
+  console.log('获取工序列表原始数据条数:', processRes.data?.length || 0)
+
   const newProcessList = processRes.data.map(item => ({
     processName: item['656ffd1bba5ef3863bf3ec1e'],
     needCount: item['690dc19f8d797ee211e7fc60'],
@@ -635,6 +639,11 @@ const search = async () => {
     price: item['657b282cd13eaaec2c6606b5'],
     sonoutput: item['66974d062503723eec1af614']
   }))
+  
+  // 打印处理后的工序列表数据
+  console.log('处理后的工序列表数据:', newProcessList)
+  console.log('处理后的工序列表数据条数:', newProcessList.length)
+  
   processList.value = newProcessList.map(item => ({ ...item }))
 
   if (billsRes.data.length === 0) {
@@ -645,7 +654,7 @@ const search = async () => {
   const newBillsList = billsRes.data.map(item => {
     const orderGoods = item['691c47ee1c02c451c72a81c5']
     const orderCode = item['655e1cbbbd2094b316347f92']
-    const processes = processList.value.filter(p => p.processOrder === orderCode && p.sonoutput != null && p.sonoutput !== '')
+    const processes = processList.value.filter(p => p.processOrder === orderCode && p.sonoutput !== "[]")
       .sort((a, b) => {
         // 按sequence字段从小到大排序
         const seqA = a.sequence || 0

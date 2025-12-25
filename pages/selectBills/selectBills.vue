@@ -199,6 +199,10 @@ const getBillsListRaw = async () => {
 
 const search = async () => {
 	Promise.all([getBillsListRaw(), getProcessRaw()]).then(([billsRes, processRes]) => {
+		// 打印获取到的工序列表原始数据
+		console.log('获取工序列表原始数据:', processRes.data)
+		console.log('获取工序列表原始数据条数:', processRes.data?.length || 0)
+		
 		processList.value = processRes.data.map(item => {
 			return {
 				processName: item['656ffd1bba5ef3863bf3ec1e'],
@@ -210,9 +214,14 @@ const search = async () => {
 				sonoutput: item['66974d062503723eec1af614']
 			}
 		})
+		
+		// 打印处理后的工序列表数据
+		console.log('处理后的工序列表数据:', processList.value)
+		console.log('处理后的工序列表数据条数:', processList.value.length)
+		
 		billsList.value = billsRes.data.map(item => {
 			const orderCode = item['655e1cbbbd2094b316347f92']  // 旧订单编码 ID
-			const processes = processList.value.filter(p => p.processOrder === orderCode && p.sonoutput != null && p.sonoutput !== '')  // 关联基于 orderCode，过滤掉sonoutput为空的工序
+			const processes = processList.value.filter(p => p.processOrder === orderCode && p.sonoutput !== "[]")  // 关联基于 orderCode，过滤掉sonoutput为"[]"或空字符串的工序
 				.sort((a, b) => {
 					// 按sequence字段从小到大排序
 					const seqA = a.sequence || 0
