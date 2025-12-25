@@ -622,10 +622,6 @@ const search = async () => {
     getProcessRaw(searchValue.value)
   ])
 
-  // 打印获取到的工序列表原始数据
-  console.log('获取工序列表原始数据:', processRes.data)
-  console.log('获取工序列表原始数据条数:', processRes.data?.length || 0)
-
   const newProcessList = processRes.data.map(item => ({
     processName: item['656ffd1bba5ef3863bf3ec1e'],
     needCount: item['690dc19f8d797ee211e7fc60'],
@@ -639,11 +635,6 @@ const search = async () => {
     price: item['657b282cd13eaaec2c6606b5'],
     sonoutput: item['66974d062503723eec1af614']
   }))
-  
-  // 打印处理后的工序列表数据
-  console.log('处理后的工序列表数据:', newProcessList)
-  console.log('处理后的工序列表数据条数:', newProcessList.length)
-  
   processList.value = newProcessList.map(item => ({ ...item }))
 
   if (billsRes.data.length === 0) {
@@ -895,11 +886,12 @@ const confirmProcessDispatch = async () => {
   if (res.status === 1) {
     uni.showToast({ title: '派工成功' })
     showProcessModal.value = false
-    // 使用 loadAllData 刷新数据，确保进度条更新（与添加工序后的刷新逻辑一致）
+    // 派工成功后刷新数据，确保进度条更新
     if (searchValue.value && searchValue.value.trim()) {
-      setTimeout(() => {
-        loadAllData()
-      }, 500)
+      // 添加延迟，确保后端数据已更新
+      setTimeout(async () => {
+        await search()
+      }, 1000)
     }
   } else {
     uni.showToast({ title: res.message })
