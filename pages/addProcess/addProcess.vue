@@ -395,18 +395,23 @@ const quit = () => {
 
 .input-group {
 	display: flex;
-	flex-direction: column;
+	flex-direction: row;
+	align-items: center;
 	gap: px2vw(15px);
+	margin-bottom: px2vw(15px);
 }
 
 .input-label {
 	font-size: px2vw(30px);
 	font-weight: bold;
 	color: #333;
+	width: px2vw(150px);
+	flex-shrink: 0;
+	white-space: nowrap;
 }
 
 .process-input {
-	width: 100%;
+	flex: 1;
 	height: px2vw(80px);
 	padding: 0 px2vw(20px);
 	border: px2vw(2px) solid #e0e0e0;
