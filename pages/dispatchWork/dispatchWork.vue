@@ -647,7 +647,8 @@ const search = async () => {
       productCode: item['691d6336535b29cbd5c6c0ca'],
       processes: processes.map(p => ({ ...p })),
       orderCode,
-      problemDescription: item['694ba108dc025d98887fd782'] || '' // 问题描述字段
+      problemDescription: item['694ba108dc025d98887fd782'] || '', // 问题描述字段
+      billRowid: item['rowid']
     }
   })
   
@@ -1025,25 +1026,27 @@ const goSelectReworkBills = () => {
 }
 
 const addProcess = async (item) => {
-  // 检查是否有选中的工序
-  if (!selectedProcess.value) {
-    uni.showToast({ title: '请先选择一个工序', icon: 'none' })
-    return
-  }
+  // 获取单据的rowid
+  const billRowid = item.billRowid || ''
   
-  // 检查选中的工序是否属于当前订单
-  if (selectedProcess.value.item.orderCode !== item.orderCode) {
-    uni.showToast({ title: '请选择当前订单的工序', icon: 'none' })
-    return
-  }
+  let selectedSequence = 0
   
-  // 获取选中工序的顺序，用于计算新工序的顺序
-  const selectedSequence = selectedProcess.value.process.sequence || 0
-  // 获取选中工序的rowid
-  const rowid = selectedProcess.value.process.rowid || ''
+  // 计算新工序的顺序
+  if (selectedProcess.value && selectedProcess.value.item.orderCode === item.orderCode) {
+    // 情况1：如果选择了工序，选中工序的顺序 + 0.01
+    const currentSequence = parseFloat(selectedProcess.value.process.sequence || 0)
+    selectedSequence = parseFloat((currentSequence + 0.01).toFixed(2))
+  } else if (item.processes && item.processes.length > 0) {
+    // 情况2：如果工序列表有工序，但没有选择工序，取顺序最大的工序的顺序 + 1，并往下取整
+    const maxSequence = Math.max(...item.processes.map(p => parseFloat(p.sequence || 0)))
+    selectedSequence = Math.floor(maxSequence) + 1
+  } else {
+    // 情况3：工序列表没有工序，顺序直接为1
+    selectedSequence = 1
+  }
   
   uni.navigateTo({
-    url: `/pages/addProcess/addProcess?orderCode=${encodeURIComponent(item.orderCode || '')}&productCode=${encodeURIComponent(item.productCode || '')}&workshop=${workshop.value}&selectedSequence=${selectedSequence}&rowid=${encodeURIComponent(rowid)}`
+    url: `/pages/addProcess/addProcess?orderCode=${encodeURIComponent(item.orderCode || '')}&productCode=${encodeURIComponent(item.productCode || '')}&workshop=${workshop.value}&selectedSequence=${selectedSequence}&billRowid=${encodeURIComponent(billRowid)}`
   })
 }
 

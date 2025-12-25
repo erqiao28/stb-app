@@ -81,8 +81,8 @@ const orderData = ref({
 	ordercode: '',
 	productcode: '',
 	workshop: '',
-	selectedSequence: 0, // 从派工页面传过来的选中工序顺序
-	rowid: '' // 从派工页面传过来的选中工序rowid
+	selectedSequence: 0, // 从派工页面传过来的计算好的工序顺序
+	billRowid: '' // 从派工页面传过来的单据rowid
 })
 
 const tableData = ref([])
@@ -116,13 +116,13 @@ onLoad((options) => {
 	orderData.value.productcode = decodeURIComponent(options.productCode || '');
 	orderData.value.workshop = options.workshop || '';
 	orderData.value.selectedSequence = parseFloat(options.selectedSequence || 0);
-	orderData.value.rowid = decodeURIComponent(options.rowid || '');
-	// 如果有传过来的顺序，设置生产顺序为选中顺序+0.01
+	orderData.value.billRowid = decodeURIComponent(options.billRowid || '');
+	// 设置生产顺序为传过来的计算好的顺序，统一保留两位小数
 	if (orderData.value.selectedSequence > 0) {
-		productionSequence.value = (orderData.value.selectedSequence + 0.01).toFixed(2)
+		productionSequence.value = orderData.value.selectedSequence.toFixed(2)
 	} else {
-		// 如果没有传顺序，默认为0.01
-		productionSequence.value = '0.01'
+		// 如果没有传顺序，默认为1
+		productionSequence.value = '1.00'
 	}
 	getProcessList(1, true)  // 初次加载全部
 })
@@ -235,7 +235,7 @@ const addProcess = async () => {
 		processName: processName,
 		isNew: isNewProcess.value,
 		sequence: parseFloat(productionSequence.value) || 0,
-		rowid: orderData.value.rowid
+		billRowid: orderData.value.billRowid
 	})
 	console.log('保存响应:', res)
 	showToast('添加成功')
