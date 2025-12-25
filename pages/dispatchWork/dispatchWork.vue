@@ -659,7 +659,7 @@ const search = async () => {
   await nextTick()
 }
 
-const loadAllData = async (retryCount = 0) => {
+const loadAllData = async () => {
   if (!searchValue.value || !searchValue.value.trim()) {
     billsList.value = []
     processList.value = []
@@ -667,12 +667,6 @@ const loadAllData = async (retryCount = 0) => {
   }
   
   await search()
-  
-  if (retryCount === 0) {
-    setTimeout(async () => {
-      await search()
-    }, 1000)
-  }
 }
 
 // ---------- 图片预览相关方法 ----------
@@ -858,7 +852,7 @@ const confirmProcessDispatch = async () => {
     // 使用 loadAllData 刷新数据，确保进度条更新（与添加工序后的刷新逻辑一致）
     if (searchValue.value && searchValue.value.trim()) {
       setTimeout(() => {
-        loadAllData(0)
+        loadAllData()
       }, 500)
     }
   } else {
@@ -1119,7 +1113,7 @@ onLoad(() => {
 onShow(() => {
   if (searchValue.value && searchValue.value.trim()) {
     setTimeout(() => {
-      loadAllData(0)
+      loadAllData()
     }, 500)
   }
 })
