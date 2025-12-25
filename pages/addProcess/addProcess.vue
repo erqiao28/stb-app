@@ -59,6 +59,15 @@
 						v-model="productionSequence"
 						step="0.01" />
 				</view>
+				<view class="input-group">
+					<view class="input-label">本工序工价</view>
+					<input 
+						type="number" 
+						class="process-input" 
+						placeholder="请输入本工序工价" 
+						v-model="processPrice"
+						step="0.01" />
+				</view>
 				<button class="add-button" @click="addProcess">添加工序</button>
 			</view>
 		</view> 
@@ -99,6 +108,9 @@ const manualProcessName = ref('')
 
 // 生产顺序
 const productionSequence = ref('')
+
+// 本工序工价
+const processPrice = ref('')
 
 // 是否新增状态（true=手动输入新增，false=从表格选择）
 const isNewProcess = ref(false)
@@ -235,6 +247,7 @@ const addProcess = async () => {
 		processName: processName,
 		isNew: isNewProcess.value,
 		sequence: parseFloat(productionSequence.value) || 0,
+		processPrice: parseFloat(processPrice.value) || 0,
 		billRowid: orderData.value.billRowid
 	})
 	console.log('保存响应:', res)
