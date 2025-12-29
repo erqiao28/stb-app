@@ -10,10 +10,6 @@
     <MachineRadiobox v-model="machine" :options="machineOptions" title="选择机台" v-model:visible="showMachineModal"
       @confirm="handleMachineConfirm" />
     
-    <!-- 模具选择模态框 -->
-    <MachineRadiobox v-model="mold" :options="moldOptions" title="选择模具" v-model:visible="showMoldModal"
-      @confirm="handleMoldConfirm" />
-    
     <!-- 添加员工模态框 -->
     <AddWorkerRadiobox v-model="selectedEmployeesForAdd" :options="allEmployeesOptions" title="添加员工" 
       :visible="showAddEmployeeModal" @update:visible="handleAddEmployeeModalClose" @confirm="handleAddEmployeeConfirm" />
@@ -115,9 +111,7 @@
               </view>
               <view class="form-group">
                 <text class="label">模具：</text>
-                <view class="value" @click="getMoldList">
-                  {{ mold?.name || '请选择模具' }}
-                </view>
+                <text class="value-readonly">{{ selectedProcessData?.process?.mold || '无' }}</text>
               </view>
             </view>
             
@@ -343,11 +337,6 @@ const machine = ref(null)
 const machineOptions = ref([])
 const showMachineModal = ref(false)
 
-// ---------- 模具相关 ----------
-const mold = ref(null)
-const moldOptions = ref([])
-const showMoldModal = ref(false)
-
 // ---------- 搜索和列表相关 ----------
 const searchValue = ref('')
 const billType = ref('正常排产')  // 单据类型：正常排产、返工排产
@@ -509,43 +498,6 @@ const handleMachineConfirm = (value) => {
   showMachineModal.value = false
 }
 
-// ---------- 模具相关方法 ----------
-const getMoldList = async () => {
-  try {
-    const res = await callWorkflowListAPIPaged({
-      worksheetId: 'shebeidangan',
-      filters: [{
-        "controlId": "67ac0a87d6566fd9d09a2340",
-        "dataType": 30,
-        "spliceType": 1,
-        "filterType": 2,
-        "values": [workshop.value]
-      }]
-    })
-    if (!res.data || res.data.length === 0) {
-      uni.showToast({ title: '无模具数据', icon: 'none' })
-      return null
-    }
-    moldOptions.value = res.data.map(item => ({
-      workshop: item['67ac0a87d6566fd9d09a2340'] || '',
-      code: item['63db6b67e134b5cd4f9f96bb'] || '',
-      name: item['63db6b67e134b5cd4f9f96bc'] || '',
-      value: item['63db6b67e134b5cd4f9f96bb'] || ''
-    })).filter(item => item.value)
-    showMoldModal.value = true
-    return res
-  } catch (error) {
-    console.error('获取模具列表失败:', error)
-    uni.showToast({ title: '获取模具列表失败', icon: 'none' })
-    return null
-  }
-}
-
-const handleMoldConfirm = (value) => {
-  mold.value = value
-  showMoldModal.value = false
-}
-
 // ---------- 搜索和列表相关方法 ----------
 const getProcessRaw = async (searchVal = '') => {
   const filters = [{
@@ -633,7 +585,8 @@ const search = async () => {
     rowid: item['rowid'],
     isOver: item['6940f719c81c746aae8ede5d'],
     price: item['657b282cd13eaaec2c6606b5'],
-    sonoutput: item['66974d062503723eec1af614']
+    sonoutput: item['66974d062503723eec1af614'],
+    mold: item['695222a27a59e0522d853edf']
   }))
   processList.value = newProcessList.map(item => ({ ...item }))
 
@@ -766,7 +719,6 @@ const isProcessSelected = (item, process) => {
 const openProcessModal = (item, process) => {
   selectedProcessData.value = { item, process }
   machine.value = null
-  mold.value = null
   // 初始化日期为今天，格式：YYYY-MM-DD
   const today = new Date()
   const year = today.getFullYear()
@@ -795,7 +747,6 @@ const closeProcessModal = () => {
   showProcessModal.value = false
   processDispatchData.value = { employee: '', quantity: 0, time: 0, machine: '', mold: '', date: '', salaryMethod: '计件', price: 0 }
   machine.value = null
-  mold.value = null
   employeeList.value = []
   selectedEmployee.value = []
   salaryMethodIndex.value = 0
@@ -846,10 +797,6 @@ const confirmProcessDispatch = async () => {
     uni.showToast({ title: '请选择机台', icon: 'none' })
     return
   }
-  if (!mold.value?.code) {
-    uni.showToast({ title: '请选择模具', icon: 'none' })
-    return
-  }
   if (!selectedEmployee.value || selectedEmployee.value.length === 0) {
     uni.showToast({ title: '请至少选择一个员工', icon: 'none' })
     return
@@ -874,7 +821,7 @@ const confirmProcessDispatch = async () => {
     employee: processDispatchData.value.employee,
     employees: selectedEmployees,
     machine: machine.value?.code || '',
-    mold: mold.value?.code || '',
+    mold: selectedProcessData.value?.process?.mold || '',
     workshop: workshop.value || '',
     rowid: selectedProcessData.value?.process?.rowid || '',
     date: processDispatchData.value.date || '',
@@ -1844,6 +1791,21 @@ onUnload(() => {
     align-items: center;
     box-sizing: border-box;
     cursor: pointer;
+  }
+  
+  .value-readonly {
+    width: px2vw(400px);
+    font-size: px2vw(30px);
+    color: #333;
+    padding: px2vw(8px) px2vw(12px);
+    background: #f9f9f9;
+    border-radius: px2vw(5px);
+    border: px2vw(1px) solid #eee;
+    min-height: px2vw(50px);
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    cursor: default;
   }
   
   picker {
