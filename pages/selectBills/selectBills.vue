@@ -95,6 +95,9 @@
 					</view>
 				</view>
 				<view class="goodsProcess">
+					<view class="bill-type-badge" 
+						:class="{ 'badge-normal': item.billType === '正常排产', 'badge-rework': item.billType === '返工排产' }"
+						v-if="item.billType">{{ item.billType }}</view>
 				</view>
 			</view>
 		</view>
@@ -109,8 +112,7 @@ import { ref } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 const { statusBarHeight } = useStatusBar()
 const workshop = ref('')
-const billType = ref('正常排产')  // 单据类型：正常排产、返工排产
-const processTypeParam = ref('0')  // 工序类型参数：0-正常排产，1-返工排产
+const billTypeFilter = ref('正常排产')  // 单据类型过滤参数：正常排产、返工排产（用于获取单据）
 const billsList = ref([])  // 单据列表
 const processList = ref([])  // 工序列表
 const searchValue = ref({
@@ -119,7 +121,15 @@ const searchValue = ref({
 	productionOrder: '',
 	orderItem: ''
 })  // 搜索输入值
-const getProcessRaw = async () => {
+// 根据单据的billType获取对应的工序类型参数
+const getProcessTypeParam = (billType) => {
+	return billType === '返工排产' ? '返工派工' : '正常派工'
+}
+
+const getProcessRaw = async (billTypeValue = '') => {
+	// 根据单据的billType决定processTypeParam
+	const processTypeParam = getProcessTypeParam(billTypeValue || '正常排产')
+	
 	const filters = [{
 		"controlId": "669a6cae2503723eec1b49bb",
 		"dataType": 30,
@@ -127,11 +137,11 @@ const getProcessRaw = async () => {
 		"filterType": 2,
 		"values": [workshop.value]
 	}, {
-		"controlId": "694ba3d9dc025d98887fd8e9",
+		"controlId": "6954ad997a59e0522d85df35",
 		"dataType": 30,
 		"spliceType": 1,
 		"filterType": 2,
-		"values": [processTypeParam.value]
+		"values": [processTypeParam]
 	}]
 	// 添加订单物品过滤 (假设 orderItem 对应 processOrder)
 	if (searchValue.value.orderItem) {
@@ -156,9 +166,7 @@ onLoad((options) => {
 	}
 	if (options.type) {
 		const type = decodeURIComponent(options.type)  // 接收单据类型参数：正常排产 或 返工排产
-		billType.value = type
-		// 根据类型设置工序参数：正常排产=0，返工排产=1
-		processTypeParam.value = type === '返工排产' ? '1' : '0'
+		billTypeFilter.value = type
 	}
 	search()  // 默认加载时搜索
 })
@@ -176,7 +184,7 @@ const getBillsListRaw = async () => {
 		"dataType": 30,
 		"spliceType": 1,
 		"filterType": 2,
-		"values": [billType.value]
+		"values": [billTypeFilter.value]
 	}
 ]
 	// 添加搜索过滤 (假设 salesOrder 对应订单编号 '655e1cbbbd2094b316347f92')
@@ -198,37 +206,53 @@ const getBillsListRaw = async () => {
 }
 
 const search = async () => {
-	Promise.all([getBillsListRaw(), getProcessRaw()]).then(([billsRes, processRes]) => {
-		processList.value = processRes.data.map(item => {
-			return {
-				processName: item['656ffd1bba5ef3863bf3ec1e'],
-				needCount: item['690dc19f8d797ee211e7fc60'],
-				finishCount: item['690c794ccf407aa3d938ba28'],
-				processOrder: item['6593b07ae97eb866a50eeba1'],
-				sequence: item['693a62040f64427fac25ae80'],
-				isOver: item['6940f719c81c746aae8ede5d'],
-				sonoutput: item['66974d062503723eec1af614']
-			}
-		})
-		billsList.value = billsRes.data.map(item => {
-			const orderCode = item['655e1cbbbd2094b316347f92']  // 旧订单编码 ID
-			const processes = processList.value.filter(p => p.processOrder === orderCode && p.sonoutput !== "[]")  // 关联基于 orderCode，过滤掉sonoutput为"[]"或空字符串的工序
-				.sort((a, b) => {
-					// 按sequence字段从小到大排序
-					const seqA = a.sequence || 0
-					const seqB = b.sequence || 0
-					return seqA - seqB
-				})
-			return {
-				orderCode,
-				orderCount: item['681b0b53b139204fd264c5fd'],
-				name: item['6937d255ff2b019b3cb34be3'],
-				model: item['6937d255ff2b019b3cb34be4'],
-				productionCode: item['691d6336535b29cbd5c6c0ca'],
-				processes,
-				problemDescription: item['694ba108dc025d98887fd782'] || '' // 问题描述字段
-			}
-		})
+	// 先获取单据列表
+	const billsRes = await getBillsListRaw()
+	
+	if (billsRes.data.length === 0) {
+		billsList.value = []
+		processList.value = []
+		return
+	}
+	
+	// 根据每个单据的billType分别获取对应的工序
+	const billTypes = [...new Set(billsRes.data.map(item => item['694a3954687045435008a7c3'] || '正常排产'))]
+	const processPromises = billTypes.map(billType => getProcessRaw(billType))
+	const processResults = await Promise.all(processPromises)
+	
+	// 合并所有工序结果
+	const allProcesses = processResults.flatMap(res => res.data.map(item => ({
+		processName: item['656ffd1bba5ef3863bf3ec1e'],
+		needCount: item['690dc19f8d797ee211e7fc60'],
+		finishCount: item['690c794ccf407aa3d938ba28'],
+		processOrder: item['6593b07ae97eb866a50eeba1'],
+		sequence: item['693a62040f64427fac25ae80'],
+		isOver: item['6940f719c81c746aae8ede5d'],
+		sonoutput: item['66974d062503723eec1af614']
+	})))
+	
+	processList.value = allProcesses.map(item => ({ ...item }))
+	
+	billsList.value = billsRes.data.map(item => {
+		const orderCode = item['655e1cbbbd2094b316347f92']  // 旧订单编码 ID
+		const billType = item['694a3954687045435008a7c3'] || '正常排产'
+		const processes = processList.value.filter(p => p.processOrder === orderCode && p.sonoutput !== "[]")  // 关联基于 orderCode，过滤掉sonoutput为"[]"或空字符串的工序
+			.sort((a, b) => {
+				// 按sequence字段从小到大排序
+				const seqA = a.sequence || 0
+				const seqB = b.sequence || 0
+				return seqA - seqB
+			})
+		return {
+			orderCode,
+			orderCount: item['681b0b53b139204fd264c5fd'],
+			name: item['6937d255ff2b019b3cb34be3'],
+			model: item['6937d255ff2b019b3cb34be4'],
+			productionCode: item['691d6336535b29cbd5c6c0ca'],
+			processes,
+			billType: billType,
+			problemDescription: item['694ba108dc025d98887fd782'] || '' // 问题描述字段
+		}
 	})
 }
 
@@ -418,11 +442,14 @@ const selectOrder = (orderCode) => {
 			margin: px2vw(15px);
 			padding: px2vw(15px);
 			display: flex;
+			position: relative;
 
 			.goodsInfo {
 				width: 100%;
 				display: flex;
 				flex-wrap: wrap;
+				position: relative;
+				z-index: 1;
 
 				.goodsInfo-up {
 					width: 100%;
@@ -600,6 +627,35 @@ const selectOrder = (orderCode) => {
 					position: relative;
 					top: px2vw(-10px);
 					/* 往上移20px，靠近圆圈底部 */
+				}
+			}
+			
+			.goodsProcess {
+				position: absolute;
+				bottom: px2vw(10px);
+				right: px2vw(10px);
+				flex-shrink: 0;
+				z-index: 100;
+				pointer-events: none;
+				
+				.bill-type-badge {
+					color: white;
+					padding: px2vw(8px) px2vw(16px);
+					border-radius: px2vw(8px);
+					font-size: px2vw(22px);
+					font-weight: bold;
+					white-space: nowrap;
+					z-index: 100;
+					box-shadow: 0 px2vw(2px) px2vw(8px) rgba(0, 0, 0, 0.2);
+					
+					&.badge-normal {
+						background-color: #4CAF50; // 绿色 - 正常排产
+					}
+					
+					&.badge-rework {
+						background-color: #FFC107; // 黄色 - 返工排产
+						color: white; // 白色文字
+					}
 				}
 			}
 		}

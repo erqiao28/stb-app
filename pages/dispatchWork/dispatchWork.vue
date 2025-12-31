@@ -298,7 +298,11 @@
             </view>
           </view>
         </view>
-        <view class="goodsProcess"></view>
+        <view class="goodsProcess">
+          <view class="bill-type-badge" 
+            :class="{ 'badge-normal': item.billType === '正常排产', 'badge-rework': item.billType === '返工排产' }"
+            v-if="item.billType">{{ item.billType }}</view>
+        </view>
       </view>
     </view>
   </view>
@@ -339,8 +343,7 @@ const showMachineModal = ref(false)
 
 // ---------- 搜索和列表相关 ----------
 const searchValue = ref('')
-const billType = ref('正常排产')  // 单据类型：正常排产、返工排产
-const processTypeParam = ref('0')  // 工序类型参数：0-正常排产，1-返工排产
+const billTypeFilter = ref('正常排产')  // 单据类型过滤参数：正常排产、返工排产（用于获取单据）
 const billsList = ref([])
 const processList = ref([])
 const listKey = ref(0)
@@ -499,7 +502,15 @@ const handleMachineConfirm = (value) => {
 }
 
 // ---------- 搜索和列表相关方法 ----------
-const getProcessRaw = async (searchVal = '') => {
+// 根据单据的billType获取对应的工序类型参数
+const getProcessTypeParam = (billType) => {
+  return billType === '返工排产' ? '返工派工' : '正常派工'
+}
+
+const getProcessRaw = async (searchVal = '', billTypeValue = '') => {
+  // 根据单据的billType决定processTypeParam
+  const processTypeParam = getProcessTypeParam(billTypeValue || '正常排产')
+  
   const filters = [{
     "controlId": "669a6cae2503723eec1b49bb",
     "dataType": 30,
@@ -507,11 +518,11 @@ const getProcessRaw = async (searchVal = '') => {
     "filterType": 2,
     "values": [workshop.value]
   }, {
-    "controlId": "694ba3d9dc025d98887fd8e9",
+    "controlId": "6954ad997a59e0522d85df35",
     "dataType": 30,
     "spliceType": 1,
     "filterType": 2,
-    "values": [processTypeParam.value]
+    "values": [processTypeParam]
   }]
   if (searchVal) {
     filters.push({
@@ -541,7 +552,7 @@ const getBillsListRaw = async (searchVal = '') => {
     "dataType": 30,
     "spliceType": 1,
     "filterType": 2,
-    "values": [billType.value]
+    "values": [billTypeFilter.value]
   }]
   if (searchVal) {
     filters.push({
@@ -569,12 +580,22 @@ const search = async () => {
     return
   }
   
-  const [billsRes, processRes] = await Promise.all([
-    getBillsListRaw(searchValue.value),
-    getProcessRaw(searchValue.value)
-  ])
+  // 先获取单据列表
+  const billsRes = await getBillsListRaw(searchValue.value)
+  
+  if (billsRes.data.length === 0) {
+    billsList.value = []
+    processList.value = []
+    return
+  }
 
-  const newProcessList = processRes.data.map(item => ({
+  // 根据每个单据的billType分别获取对应的工序
+  const billTypes = [...new Set(billsRes.data.map(item => item['694a3954687045435008a7c3'] || '正常排产'))]
+  const processPromises = billTypes.map(billType => getProcessRaw(searchValue.value, billType))
+  const processResults = await Promise.all(processPromises)
+  
+  // 合并所有工序结果
+  const allProcesses = processResults.flatMap(res => res.data.map(item => ({
     processName: item['656ffd1bba5ef3863bf3ec1e'],
     needCount: item['690dc19f8d797ee211e7fc60'],
     finishCount: item['690c794ccf407aa3d938ba28'],
@@ -587,17 +608,14 @@ const search = async () => {
     price: item['657b282cd13eaaec2c6606b5'],
     sonoutput: item['66974d062503723eec1af614'],
     mold: item['695222a27a59e0522d853edf']
-  }))
-  processList.value = newProcessList.map(item => ({ ...item }))
-
-  if (billsRes.data.length === 0) {
-    billsList.value = []
-    return
-  }
+  })))
+  
+  processList.value = allProcesses.map(item => ({ ...item }))
 
   const newBillsList = billsRes.data.map(item => {
     const orderGoods = item['691c47ee1c02c451c72a81c5']
     const orderCode = item['655e1cbbbd2094b316347f92']
+    const billType = item['694a3954687045435008a7c3'] || '正常排产'
     const processes = processList.value.filter(p => p.processOrder === orderCode && p.sonoutput !== "[]")
       .sort((a, b) => {
         // 按sequence字段从小到大排序
@@ -626,7 +644,8 @@ const search = async () => {
       processes: processes.map(p => ({ ...p })),
       orderCode,
       problemDescription: item['694ba108dc025d98887fd782'] || '', // 问题描述字段
-      billRowid: item['rowid']
+      billRowid: item['rowid'],
+      billType: billType // 单据类型
     }
   })
   
@@ -989,16 +1008,14 @@ const goWorkGuide = () => {
 }
 
 const goSelectBills = () => {
-  billType.value = '正常排产'
-  processTypeParam.value = '0'  // 正常排产参数为0
+  billTypeFilter.value = '正常排产'
   uni.navigateTo({
     url: `/pages/selectBills/selectBills?workshop=${workshop.value}&type=${encodeURIComponent('正常排产')}`
   })
 }
 
 const goSelectReworkBills = () => {
-  billType.value = '返工排产'
-  processTypeParam.value = '1'  // 返工排产参数为1
+  billTypeFilter.value = '返工排产'
   uni.navigateTo({
     url: `/pages/selectBills/selectBills?workshop=${workshop.value}&type=${encodeURIComponent('返工排产')}`
   })
@@ -1029,7 +1046,7 @@ const addProcess = async (item) => {
   }
   
   uni.navigateTo({
-    url: `/pages/addProcess/addProcess?orderCode=${encodeURIComponent(item.orderCode || '')}&productCode=${encodeURIComponent(item.productCode || '')}&workshop=${workshop.value}&selectedSequence=${selectedSequence}&billRowid=${encodeURIComponent(billRowid)}&processRowid=${encodeURIComponent(processRowid)}&billType=${encodeURIComponent(billType.value)}`
+    url: `/pages/addProcess/addProcess?orderCode=${encodeURIComponent(item.orderCode || '')}&productCode=${encodeURIComponent(item.productCode || '')}&workshop=${workshop.value}&selectedSequence=${selectedSequence}&billRowid=${encodeURIComponent(billRowid)}&processRowid=${encodeURIComponent(processRowid)}&billType=${encodeURIComponent(item.billType || '正常排产')}`
   })
 }
 
@@ -1259,11 +1276,14 @@ onUnload(() => {
       margin: px2vw(10px);
       padding: px2vw(15px);
       display: flex;
+      position: relative;
 
       .goodsInfo {
         width: 100%;
         display: flex;
         flex-direction: column;
+        position: relative;
+        z-index: 1;
 
         .goodsInfo-up {
           width: 100%;
@@ -1524,6 +1544,35 @@ onUnload(() => {
           margin: 0 px2vw(8px) 0 px2vw(10px);
           position: relative;
           top: px2vw(-10px);
+        }
+      }
+      
+      .goodsProcess {
+        position: absolute;
+        bottom: px2vw(10px);
+        right: px2vw(10px);
+        flex-shrink: 0;
+        z-index: 100;
+        pointer-events: none;
+        
+        .bill-type-badge {
+          color: white;
+          padding: px2vw(8px) px2vw(16px);
+          border-radius: px2vw(8px);
+          font-size: px2vw(22px);
+          font-weight: bold;
+          white-space: nowrap;
+          z-index: 100;
+          box-shadow: 0 px2vw(2px) px2vw(8px) rgba(0, 0, 0, 0.2);
+          
+          &.badge-normal {
+            background-color: #4CAF50; // 绿色 - 正常排产
+          }
+          
+          &.badge-rework {
+            background-color: #FFC107; // 黄色 - 返工排产
+            color: white; // 白色文字
+          }
         }
       }
     }
