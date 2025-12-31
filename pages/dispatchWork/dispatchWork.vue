@@ -92,7 +92,7 @@
               <view class="form-group">
                 <text class="label">派工数量：</text>
                 <input v-model.number="processDispatchData.quantity" type="number" placeholder="请输入数量"
-                  :max="remainingQuantity" min="0" class="input-field" />
+                  :max="maxQuantity" min="0" class="input-field" />
               </view>
               <view class="form-group">
                 <text class="label">派工工时：</text>
@@ -384,15 +384,15 @@ const allEmployeesOptions = ref([])
 const allEmployeesMap = ref({})
 
 // ==================== 计算属性 ====================
-const remainingQuantity = computed(() => {
-  return selectedProcessData.value?.process?.needCount - selectedProcessData.value?.process?.finishCount || 0
+// 最大派工数量：需派工数量
+const maxQuantity = computed(() => {
+  return selectedProcessData.value?.process?.needCount || 0
 })
 
-// 判断是否可以派工：已派工数量必须小于需派工数量
+// 判断是否可以派工：只要需派工数量大于0就可以派工
 const canDispatch = computed(() => {
-  const finishCount = selectedProcessData.value?.process?.finishCount || 0
   const needCount = selectedProcessData.value?.process?.needCount || 0
-  return finishCount < needCount
+  return needCount > 0
 })
 
 // 判断当前工序是否已终止
@@ -786,7 +786,7 @@ const onSalaryMethodChange = (e) => {
 const confirmProcessDispatch = async () => {
   // 检查是否可以派工
   if (!canDispatch.value) {
-    uni.showToast({ title: '该工序已完成，无法继续派工', icon: 'none' })
+    uni.showToast({ title: '该工序需派工数量为0，无法派工', icon: 'none' })
     return
   }
   
@@ -795,10 +795,10 @@ const confirmProcessDispatch = async () => {
     return
   }
   
-  // 检查派工数量是否超过剩余数量
-  const remaining = remainingQuantity.value
-  if (processDispatchData.value.quantity > remaining) {
-    uni.showToast({ title: `派工数量不能超过剩余数量 ${remaining}`, icon: 'none' })
+  // 检查派工数量是否超过需派工数量
+  const maxQty = maxQuantity.value
+  if (processDispatchData.value.quantity > maxQty) {
+    uni.showToast({ title: `派工数量不能超过需派工数量 ${maxQty}`, icon: 'none' })
     return
   }
   
@@ -1074,10 +1074,10 @@ const quit = () => {
 // ==================== Watch监听器 ====================
 // 监听派工数量变化，验证并计算派工工时
 watch(() => processDispatchData.value.quantity, (newVal) => {
-  const remaining = remainingQuantity.value
-  if (newVal > remaining) {
-    uni.showToast({ title: `数量不能超过剩余数量 ${remaining}`, icon: 'none' })
-    processDispatchData.value.quantity = remaining
+  const maxQty = maxQuantity.value
+  if (newVal > maxQty) {
+    uni.showToast({ title: `数量不能超过需派工数量 ${maxQty}`, icon: 'none' })
+    processDispatchData.value.quantity = maxQty
     return
   } else if (newVal < 0) {
     processDispatchData.value.quantity = 0
