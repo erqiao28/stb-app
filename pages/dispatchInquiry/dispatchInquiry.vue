@@ -72,8 +72,11 @@
 						<text class="processName">工序名称：{{ item.processName }}</text>
 						<text class="worker">加工人：{{ item.worker }}</text>
 						<text class="dispatchCount">派工数量：{{ item.dispatchCount }}</text>
-						<text class="finishCount">完成数量：{{ item.finishCount }}</text>
 						<text class="worktime">工时：{{ item.worktime }}</text>
+						<text class="finishCount">完成数量：{{ item.finishCount }}</text>
+						<text class="reworkCount">返工数量：{{ item.reworkCount }}</text>
+						<text class="wasteCount">废品数量：{{ item.wasteCount }}</text>
+						
 					</view>
 				</view>
 				<!-- <view class="dispatchInquiry-item-btn">
@@ -129,8 +132,10 @@ const dispatchInquiryList = ref([
 		productionOrder: '',
 		worker: '',
 		dispatchCount: '',
-		finishCount: '',
 		worktime: '',
+		finishCount: '',
+		reworkCount: '',
+		wasteCount: '',
 	}
 ])
 
@@ -153,6 +158,8 @@ const getDispatchInquiryList = async () => {
     dispatchCount: item['655d9cd8cc4f25a27fb3e858'],
     finishCount: item['693fe07b284b84255a6ebda5'],
     worktime: item['693a7d580f64427fac25d070'],
+	reworkCount: item['694e69638c7b5544ee6c3493'],
+	wasteCount: item['694e69638c7b5544ee6c3494'],
   }))
 }
 
@@ -408,7 +415,9 @@ const quit = () => {
 					.worker,
 					.dispatchCount,
 					.finishCount,
-					.worktime {
+					.worktime,
+					.reworkCount,
+					.wasteCount {
 						font-size: px2vw(25px);
 						display: flex;
 						justify-content: flex-start;
