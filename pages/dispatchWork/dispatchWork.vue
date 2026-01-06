@@ -174,8 +174,8 @@
           <button class="btn-confirm" @click="addEmployee">添加员工</button>
           <button class="btn-confirm" @click="confirmProcessDispatch" :disabled="!canDispatch">确认派工</button>
           <button class="btn-confirm" :disabled="isProcessOver" @click="overProcess">终止</button>
-          <button class="btn-confirm">转派</button>
-          <button class="btn-confirm">修改</button>
+          <!-- <button class="btn-confirm">转派</button>
+          <button class="btn-confirm">修改</button> -->
         </view>
       </view>
     </view>

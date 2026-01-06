@@ -4,6 +4,90 @@
 			@confirm="handleReportConfirm" />
 		<Radiobox v-model="isStop" :options="isStopOptions" title="终止否" v-model:visible="showIsStopModal"
 			@confirm="handleIsStopConfirm" />
+		
+		<!-- 转派模态框 -->
+		<view class="transfer-modal" v-if="showTransferModal" @click.self="closeTransferModal">
+			<view class="transfer-content" @click.stop>
+				<view class="modal-header">
+					<text class="modal-title">转派</text>
+					<view class="modal-close" @click="closeTransferModal">×</view>
+				</view>
+				
+				<scroll-view scroll-y class="modal-scroll-content">
+					<view class="modal-body">
+						<!-- 机台和模具 -->
+						<view class="row-group">
+							<view class="form-group">
+								<text class="label">机台：</text>
+								<text class="value-readonly">{{ transferData.machineNumber || '无' }}</text>
+							</view>
+							<view class="form-group">
+								<text class="label">模具：</text>
+								<text class="value-readonly">{{ transferData.mouldNumber || '无' }}</text>
+							</view>
+						</view>
+						
+						<!-- 员工和转派数量 -->
+						<view class="row-group">
+							<view class="form-group">
+								<text class="label">员工：</text>
+								<view class="value" @click="openSelectEmployeeModal">
+									{{ transferData.employee || '请选择员工' }}
+								</view>
+							</view>
+							<view class="form-group">
+								<text class="label">转派数量：</text>
+								<text class="value-readonly">{{ transferData.remainCount || '0' }}</text>
+							</view>
+						</view>
+						
+						<!-- 转派日期 -->
+						<view class="row-group">
+							<view class="form-group">
+								<text class="label">转派日期：</text>
+								<text class="value-readonly">{{ transferData.transferDate || '' }}</text>
+							</view>
+							<view class="form-group">
+								<text class="label">工序：</text>
+								<text class="value-readonly">{{ transferData.processName || '' }}</text>
+							</view>
+						</view>
+
+						<!-- 转派备注 -->
+						<view class="row-group">
+							<view class="form-group">
+								<text class="label">转派备注：</text>
+								<textarea 
+									v-model="transferData.remark" 
+									placeholder="请输入转派备注" 
+									class="remark-textarea"
+									maxlength="200"
+								/>
+							</view>
+							<view class="form-group">
+								<!-- 占位 -->
+							</view>
+						</view>
+					</view>
+				</scroll-view>
+				
+				<!-- 模态框底部按钮 -->
+				<view class="modal-footer">
+					<button class="btn-cancel" @click="closeTransferModal">取消</button>
+					<button class="btn-confirm" @click="confirmTransfer">确定转派</button>
+				</view>
+			</view>
+		</view>
+		
+		<!-- 选择转派员工模态框 -->
+		<AddWorkerRadiobox 
+			v-model="selectedTransferEmployees" 
+			:options="allEmployeesOptions" 
+			title="选择转派员工" 
+			:visible="showSelectEmployeeModal" 
+			@update:visible="handleSelectEmployeeModalClose" 
+			@confirm="handleSelectEmployeeConfirm" 
+		/>
 		<!-- 导航栏 -->
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="quit"></image>
@@ -60,6 +144,12 @@
 		<!-- 派工单据列表 -->
 		<view class="dispatchInquiry-list">
 			<view class="dispatchInquiry-item" v-for="item in dispatchInquiryList" :key="item.id">
+				<button 
+					class="btn-transfer" 
+					:class="{ 'btn-transfer-disabled': item.status === '已转派' }"
+					@click="handleTransfer(item)"
+					:disabled="item.status === '已转派'"
+				>转派</button>
 				<view class="dispatchInquiry-item-info">
 					<view class="dispatchInquiry-item-info-top">
 						<text class="productionOrder">生产订单：{{ item.productionOrder }}</text>
@@ -79,12 +169,9 @@
 						
 					</view>
 				</view>
-				<!-- <view class="dispatchInquiry-item-btn">
-					<button class="btn-item">终止</button>
-					<button class="btn-item">转派</button>
-					<button class="btn-item">修改</button>
-					<button class="btn-item">删除</button>
-				</view> -->
+				<view class="status-badge" v-if="item.status">
+					{{ item.status }}
+				</view>
 			</view>
 		</view>
 	</view>
@@ -96,6 +183,8 @@ import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import Radiobox from '../../component/radiobox/radiobox.vue'
+import AddWorkerRadiobox from '../../component/addWorkerRadiobox/addWorkerRadiobox.vue'
+import http from '../../utils/request'
 import { useStatusBar } from '../../composables/useStatusBar'
 const userStore = useUserStore()
 const { statusBarHeight } = useStatusBar()
@@ -160,7 +249,193 @@ const getDispatchInquiryList = async () => {
     worktime: item['693a7d580f64427fac25d070'],
 	reworkCount: item['694e69638c7b5544ee6c3493'],
 	wasteCount: item['694e69638c7b5544ee6c3494'],
+	rowid: item['rowid'],
+	machineNumber: item['695c9af59223cfe3a0c02d5f'],
+	mouldNumber: item['695c9b009223cfe3a0c02d66'],
+	remainCount: item['6901c87f7a33416aedfd6bc4'],
+	workshop: item['66f130864a66ee0d85e400a9'],
+	status: item['66c7f8866440b9d16c7bf908'],
   }))
+}
+
+// 转派相关数据
+const showTransferModal = ref(false)
+const showSelectEmployeeModal = ref(false)
+const selectedTransferEmployees = ref([])
+const allEmployeesOptions = ref([])
+const allEmployeesMap = ref({})
+const currentTransferItem = ref(null)
+
+// 转派表单数据
+const transferData = ref({
+	machineNumber: '',
+	mouldNumber: '',
+	employee: '',
+	employeeId: '',
+	remainCount: '',
+	transferDate: '',
+	processName: '',
+	remark: '',
+	rowid: '',
+	loginCode: ''
+})
+
+// 获取当前日期（格式：YYYY-MM-DD）
+const getCurrentDate = () => {
+	const now = new Date()
+	const year = now.getFullYear()
+	const month = String(now.getMonth() + 1).padStart(2, '0')
+	const day = String(now.getDate()).padStart(2, '0')
+	return `${year}-${month}-${day}`
+}
+
+// 获取员工列表
+const loadEmployees = async () => {
+	if (!currentTransferItem.value || !currentTransferItem.value.workshop) {
+		uni.showToast({
+			title: '缺少车间信息',
+			icon: 'none'
+		})
+		return
+	}
+	
+	try {
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: 'yggs',
+			filters: [{
+				"controlId": "6937d496ff2b019b3cb34c95",
+				"dataType": 30,
+				"spliceType": 1,
+				"filterType": 2,
+				"values": [currentTransferItem.value.workshop]
+			}]
+		})
+		
+		if (res.data && res.data.length > 0) {
+			const mappedEmployees = res.data.map(item => {
+				const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
+				const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
+				
+				return {
+					id: item['6943bd902161a0fc58bad5ab'] || '',
+					name: item['6938db8bda0981f67b352af3'] || '',
+					totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
+					unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0
+				}
+			}).filter(emp => emp.id)
+			
+			allEmployeesOptions.value = mappedEmployees.map(emp => ({
+				label: emp.name,
+				value: emp.id,
+				totalHours: emp.totalHours || 0,
+				unrecordedHours: emp.unrecordedHours || 0
+			}))
+			
+			allEmployeesMap.value = {}
+			mappedEmployees.forEach(emp => {
+				allEmployeesMap.value[emp.id] = emp
+			})
+		} else {
+			allEmployeesOptions.value = []
+			allEmployeesMap.value = {}
+		}
+	} catch (error) {
+		console.error('加载员工失败:', error)
+		allEmployeesOptions.value = []
+		allEmployeesMap.value = {}
+	}
+}
+
+// 打开转派模态框
+const handleTransfer = (item) => {
+	currentTransferItem.value = item
+	transferData.value = {
+		machineNumber: item.machineNumber || '',
+		mouldNumber: item.mouldNumber || '',
+		employee: '',
+		employeeId: '',
+		remainCount: item.remainCount || '0',
+		transferDate: getCurrentDate(),
+		processName: item.processName || '',
+		remark: '',
+		rowid: item.rowid || '',
+		loginCode: userStore.loginCode || ''
+	}
+	selectedTransferEmployees.value = []
+	showTransferModal.value = true
+}
+
+// 关闭转派模态框
+const closeTransferModal = () => {
+	showTransferModal.value = false
+	currentTransferItem.value = null
+	transferData.value = {
+		machineNumber: '',
+		mouldNumber: '',
+		employee: '',
+		employeeId: '',
+		remainCount: '',
+		transferDate: '',
+		processName: '',
+		remark: '',
+		rowid: '',
+		loginCode: ''
+	}
+	selectedTransferEmployees.value = []
+}
+
+// 打开选择员工模态框
+const openSelectEmployeeModal = async () => {
+	if (allEmployeesOptions.value.length === 0) {
+		await loadEmployees()
+	}
+	selectedTransferEmployees.value = []
+	showSelectEmployeeModal.value = true
+}
+
+// 关闭选择员工模态框
+const handleSelectEmployeeModalClose = (value) => {
+	showSelectEmployeeModal.value = value
+}
+
+// 确认选择员工
+const handleSelectEmployeeConfirm = (selectedIds) => {
+	if (selectedIds && selectedIds.length > 0) {
+		// 只取第一个选中的员工
+		const selectedId = selectedIds[0]
+		const emp = allEmployeesMap.value[selectedId]
+		
+		if (emp) {
+			transferData.value.employee = emp.name
+			transferData.value.employeeId = selectedId
+		} else {
+			transferData.value.employee = ''
+			transferData.value.employeeId = ''
+		}
+	} else {
+		transferData.value.employee = ''
+		transferData.value.employeeId = ''
+	}
+	showSelectEmployeeModal.value = false
+}
+
+// 确定转派
+const confirmTransfer = async () => {
+	if (!transferData.value.employee || !transferData.value.employeeId) {
+		uni.showToast({
+			title: '请选择转派员工',
+			icon: 'none'
+		})
+		return
+	}
+	
+	const res = await http.post('/api/workflow/hooks/Njk1Y2E1ZDIwODY3ZmI3ZDc1Njc2ZDUx', transferData.value)
+	if (res.status === 1) {
+		showToast('转派失败')
+		return
+	}
+	showToast('转派成功')
+	closeTransferModal()
 }
 
 // 退出
@@ -171,9 +446,10 @@ const quit = () => {
 
 <style scoped lang="scss">
 .dispatchInquiry-container {
-	height: 100vh;
+	min-height: 100vh;
 	width: 100vw;
 	background-color: #f0f0f0;
+	box-sizing: border-box;
 
 	/* 导航栏 */
 	.header {
@@ -378,6 +654,42 @@ const quit = () => {
 			padding: px2vw(15px);
 			display: flex;
 			flex-direction: column;
+			position: relative;
+
+			.btn-transfer {
+				position: absolute;
+				top: px2vw(15px);
+				right: px2vw(15px);
+				width: px2vw(120px);
+				height: px2vw(50px);
+				font-size: px2vw(25px);
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				background-color: #fff;
+				color: #5884f1;
+				border: px2vw(2px) solid #5884f1;
+				border-radius: px2vw(10px);
+				cursor: pointer;
+				z-index: 10;
+				
+				&:active {
+					opacity: 0.8;
+				}
+				
+				&.btn-transfer-disabled,
+				&:disabled {
+					background-color: #f5f5f5;
+					color: #999;
+					border-color: #ddd;
+					cursor: not-allowed;
+					opacity: 0.6;
+					
+					&:active {
+						opacity: 0.6;
+					}
+				}
+			}
 
 			.dispatchInquiry-item-info {
 				width: 100%;
@@ -392,6 +704,7 @@ const quit = () => {
 					font-size: px2vw(25px);
 					font-weight: bold;
 					align-items: center;
+					padding-right: px2vw(140px);
 
 					.orderCode {
 						font-size: px2vw(25px);
@@ -426,23 +739,200 @@ const quit = () => {
 					}
 				}
 			}
-
-			.dispatchInquiry-item-btn {
-				width: 100%;
+			
+			.status-badge {
+				position: absolute;
+				bottom: px2vw(10px);
+				right: px2vw(10px);
+				color: white;
+				padding: px2vw(8px) px2vw(16px);
+				border-radius: px2vw(8px);
+				font-size: px2vw(22px);
+				font-weight: bold;
+				white-space: nowrap;
+				z-index: 100;
+				box-shadow: 0 px2vw(2px) px2vw(8px) rgba(0, 0, 0, 0.2);
+				background-color: #5884f1;
+				pointer-events: none;
+			}
+		}
+	}
+	
+	/* 转派模态框样式 */
+	.transfer-modal {
+		position: fixed;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		background-color: rgba(0, 0, 0, 0.5);
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		z-index: 100;
+		
+		.transfer-content {
+			background: white;
+			border-radius: px2vw(18px);
+			width: 90%;
+			max-width: px2vw(1400px);
+			max-height: 80vh;
+			display: flex;
+			flex-direction: column;
+			overflow: hidden;
+			
+			.modal-header {
 				display: flex;
 				justify-content: space-between;
 				align-items: center;
-				margin-top: px2vw(25px);
-
-				.btn-item {
-					width: px2vw(400px);
-					height: px2vw(60px);
-					font-size: px2vw(25px);
+				padding: px2vw(30px) px2vw(40px);
+				border-bottom: px2vw(2px) solid #eee;
+				flex-shrink: 0;
+				
+				.modal-title {
+					font-size: px2vw(35px);
+					font-weight: bold;
+					color: #333;
+				}
+				
+				.modal-close {
+					width: px2vw(50px);
+					height: px2vw(50px);
 					display: flex;
 					align-items: center;
 					justify-content: center;
-					background-color: #fff;
-					border: px2vw(3px) solid #ccc;
+					font-size: px2vw(50px);
+					color: #999;
+					cursor: pointer;
+					
+					&:active {
+						opacity: 0.7;
+					}
+				}
+			}
+			
+			.modal-scroll-content {
+				flex: 1;
+				overflow-y: auto;
+				-webkit-overflow-scrolling: touch;
+			}
+			
+			.modal-body {
+				padding: px2vw(20px) px2vw(20px) px2vw(10px) px2vw(20px);
+				display: flex;
+				flex-direction: column;
+				gap: px2vw(10px);
+			}
+			
+			.row-group {
+				display: flex;
+				gap: px2vw(10px);
+				width: 100%;
+				
+				&.single .form-group.full {
+					width: 100%;
+				}
+			}
+			
+			.form-group {
+				display: flex;
+				flex-direction: row;
+				justify-content: space-between;
+				gap: px2vw(10px);
+				flex: 1;
+				
+				&.full {
+					width: 100%;
+				}
+				
+				.label {
+					font-size: px2vw(30px);
+					color: #666;
+					font-weight: bold;
+					width: px2vw(120px);
+					white-space: nowrap;
+					flex-shrink: 0;
+					text-align: left;
+				}
+				
+				.value {
+					width: px2vw(400px);
+					font-size: px2vw(30px);
+					color: #333;
+					padding: px2vw(8px) px2vw(12px);
+					background: #f9f9f9;
+					border-radius: px2vw(5px);
+					border: px2vw(1px) solid #eee;
+					min-height: px2vw(50px);
+					display: flex;
+					align-items: center;
+					box-sizing: border-box;
+					cursor: pointer;
+				}
+				
+				.value-readonly {
+					width: px2vw(400px);
+					font-size: px2vw(30px);
+					color: #333;
+					padding: px2vw(8px) px2vw(12px);
+					background: #f9f9f9;
+					border-radius: px2vw(5px);
+					border: px2vw(1px) solid #eee;
+					min-height: px2vw(50px);
+					display: flex;
+					align-items: center;
+					box-sizing: border-box;
+					cursor: default;
+				}
+				
+				.remark-textarea {
+					flex: none;
+					width: px2vw(400px);
+					min-height: px2vw(120px);
+					padding: px2vw(8px) px2vw(12px);
+					border: px2vw(1px) solid #eee;
+					border-radius: px2vw(5px);
+					background: #f9f9f9;
+					font-size: px2vw(30px);
+					color: #333;
+					box-sizing: border-box;
+					resize: none;
+				}
+			}
+			
+			.modal-footer {
+				display: flex;
+				justify-content: flex-end;
+				gap: px2vw(10px);
+				padding: px2vw(30px) px2vw(40px);
+				border-top: px2vw(2px) solid #eee;
+				flex-shrink: 0;
+				
+				.btn-cancel,
+				.btn-confirm {
+					width: px2vw(200px);
+					height: px2vw(70px);
+					border-radius: px2vw(18px);
+					font-size: px2vw(30px);
+					border: none;
+					cursor: pointer;
+				}
+				
+				.btn-cancel {
+					background: #f5f5f5;
+					color: #666;
+				}
+				
+				.btn-confirm {
+					background: #5884f1;
+					color: white;
+					
+					&:disabled {
+						background: #ccc;
+						color: #999;
+						cursor: not-allowed;
+						opacity: 0.6;
+					}
 				}
 			}
 		}
