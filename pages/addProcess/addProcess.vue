@@ -64,8 +64,10 @@
 					<input 
 						type="number" 
 						class="process-input" 
+						:class="{ 'input-disabled': !canEditPrice }"
 						placeholder="请输入本工序工价" 
 						v-model="processPrice"
+						:disabled="!canEditPrice"
 						step="0.01" />
 				</view>
 				<view class="input-group">
@@ -83,7 +85,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import {
 	onLoad,
 	onPullDownRefresh,
@@ -127,6 +129,11 @@ const plannedProductionDate = ref('')
 
 // 是否新增状态（true=手动输入新增，false=从表格选择）
 const isNewProcess = ref(false)
+
+// 是否可以编辑工价（只有返工排产时可以编辑）
+const canEditPrice = computed(() => {
+	return orderData.value.billType === '返工排产'
+})
 
 // 搜索输入值
 const searchValue = ref('')
@@ -449,6 +456,14 @@ const quit = () => {
 	&:focus {
 		border-color: #5884f1;
 		outline: none;
+	}
+	
+	&.input-disabled,
+	&:disabled {
+		background-color: #f5f5f5;
+		color: #999;
+		cursor: not-allowed;
+		opacity: 0.6;
 	}
 }
 
