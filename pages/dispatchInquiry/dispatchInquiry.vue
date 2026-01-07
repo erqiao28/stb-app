@@ -146,9 +146,9 @@
 			<view class="dispatchInquiry-item" v-for="item in dispatchInquiryList" :key="item.id">
 				<button 
 					class="btn-transfer" 
-					:class="{ 'btn-transfer-disabled': item.status === '已转派' }"
+					:class="{ 'btn-transfer-disabled': !canTransfer(item) }"
 					@click="handleTransfer(item)"
-					:disabled="item.status === '已转派'"
+					:disabled="!canTransfer(item)"
 				>转派</button>
 				<view class="dispatchInquiry-item-info">
 					<view class="dispatchInquiry-item-info-top">
@@ -255,6 +255,8 @@ const getDispatchInquiryList = async () => {
 	remainCount: item['6901c87f7a33416aedfd6bc4'],
 	workshop: item['66f130864a66ee0d85e400a9'],
 	status: item['66c7f8866440b9d16c7bf908'],
+	isRedeploy: item['695b7efca820885c2979af50'],
+	isredeploy: item['695b7efca820885c2979af4f'],
   }))
 }
 
@@ -346,8 +348,22 @@ const loadEmployees = async () => {
 	}
 }
 
+// 判断是否可以转派
+const canTransfer = (item) => {
+	// status 为 "部分报工" 或 "待报工"，并且 isRedeploy === "[]"，并且 isredeploy 为空
+	const statusValid = item.status === '部分报工' || item.status === '待报工'
+	const isRedeployValid = item.isRedeploy === '[]'
+	const isredeployValid = !item.isredeploy || item.isredeploy === '' || item.isredeploy === '[]'
+	return statusValid && isRedeployValid && isredeployValid
+}
+
 // 打开转派模态框
 const handleTransfer = (item) => {
+	// 再次检查是否可以转派
+	if (!canTransfer(item)) {
+		return
+	}
+	
 	currentTransferItem.value = item
 	transferData.value = {
 		machineNumber: item.machineNumber || '',
