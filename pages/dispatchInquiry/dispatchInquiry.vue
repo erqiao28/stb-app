@@ -429,13 +429,28 @@ const confirmTransfer = async () => {
 		return
 	}
 	
-	const res = await http.post('/api/workflow/hooks/Njk1Y2E1ZDIwODY3ZmI3ZDc1Njc2ZDUx', transferData.value)
-	if (res.status === 1) {
-		showToast('转派失败')
-		return
+	try {
+		const res = await http.post('https://www.dachen.vip/api/workflow/hooks/Njk1Y2E1ZDIwODY3ZmI3ZDc1Njc2ZDUx', transferData.value)
+		
+		// 判断转派是否成功
+		const isSuccess = (typeof res === 'string' && res.includes('转派成功')) || 
+		                  (res && res.status === 1) || 
+		                  (res && res.message === '转派成功')
+		
+		if (isSuccess) {
+			uni.showToast({ title: '转派成功', icon: 'success' })
+			closeTransferModal()
+			// 延迟刷新，确保后端数据已更新
+			setTimeout(() => {
+				getDispatchInquiryList()
+			}, 500)
+		} else {
+			const errorMsg = res?.message || res?.data || res || '转派失败'
+			uni.showToast({ title: errorMsg, icon: 'none' })
+		}
+	} catch (error) {
+		uni.showToast({ title: '转派失败：' + (error.message || '未知错误'), icon: 'none' })
 	}
-	showToast('转派成功')
-	closeTransferModal()
 }
 
 // 退出
