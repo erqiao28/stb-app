@@ -351,7 +351,7 @@ const loadEmployees = async () => {
 // 判断是否可以转派
 const canTransfer = (item) => {
 	// status 为 "部分报工" 或 "待报工"，并且 isRedeploy === "[]"，并且 isredeploy 为空
-	const statusValid = item.status === '部分报工' || item.status === '待报工'
+	const statusValid = item.status === '部分报工'
 	const isRedeployValid = item.isRedeploy === '[]'
 	const isredeployValid = !item.isredeploy || item.isredeploy === '' || item.isredeploy === '[]'
 	return statusValid && isRedeployValid && isredeployValid

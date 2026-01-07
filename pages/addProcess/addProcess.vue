@@ -60,12 +60,12 @@
 						step="0.01" />
 				</view>
 				<view class="input-group">
-					<view class="input-label">本工序工价</view>
+					<view class="input-label">返工工价</view>
 					<input 
 						type="number" 
 						class="process-input" 
 						:class="{ 'input-disabled': !canEditPrice }"
-						placeholder="请输入本工序工价" 
+						placeholder="请输入返工工价" 
 						v-model="processPrice"
 						:disabled="!canEditPrice"
 						step="0.01" />
