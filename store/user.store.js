@@ -33,6 +33,7 @@ export const useUserStore = defineStore(
 		// 登录名称
 		const loginName = ref('')
 		const loginCode = ref('')
+		const loginLimits = ref('')
 		
 		// 登出
 		const logout = () => {
@@ -51,7 +52,8 @@ export const useUserStore = defineStore(
 			account,
 			appVersion,
 			loginName,
-			loginCode
+			loginCode,
+			loginLimits
 		}
 	}, {
 		persist: {

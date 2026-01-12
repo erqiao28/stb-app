@@ -210,7 +210,7 @@
     <!-- 搜索区域 -->
     <view class="search-box">
       <view class="assemble">
-        <view class="assemble-box" @click="showWorkshopModal = true">
+        <view class="assemble-box" :class="{ 'assemble-box-disabled': isWorkshopLocked }" @click="!isWorkshopLocked && (showWorkshopModal = true)">
           {{ workshop }}
         </view>
       </view>
@@ -335,6 +335,7 @@ const { statusBarHeight } = useStatusBar()
 const workshop = ref('拉伸车间')
 const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
 const showWorkshopModal = ref(false)
+const isWorkshopLocked = ref(false) // 车间是否被锁定（不能修改）
 
 // ---------- 机台相关 ----------
 const machine = ref(null)
@@ -991,7 +992,7 @@ const onEmployeeCheckboxChange = (e) => {
 // ---------- 页面跳转方法 ----------
 const goDispatchInquiry = () => {
   uni.navigateTo({
-    url: '/pages/dispatchInquiry/dispatchInquiry'
+    url: `/pages/dispatchInquiry/dispatchInquiry?workshop=${encodeURIComponent(workshop.value)}`
   })
 }
 
@@ -1103,6 +1104,12 @@ const calculateWorkTime = () => {
 
 // ==================== 生命周期钩子 ====================
 onLoad(() => {
+  // 检查仓库中的权限字段（车间）
+  if (userStore.loginLimits && userStore.loginLimits.trim()) {
+    workshop.value = userStore.loginLimits
+    isWorkshopLocked.value = true // 锁定车间，不允许修改
+  }
+  
   uni.$on('selectOrder', (order) => {
     searchValue.value = order
   })
@@ -1245,7 +1252,37 @@ onUnload(() => {
       }
     }
 
-    .assemble,
+    .assemble {
+      width: px2vw(280px);
+      height: px2vw(80px);
+      margin: px2vw(10px);
+      padding: px2vw(16px) px2vw(25px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      border-radius: px2vw(18px);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      background-color: #2755f1;
+      font-size: px2vw(25px);
+      
+      .assemble-box {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+        
+        &.assemble-box-disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          pointer-events: none;
+        }
+      }
+    }
+    
     .selectDocument {
       width: px2vw(280px);
       height: px2vw(80px);

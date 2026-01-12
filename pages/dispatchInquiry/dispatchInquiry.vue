@@ -188,9 +188,17 @@ import http from '../../utils/request'
 import { useStatusBar } from '../../composables/useStatusBar'
 const userStore = useUserStore()
 const { statusBarHeight } = useStatusBar()
-onLoad(() => {
+onLoad((options) => {
+	// 从URL参数获取workshop值，如果存在则使用，否则使用默认值
+	if (options.workshop) {
+		workshop.value = decodeURIComponent(options.workshop)
+	}
 	getDispatchInquiryList()
 })
+
+// 车间相关
+const workshop = ref('拉伸车间')
+const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
 
 // 需检验单选框
 const report = ref('全部')
@@ -232,9 +240,14 @@ const dispatchInquiryList = ref([
 const getDispatchInquiryList = async () => {
 	
   const res = await callWorkflowListAPIPaged({
-    worksheetId: 'baogongdan',
-    filters: [
-    ]
+    worksheetId: 'paigongrenyuan',
+    filters: [{
+    "controlId": "690c30aacf407aa3d9389791",
+    "dataType": 30,
+    "spliceType": 1,
+    "filterType": 2,
+    "values": [workshop.value]
+  }]
   })
   dispatchInquiryList.value = res.data.map(item => ({
     goodsName: item['6944facfdc7b13304885b3ad'],
@@ -293,7 +306,7 @@ const getCurrentDate = () => {
 
 // 获取员工列表
 const loadEmployees = async () => {
-	if (!currentTransferItem.value || !currentTransferItem.value.workshop) {
+	if (!workshop.value) {
 		uni.showToast({
 			title: '缺少车间信息',
 			icon: 'none'
@@ -309,7 +322,7 @@ const loadEmployees = async () => {
 				"dataType": 30,
 				"spliceType": 1,
 				"filterType": 2,
-				"values": [currentTransferItem.value.workshop]
+				"values": [workshop.value]
 			}]
 		})
 		
