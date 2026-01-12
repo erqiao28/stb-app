@@ -65,6 +65,15 @@ const userStore = useUserStore()
 const { statusBarHeight } = useStatusBar()
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 
+// 获取当前日期（格式：YYYY-MM-DD）
+const getCurrentDate = () => {
+	const now = new Date()
+	const year = now.getFullYear()
+	const month = String(now.getMonth() + 1).padStart(2, '0')
+	const day = String(now.getDate()).padStart(2, '0')
+	return `${year}-${month}-${day}`
+}
+
 // 表格数据
 const tableData = ref([])
 const currentPage = ref(1)
@@ -95,6 +104,10 @@ const getWorkloadList = async (pageNum, isRefresh = false) => {
 	if (loading.value) return;
 	loading.value = true;
 	
+	// 每次请求时获取当前日期
+	const currentDate = getCurrentDate()
+	console.log('员工工作量查询页面 - 获取员工列表 - 当前日期:', currentDate)
+	
 	const res = await callWorkflowListAPIPaged({
 		worksheetId: 'yggs',
 		filters: []
@@ -106,7 +119,9 @@ const getWorkloadList = async (pageNum, isRefresh = false) => {
 		recordedWorktime: item['693bcaa5f15635c61ac3507b'],
 		unrecordedWorktime: item['693bc9b7f15635c61ac35050'],
 		remainWorktime: item['693bcaa5f15635c61ac3507c'],
+		dispatchWorkDate: item['69524e7b7a59e0522d855df6'] || ''
 	}))
+	.filter(item => item.dispatchWorkDate === currentDate)
 	
 	if (isRefresh) {
 		tableData.value = mappedData

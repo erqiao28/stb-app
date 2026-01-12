@@ -242,12 +242,20 @@ const getDispatchInquiryList = async () => {
   const res = await callWorkflowListAPIPaged({
     worksheetId: 'paigongrenyuan',
     filters: [{
-    "controlId": "690c30aacf407aa3d9389791",
+    "controlId": "696075d19223cfe3a0c169dc",
     "dataType": 30,
     "spliceType": 1,
     "filterType": 2,
     "values": [workshop.value]
-  }]
+  },{
+    "controlId": "69524e7b7a59e0522d855df6",
+    "dataType": 30,
+    "spliceType": 1,
+    "filterType": 2,
+    "values": [dateTime.value]
+  }],
+  pageSize: 1000,
+  pageNum: 1
   })
   dispatchInquiryList.value = res.data.map(item => ({
     goodsName: item['6944facfdc7b13304885b3ad'],
@@ -304,6 +312,15 @@ const getCurrentDate = () => {
 	return `${year}-${month}-${day}`
 }
 
+// 获取当前日期（格式：YYYY-MM-DD）
+const getCurrentDate = () => {
+	const now = new Date()
+	const year = now.getFullYear()
+	const month = String(now.getMonth() + 1).padStart(2, '0')
+	const day = String(now.getDate()).padStart(2, '0')
+	return `${year}-${month}-${day}`
+}
+
 // 获取员工列表
 const loadEmployees = async () => {
 	if (!workshop.value) {
@@ -315,15 +332,19 @@ const loadEmployees = async () => {
 	}
 	
 	try {
+		const currentDate = getCurrentDate()
+		console.log('派工查询页面 - 获取员工列表 - 当前日期:', currentDate)
 		const res = await callWorkflowListAPIPaged({
 			worksheetId: 'yggs',
 			filters: [{
-				"controlId": "6937d496ff2b019b3cb34c95",
+				"controlId": "696075d19223cfe3a0c169dc",
 				"dataType": 30,
 				"spliceType": 1,
 				"filterType": 2,
 				"values": [workshop.value]
-			}]
+			}],
+			pageSize: 1000,
+			pageNum: 1
 		})
 		
 		if (res.data && res.data.length > 0) {
@@ -335,9 +356,12 @@ const loadEmployees = async () => {
 					id: item['6943bd902161a0fc58bad5ab'] || '',
 					name: item['6938db8bda0981f67b352af3'] || '',
 					totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
-					unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0
+					unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
+					dispatchWorkDate: item['69524e7b7a59e0522d855df6'] || ''
 				}
-			}).filter(emp => emp.id)
+			})
+			.filter(emp => emp.id)
+			.filter(emp => emp.dispatchWorkDate === currentDate)
 			
 			allEmployeesOptions.value = mappedEmployees.map(emp => ({
 				label: emp.name,

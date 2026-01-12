@@ -337,6 +337,15 @@ const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '�
 const showWorkshopModal = ref(false)
 const isWorkshopLocked = ref(false) // 车间是否被锁定（不能修改）
 
+// 获取当前日期（格式：YYYY-MM-DD）
+const getCurrentDate = () => {
+	const now = new Date()
+	const year = now.getFullYear()
+	const month = String(now.getMonth() + 1).padStart(2, '0')
+	const day = String(now.getDate()).padStart(2, '0')
+	return `${year}-${month}-${day}`
+}
+
 // ---------- 机台相关 ----------
 const machine = ref(null)
 const machineOptions = ref([])
@@ -868,18 +877,30 @@ const confirmProcessDispatch = async () => {
 // ---------- 员工相关方法 ----------
 const loadEmployees = async () => {
   try {
+    // 每次请求时获取当前日期
+    const currentDate = getCurrentDate()
+    console.log('派工页面 - 获取员工列表 - 当前日期:', currentDate)
+    
     const res = await callWorkflowListAPIPaged({
       worksheetId: 'yggs',
       filters: [{
-        "controlId": "6937d496ff2b019b3cb34c95",
+        "controlId": "696075d19223cfe3a0c169dc",
         "dataType": 30,
         "spliceType": 1,
         "filterType": 2,
         "values": [workshop.value]
-      }]
+      }],
+      pageSize: 1000,
+      pageNum: 1
     })
     
+    console.log('获取员工列表 - 原始响应数据:', res)
+    console.log('获取员工列表 - 数据条数:', res.data?.length || 0)
+    console.log('获取员工列表 - 车间筛选值:', workshop.value)
+    
     if (res.data && res.data.length > 0) {
+      console.log('获取员工列表 - 原始数据示例:', res.data[0])
+      
       const mappedEmployees = res.data.map(item => {
         const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
         const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
@@ -888,9 +909,15 @@ const loadEmployees = async () => {
           id: item['6943bd902161a0fc58bad5ab'] || '',
           name: item['6938db8bda0981f67b352af3'] || '',
           totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
-          unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0
+          unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
+          dispatchWorkDate: item['69524e7b7a59e0522d855df6'] || ''
         }
-      }).filter(emp => emp.id)
+      })
+      .filter(emp => emp.id)
+      .filter(emp => emp.dispatchWorkDate === currentDate)
+      
+      console.log('获取员工列表 - 映射后的员工数据:', mappedEmployees)
+      console.log('获取员工列表 - 员工数量:', mappedEmployees.length)
       
       allEmployeesOptions.value = mappedEmployees.map(emp => ({
         label: emp.name,
@@ -899,11 +926,16 @@ const loadEmployees = async () => {
         unrecordedHours: emp.unrecordedHours || 0
       }))
       
+      console.log('获取员工列表 - allEmployeesOptions:', allEmployeesOptions.value)
+      
       allEmployeesMap.value = {}
       mappedEmployees.forEach(emp => {
         allEmployeesMap.value[emp.id] = emp
       })
+      
+      console.log('获取员工列表 - allEmployeesMap:', allEmployeesMap.value)
     } else {
+      console.log('获取员工列表 - 没有数据')
       allEmployeesOptions.value = []
       allEmployeesMap.value = {}
     }
