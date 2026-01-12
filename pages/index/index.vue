@@ -315,6 +315,12 @@ const login = async () => {
 		return
 	}
 	showToast('登录成功')
+	
+	// 打印登录响应中的limits字段
+	console.log('登录响应 res:', res)
+	console.log('登录响应中的 limits:', res.limits)
+	console.log('仓库中的 loginLimits (登录前):', userStore.loginLimits)
+	
 	// 判断用户列表是否已经存在
 	const index = userStore.userlist.findIndex(item => item.rowid === res.rowid)
 	if (index === -1) {
@@ -328,6 +334,17 @@ const login = async () => {
 	// 将登录名称覆盖
 	userStore.loginName = res.username
 	userStore.loginCode = res.code
+	
+	// 如果登录响应中有limits字段，保存到仓库的loginLimits
+	if (res.limits !== undefined && res.limits !== null && res.limits !== '') {
+		userStore.loginLimits = res.limits
+		console.log('已保存 limits 到仓库 loginLimits:', userStore.loginLimits)
+	} else {
+		console.log('登录响应中没有 limits 字段或值为空')
+	}
+	
+	console.log('仓库中的 loginLimits (登录后):', userStore.loginLimits)
+	
 	// 清空输入框
 	if (userStore.rememberPassword === false) {
 		loginform.value.username = ''

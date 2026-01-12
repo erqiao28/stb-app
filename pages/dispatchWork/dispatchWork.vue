@@ -1105,9 +1105,18 @@ const calculateWorkTime = () => {
 // ==================== 生命周期钩子 ====================
 onLoad(() => {
   // 检查仓库中的权限字段（车间）
+  console.log('loginLimits值:', userStore.loginLimits)
+  console.log('loginLimits类型:', typeof userStore.loginLimits)
+  console.log('loginLimits是否为空:', !userStore.loginLimits)
+  console.log('loginLimits trim后:', userStore.loginLimits?.trim())
+  
   if (userStore.loginLimits && userStore.loginLimits.trim()) {
+    console.log('设置车间为:', userStore.loginLimits)
     workshop.value = userStore.loginLimits
     isWorkshopLocked.value = true // 锁定车间，不允许修改
+    console.log('车间已锁定，isWorkshopLocked:', isWorkshopLocked.value)
+  } else {
+    console.log('loginLimits为空或无效，车间未锁定')
   }
   
   uni.$on('selectOrder', (order) => {
@@ -1124,6 +1133,18 @@ onLoad(() => {
 })
 
 onShow(() => {
+  // 每次显示页面时也检查一次权限字段（车间）
+  if (userStore.loginLimits && userStore.loginLimits.trim()) {
+    if (workshop.value !== userStore.loginLimits) {
+      console.log('onShow: 设置车间为:', userStore.loginLimits)
+      workshop.value = userStore.loginLimits
+    }
+    if (!isWorkshopLocked.value) {
+      console.log('onShow: 锁定车间')
+      isWorkshopLocked.value = true
+    }
+  }
+  
   if (searchValue.value && searchValue.value.trim()) {
     setTimeout(() => {
       loadAllData()
