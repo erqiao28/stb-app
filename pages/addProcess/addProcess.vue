@@ -41,7 +41,7 @@
 
 			<!-- 右侧：输入框和按钮区域 -->
 			<view class="input-section">
-				<view class="input-group">
+				<!-- <view class="input-group">
 					<view class="input-label">新增工序</view>
 					<input 
 						type="text" 
@@ -49,7 +49,7 @@
 						placeholder="请输入工序名称" 
 						v-model="manualProcessName"
 						@input="handleManualInput" />
-				</view>
+				</view> -->
 				<view class="input-group">
 					<view class="input-label">生产顺序</view>
 					<input 
