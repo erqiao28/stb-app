@@ -242,17 +242,11 @@ const getDispatchInquiryList = async () => {
   const res = await callWorkflowListAPIPaged({
     worksheetId: 'paigongrenyuan',
     filters: [{
-    "controlId": "696075d19223cfe3a0c169dc",
+    "controlId": "690c30aacf407aa3d9389791",
     "dataType": 30,
     "spliceType": 1,
     "filterType": 2,
     "values": [workshop.value]
-  },{
-    "controlId": "69524e7b7a59e0522d855df6",
-    "dataType": 30,
-    "spliceType": 1,
-    "filterType": 2,
-    "values": [dateTime.value]
   }],
   pageSize: 1000,
   pageNum: 1

@@ -1,0 +1,28 @@
+diff a/pages/addProcess/addProcess.vue b/pages/addProcess/addProcess.vue	(rejected hunks)
+@@ -78,6 +78,26 @@
+ 						</view>
+ 					</picker>
+ 				</view>
++				<view class="input-group">
++					<view class="input-label">派工类型</view>
++					<view class="picker-wrapper">
++						<view class="process-input selector-picker" :class="{ 'input-disabled': !canEditDispatchType }" @click="canEditDispatchType && toggleDispatchTypeDropdown()">
++							{{ dispatchTypeOptions[dispatchTypeIndex].label }}
++							<text class="arrow-down" v-if="canEditDispatchType">▼</text>
++						</view>
++						<view class="dropdown-menu" v-if="showDispatchTypeDropdown && canEditDispatchType" @click.stop>
++							<view 
++								v-for="(type, index) in dispatchTypeOptions" 
++								:key="type.value"
++								class="dropdown-item"
++								:class="{ 'dropdown-item-selected': index === dispatchTypeIndex }"
++								@click="selectDispatchType(index)">
++								{{ type.label }}
++							</view>
++						</view>
++					</view>
++					<view class="dropdown-overlay" v-if="showDispatchTypeDropdown && canEditDispatchType" @click="closeDispatchTypeDropdown"></view>
++				</view>
+ 				<button class="add-button" @click="addProcess">添加工序</button>
+ 			</view>
+ 		</view> 
