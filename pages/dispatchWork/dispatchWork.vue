@@ -174,6 +174,7 @@
           <button class="btn-confirm" @click="addEmployee">添加员工</button>
           <button class="btn-confirm" @click="confirmProcessDispatch" :disabled="!canDispatch">确认派工</button>
           <button class="btn-confirm" :disabled="isProcessOver" @click="overProcess">终止</button>
+          <button class="btn-delete-process" v-if="selectedProcessData?.item?.billType === '返工排产'" @click="deleteProcess">删除</button>
           <!-- <button class="btn-confirm">转派</button>
           <button class="btn-confirm">修改</button> -->
         </view>
@@ -250,6 +251,7 @@
               <button class="btn-dispatch" @click="lookImage(item)">查看图片</button>
               <button class="btn-detail" @click="dispatchWork(item)">操作</button>
               <button class="btn-delete" @click="addProcess(item)">添加工序</button>
+              <button class="btn-normal-process" v-if="item.billType === '返工排产'" @click="useNormalProcess(item)">使用正常工序</button>
             </view>
           </view>
           
@@ -1100,6 +1102,89 @@ const dispatchWork = (item) => {
   openProcessModal(selectedProcess.value.item, selectedProcess.value.process)
 }
 
+// 使用正常工序
+const useNormalProcess = async (item) => {
+  const billRowid = item.billRowid || ''
+  
+  if (!billRowid) {
+    uni.showToast({ title: '单据ID不存在', icon: 'none' })
+    return
+  }
+  
+  try {
+    uni.showLoading({ title: '处理中...' })
+    const result = await http.post('https://www.dachen.vip/api/workflow/hooks/Njk3MWMwODkwZjBkMGFkODBmMjhjOGU1', {
+      billRowid: billRowid
+    })
+    uni.hideLoading()
+    
+    if (result.status === 1) {
+      uni.showToast({ title: result.msg || '操作失败', icon: 'none' })
+      return
+    }
+    
+    uni.showToast({ title: '操作成功' })
+    // 刷新数据，确保数据更新
+    if (searchValue.value && searchValue.value.trim()) {
+      // 添加延迟，确保后端数据已更新
+      setTimeout(async () => {
+        await search()
+      }, 1000)
+    }
+  } catch (error) {
+    uni.hideLoading()
+    console.error('使用正常工序失败:', error)
+    uni.showToast({ title: '操作失败：' + (error.message || '未知错误'), icon: 'none' })
+  }
+}
+
+// 删除工序
+const deleteProcess = async () => {
+  const processRowid = selectedProcessData.value?.process?.rowid || ''
+  
+  if (!processRowid) {
+    uni.showToast({ title: '工序ID不存在', icon: 'none' })
+    return
+  }
+  
+  // 确认删除
+  uni.showModal({
+    title: '确认删除',
+    content: `确定要删除工序"${selectedProcessData.value?.process?.processName || ''}"吗？`,
+    success: async (res) => {
+      if (res.confirm) {
+        try {
+          uni.showLoading({ title: '删除中...' })
+          const result = await http.post('https://www.dachen.vip/api/workflow/hooks/Njk3MWNkY2UwZjBkMGFkODBmMmE3NGM3', {
+            rowid: processRowid
+          })
+          uni.hideLoading()
+          
+          if (result.status === 1) {
+            uni.showToast({ title: result.msg || '删除失败', icon: 'none' })
+            return
+          }
+          
+          uni.showToast({ title: '删除成功' })
+          // 关闭模态框
+          showProcessModal.value = false
+          // 刷新数据，确保数据更新
+          if (searchValue.value && searchValue.value.trim()) {
+            // 添加延迟，确保后端数据已更新
+            setTimeout(async () => {
+              await search()
+            }, 1000)
+          }
+        } catch (error) {
+          uni.hideLoading()
+          console.error('删除工序失败:', error)
+          uni.showToast({ title: '删除失败：' + (error.message || '未知错误'), icon: 'none' })
+        }
+      }
+    }
+  })
+}
+
 const quit = () => {
   uni.navigateBack()
 }
@@ -1461,6 +1546,12 @@ onUnload(() => {
               align-items: center;
 
               &.btn-dispatch {
+                background: white;
+                color: #5884f1;
+              }
+              
+              &.btn-normal-process {
+                width: px2vw(200px);
                 background: white;
                 color: #5884f1;
               }
@@ -1982,7 +2073,8 @@ onUnload(() => {
   flex-shrink: 0;
 
   .btn-cancel,
-  .btn-confirm {
+  .btn-confirm,
+  .btn-delete-process {
     width: px2vw(200px);
     height: px2vw(70px);
     border-radius: px2vw(18px);
@@ -2005,6 +2097,19 @@ onUnload(() => {
       color: #999;
       cursor: not-allowed;
       opacity: 0.6;
+    }
+  }
+  
+  .btn-delete-process {
+    background: #f44336;
+    color: white;
+    
+    &:hover {
+      background: #d32f2f;
+    }
+    
+    &:active {
+      background: #b71c1c;
     }
   }
 }
