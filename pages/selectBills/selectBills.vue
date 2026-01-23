@@ -231,12 +231,17 @@ const search = async () => {
 		sonoutput: item['66974d062503723eec1af614']
 	})))
 	
-	processList.value = allProcesses.map(item => ({ ...item }))
+	// 先过滤掉sonoutput为"[]"的工序
+	const filteredProcesses = allProcesses.filter(p => p.sonoutput !== "[]")
+	
+	processList.value = filteredProcesses.map(item => ({ ...item }))
 	
 	billsList.value = billsRes.data.map(item => {
 		const orderCode = item['655e1cbbbd2094b316347f92']  // 旧订单编码 ID
 		const billType = item['694a3954687045435008a7c3'] || '正常排产'
-		const processes = processList.value.filter(p => p.processOrder === orderCode && p.sonoutput !== "[]")  // 关联基于 orderCode，过滤掉sonoutput为"[]"或空字符串的工序
+		
+		// 再匹配订单编号，订单编号相同的就将工序渲染到单据上
+		const processes = processList.value.filter(p => p.processOrder === orderCode)
 			.sort((a, b) => {
 				// 按sequence字段从小到大排序
 				const seqA = a.sequence || 0

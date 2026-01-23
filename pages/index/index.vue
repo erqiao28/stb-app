@@ -359,7 +359,7 @@ const login = async () => {
 		return
 	}
 	// 发请求
-	const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjkxNTc3NDc4YTVhMDAzMjI2M2I1ZGJi', loginform.value)
+	const res = await http.post('/api/workflow/hooks/NjkxNTc3NDc4YTVhMDAzMjI2M2I1ZGJi', loginform.value)
 	if (res.status === 1) {
 		showToast('账号或密码错误')
 		return

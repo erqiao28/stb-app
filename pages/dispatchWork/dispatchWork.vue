@@ -12,7 +12,8 @@
     
     <!-- 添加员工模态框 -->
     <AddWorkerRadiobox v-model="selectedEmployeesForAdd" :options="allEmployeesOptions" title="添加员工" 
-      :visible="showAddEmployeeModal" @update:visible="handleAddEmployeeModalClose" @confirm="handleAddEmployeeConfirm" />
+      :visible="showAddEmployeeModal" @update:visible="handleAddEmployeeModalClose" @confirm="handleAddEmployeeConfirm"
+      :workshopOptions="workshopOptions" :workshop="modalWorkshop" @update:workshop="onModalWorkshopChange" />
     
     <!-- 图片预览模态框 -->
     <view class="image-preview-modal" v-if="showImagePreview" @click="closeImagePreview" :style="{ paddingTop: statusBarHeight + 'px' }">
@@ -115,7 +116,7 @@
               </view>
             </view>
             
-            <!-- 日期选择 -->
+            <!-- 日期选择和最终工序 -->
             <view class="row-group">
               <view class="form-group">
                 <text class="label">派工日期：</text>
@@ -126,7 +127,12 @@
                 </picker>
               </view>
               <view class="form-group">
-                <!-- 占位，保持布局一致 -->
+                <text class="label">最终工序：</text>
+                <picker mode="selector" :range="isLastOptions" :value="isLastIndex" @change="onIsLastChange">
+                  <view class="value">
+                    {{ processDispatchData.isLast || '请选择最终工序' }}
+                  </view>
+                </picker>
               </view>
             </view>
             
@@ -338,6 +344,11 @@ const workshop = ref('拉伸车间')
 const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
 const showWorkshopModal = ref(false)
 const isWorkshopLocked = ref(false) // 车间是否被锁定（不能修改）
+const modalWorkshop = ref('') // 模态框中的车间选择
+const modalWorkshopIndex = computed(() => {
+  const index = workshopOptions.value.indexOf(modalWorkshop.value)
+  return index >= 0 ? index : 0
+})
 
 // 获取当前日期（格式：YYYY-MM-DD）
 const getCurrentDate = () => {
@@ -376,12 +387,17 @@ const processDispatchData = ref({
   mold: '',
   date: '',
   salaryMethod: '计件',  // 计薪方式：计件、计时，默认值为计件
-  price: 0  // 工价
+  price: 0,  // 工价
+  isLast: '否'  // 最终工序：是、否，默认值为否
 })
 
 // 计薪方式选项
 const salaryMethodOptions = ref(['计件', '计时'])
 const salaryMethodIndex = ref(0)  // 默认选中第一个选项（计件）
+
+// 最终工序选项
+const isLastOptions = ref(['是', '否'])
+const isLastIndex = ref(1)  // 默认选中第二个选项（否）
 
 // ---------- 终止派工模态相关 ----------
 const showTerminateModal = ref(false)
@@ -757,6 +773,9 @@ const openProcessModal = (item, process) => {
   const day = String(today.getDate()).padStart(2, '0')
   const todayStr = `${year}-${month}-${day}`
   
+  // 初始化模态框车间为页面当前车间
+  modalWorkshop.value = workshop.value
+  
   processDispatchData.value = {
     employee: '',
     quantity: 0,
@@ -765,9 +784,11 @@ const openProcessModal = (item, process) => {
     mold: '',
     date: todayStr,
     salaryMethod: '计件',  // 默认值为计件
-    price: process?.price || 0  // 将工序的工价赋值给派工模态框
+    price: process?.price || 0,  // 将工序的工价赋值给派工模态框
+    isLast: '否'  // 默认值为否
   }
   salaryMethodIndex.value = 0  // 默认选中第一个选项（计件）
+  isLastIndex.value = 1  // 默认选中第二个选项（否）
   selectedEmployee.value = []
   employeeList.value = []
   loadEmployees()
@@ -776,11 +797,13 @@ const openProcessModal = (item, process) => {
 
 const closeProcessModal = () => {
   showProcessModal.value = false
-  processDispatchData.value = { employee: '', quantity: 0, time: 0, machine: '', mold: '', date: '', salaryMethod: '计件', price: 0 }
+  processDispatchData.value = { employee: '', quantity: 0, time: 0, machine: '', mold: '', date: '', salaryMethod: '计件', price: 0, isLast: '否' }
   machine.value = null
   employeeList.value = []
   selectedEmployee.value = []
   salaryMethodIndex.value = 0
+  isLastIndex.value = 1
+  modalWorkshop.value = ''  // 清空模态框车间选择
   // 关闭模态框后不清空选中状态，保持选中以便再次派工
 }
 
@@ -789,10 +812,23 @@ const onDateChange = (e) => {
   processDispatchData.value.date = e.detail.value
 }
 
+// 模态框车间选择变化处理
+const onModalWorkshopChange = (value) => {
+  modalWorkshop.value = value
+  // 车间改变时，重新加载员工列表
+  loadEmployees()
+}
+
 // 计薪方式选择变化处理
 const onSalaryMethodChange = (e) => {
   salaryMethodIndex.value = e.detail.value
   processDispatchData.value.salaryMethod = salaryMethodOptions.value[e.detail.value]
+}
+
+// 最终工序选择变化处理
+const onIsLastChange = (e) => {
+  isLastIndex.value = e.detail.value
+  processDispatchData.value.isLast = isLastOptions.value[e.detail.value]
 }
 
 const confirmProcessDispatch = async () => {
@@ -857,7 +893,8 @@ const confirmProcessDispatch = async () => {
     rowid: selectedProcessData.value?.process?.rowid || '',
     date: processDispatchData.value.date || '',
     salaryMethod: processDispatchData.value.salaryMethod || '',
-    price: processDispatchData.value.price || 0
+    price: processDispatchData.value.price || 0,
+    isLast: processDispatchData.value.isLast || '否'
   }
 
   const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjkyMTJlNzdhOWE4ZGM2YmMxZjczYzlk', dispatchData)
@@ -881,7 +918,9 @@ const loadEmployees = async () => {
   try {
     // 每次请求时获取当前日期
     const currentDate = getCurrentDate()
-    console.log('派工页面 - 获取员工列表 - 当前日期:', currentDate)
+    
+    // 使用模态框中的车间值，如果没有则使用页面车间值
+    const selectedWorkshop = modalWorkshop.value || workshop.value
     
     const res = await callWorkflowListAPIPaged({
       worksheetId: 'yggs',
@@ -890,7 +929,7 @@ const loadEmployees = async () => {
         "dataType": 30,
         "spliceType": 1,
         "filterType": 2,
-        "values": [workshop.value]
+        "values": [selectedWorkshop]
       }],
       pageSize: 1000,
       pageNum: 1
@@ -949,9 +988,13 @@ const loadEmployees = async () => {
 }
 
 const addEmployee = async () => {
-  if (allEmployeesOptions.value.length === 0) {
-    await loadEmployees()
+  // 如果模态框车间值还没有设置，使用当前页面车间值
+  if (!modalWorkshop.value) {
+    modalWorkshop.value = workshop.value
   }
+  
+  // 重新加载员工列表，确保使用最新的车间值
+  await loadEmployees()
   
   selectedEmployeesForAdd.value = []
   showAddEmployeeModal.value = true

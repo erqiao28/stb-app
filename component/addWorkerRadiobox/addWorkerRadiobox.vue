@@ -4,6 +4,14 @@
         <view class="modal-header">
           <text class="modal-title">{{ title }}</text>
         </view>
+        <view class="modal-workshop-selector">
+          <text class="workshop-label">车间：</text>
+          <picker mode="selector" :range="workshopOptions" :value="workshopIndex" @change="onWorkshopChange">
+            <view class="workshop-value">
+              {{ workshop || '请选择车间' }}
+            </view>
+          </picker>
+        </view>
         <view class="modal-body">
           <view class="employee-table-header">
             <view class="col-checkbox"></view>
@@ -52,10 +60,30 @@ const props = defineProps({
   visible: {
     type: Boolean,
     default: false
+  },
+  workshopOptions: {
+    type: Array,
+    default: () => []
+  },
+  workshop: {
+    type: String,
+    default: ''
   }
 })
 
-const emit = defineEmits(['update:modelValue', 'update:visible', 'confirm'])
+const emit = defineEmits(['update:modelValue', 'update:visible', 'update:workshop', 'confirm'])
+
+// 车间选择相关
+const workshopIndex = computed(() => {
+  const index = props.workshopOptions.indexOf(props.workshop)
+  return index >= 0 ? index : 0
+})
+
+const onWorkshopChange = (e) => {
+  const selectedIndex = e.detail.value
+  const selectedWorkshop = props.workshopOptions[selectedIndex]
+  emit('update:workshop', selectedWorkshop)
+}
 
 // 处理 options 为字符串数组或对象数组的情况，并去重
 const processedOptions = computed(() => {
@@ -163,6 +191,37 @@ const onCheckboxChange = (e) => {
   font-size: px2vw(35px);
   color: #333;
   text-align: center;
+}
+
+.modal-workshop-selector {
+  display: flex;
+  align-items: center;
+  padding: px2vw(15px) px2vw(40px);
+  border-bottom: px2vw(2px) solid #eee;
+  flex-shrink: 0;
+  gap: px2vw(15px);
+
+  .workshop-label {
+    font-size: px2vw(30px);
+    color: #666;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+
+  .workshop-value {
+    flex: 1;
+    font-size: px2vw(30px);
+    color: #333;
+    padding: px2vw(8px) px2vw(12px);
+    background: #f9f9f9;
+    border-radius: px2vw(5px);
+    border: px2vw(1px) solid #eee;
+    min-height: px2vw(50px);
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    cursor: pointer;
+  }
 }
 
 .modal-body {
