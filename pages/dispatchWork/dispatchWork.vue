@@ -270,6 +270,7 @@
             </view>
             <view class="buttons">
               <button class="btn-dispatch" @click="lookImage(item)">查看图片</button>
+              <button class="btn-sop" @click="lookSop(item)">查看SOP</button>
               <button class="btn-detail" @click="dispatchWork(item)">操作</button>
               <button class="btn-delete" @click="addProcess(item)">添加工序</button>
               <button class="btn-normal-process" v-if="item.billType === '返工排产'" @click="useNormalProcess(item)">使用正常工序</button>
@@ -676,7 +677,8 @@ const search = async () => {
         // 解析失败，保持原值
       }
     }
-    console.log('获取单据中的 imageData:', imageData)
+
+    const sop = item['697b206a3b5e707f84cd9c48']
     
     return {
       orderGoods,
@@ -684,6 +686,7 @@ const search = async () => {
       name: item['6937d255ff2b019b3cb34be3'],
       productionCode: item['691d6336535b29cbd5c6c0ca'],
       image: imageData,
+      sop,
       completedProcess: processes.length > 0 ? `${processes.filter(p => p.finishCount === p.needCount).length}/${processes.length}` : '0',
       productCode: item['691d6336535b29cbd5c6c0ca'],
       processes: processes.map(p => ({ ...p })),
@@ -711,7 +714,7 @@ const loadAllData = async () => {
   await search()
 }
 
-// ---------- 图片预览相关方法 ----------
+// ---------- 图片 / SOP 相关方法 ----------
 const lookImage = (item) => {
   let imageData = item?.image
   
@@ -749,6 +752,71 @@ const lookImage = (item) => {
   previewImageUrls.value = urls
   previewImageIndex.value = 0
   showImagePreview.value = true
+}
+
+const lookSop = (item) => {
+  let sop = item?.sop
+
+  if (!sop) {
+    uni.showToast({ title: '暂无SOP文件', icon: 'none' })
+    return
+  }
+
+  // sop 可能是字符串或对象数组，这里统一转为数组处理
+  if (typeof sop === 'string') {
+    try {
+      sop = JSON.parse(sop)
+    } catch (e) {
+      // 解析失败则当作单个对象或无效数据处理
+    }
+  }
+
+  const sopArray = Array.isArray(sop) ? sop : (sop ? [sop] : [])
+  if (!sopArray.length) {
+    uni.showToast({ title: '暂无SOP文件', icon: 'none' })
+    return
+  }
+
+  const first = sopArray[0] || {}
+  // 优先使用 DownloadUrl，其次 original_file_full_path，最后 file_path + file_name 兜底
+  const url = first.DownloadUrl || first.original_file_full_path || (first.file_path && first.file_name ? first.file_path + first.file_name : '')
+
+  if (!url) {
+    uni.showToast({ title: 'SOP文件地址不存在', icon: 'none' })
+    return
+  }
+
+  const fileName = first.original_file_name || first.file_name || 'SOP文件'
+
+  uni.showLoading({ title: '正在打开SOP...' })
+
+  uni.downloadFile({
+    url,
+    success: (res) => {
+      if (res.statusCode === 200) {
+        uni.openDocument({
+          filePath: res.tempFilePath,
+          showMenu: true,
+          success: () => {
+            // 打开成功，无需额外提示
+          },
+          fail: () => {
+            uni.showToast({ title: '无法打开SOP文件', icon: 'none' })
+          },
+          complete: () => {
+            uni.hideLoading()
+          }
+        })
+      } else {
+        uni.hideLoading()
+        uni.showToast({ title: 'SOP文件下载失败', icon: 'none' })
+      }
+    },
+    fail: () => {
+      uni.hideLoading()
+      uni.showToast({ title: 'SOP文件下载失败', icon: 'none' })
+    }
+  })
 }
 
 const onPreviewSwiperChange = (e) => {
@@ -956,14 +1024,8 @@ const loadEmployees = async () => {
       pageSize: 1000,
       pageNum: 1
     })
-    
-    console.log('获取员工列表 - 原始响应数据:', res)
-    console.log('获取员工列表 - 数据条数:', res.data?.length || 0)
-    console.log('获取员工列表 - 车间筛选值:', workshop.value)
-    
+
     if (res.data && res.data.length > 0) {
-      console.log('获取员工列表 - 原始数据示例:', res.data[0])
-      
       const mappedEmployees = res.data.map(item => {
         const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
         const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
@@ -978,27 +1040,19 @@ const loadEmployees = async () => {
       })
       .filter(emp => emp.id)
       .filter(emp => emp.dispatchWorkDate === currentDate)
-      
-      console.log('获取员工列表 - 映射后的员工数据:', mappedEmployees)
-      console.log('获取员工列表 - 员工数量:', mappedEmployees.length)
-      
+
       allEmployeesOptions.value = mappedEmployees.map(emp => ({
         label: emp.name,
         value: emp.id,
         totalHours: emp.totalHours || 0,
         unrecordedHours: emp.unrecordedHours || 0
       }))
-      
-      console.log('获取员工列表 - allEmployeesOptions:', allEmployeesOptions.value)
-      
+
       allEmployeesMap.value = {}
       mappedEmployees.forEach(emp => {
         allEmployeesMap.value[emp.id] = emp
       })
-      
-      console.log('获取员工列表 - allEmployeesMap:', allEmployeesMap.value)
     } else {
-      console.log('获取员工列表 - 没有数据')
       allEmployeesOptions.value = []
       allEmployeesMap.value = {}
     }
@@ -1287,18 +1341,9 @@ const calculateWorkTime = () => {
 // ==================== 生命周期钩子 ====================
 onLoad(() => {
   // 检查仓库中的权限字段（车间）
-  console.log('loginLimits值:', userStore.loginLimits)
-  console.log('loginLimits类型:', typeof userStore.loginLimits)
-  console.log('loginLimits是否为空:', !userStore.loginLimits)
-  console.log('loginLimits trim后:', userStore.loginLimits?.trim())
-  
   if (userStore.loginLimits && userStore.loginLimits.trim()) {
-    console.log('设置车间为:', userStore.loginLimits)
     workshop.value = userStore.loginLimits
     isWorkshopLocked.value = true // 锁定车间，不允许修改
-    console.log('车间已锁定，isWorkshopLocked:', isWorkshopLocked.value)
-  } else {
-    console.log('loginLimits为空或无效，车间未锁定')
   }
   
   uni.$on('selectOrder', (order) => {
@@ -1318,11 +1363,9 @@ onShow(() => {
   // 每次显示页面时也检查一次权限字段（车间）
   if (userStore.loginLimits && userStore.loginLimits.trim()) {
     if (workshop.value !== userStore.loginLimits) {
-      console.log('onShow: 设置车间为:', userStore.loginLimits)
       workshop.value = userStore.loginLimits
     }
     if (!isWorkshopLocked.value) {
-      console.log('onShow: 锁定车间')
       isWorkshopLocked.value = true
     }
   }
