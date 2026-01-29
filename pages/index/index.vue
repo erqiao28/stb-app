@@ -77,8 +77,6 @@ onShow(() => {
 // 检查更新
 const checkUpdate = async () => {
 	try {
-		console.log('【检查更新】开始执行 checkUpdate')
-
 		// 显示检查中提示
 		uni.showLoading({
 			title: '检查更新中...',
@@ -90,17 +88,12 @@ const checkUpdate = async () => {
 			worksheetId: 'rjzyb',
 			filters: []
 		})
-		console.log('【检查更新】接口返回原始数据:', res)
-
 		// 2. 检查数据是否存在
 		if (!res.data || res.data.length === 0) {
-			console.log('【检查更新】res.data 为空或长度为 0')
 			uni.hideLoading()
 			showToast('暂无更新信息')
 			return
 		}
-
-		console.log('【检查更新】res.data[0]:', res.data[0])
 
 		// 3. 提取文件数据数组和版本号
 		let fileList = res.data[0]['692feb5aee6bb1f6871490de']
@@ -108,17 +101,11 @@ const checkUpdate = async () => {
 		
 		// 获取当前版本（从 pinia 读取）
 		const currentVersion = userStore.appVersion || ''
-		console.log('【检查更新】当前版本 currentVersion:', currentVersion)
-		console.log('【检查更新】服务器新版本 newVersion:', newVersion)
-		console.log('【检查更新】原始 fileList 字段:', fileList)
 		
 		// 如果 fileList 是字符串，尝试解析为 JSON
 		if (typeof fileList === 'string') {
 			try {
 				fileList = JSON.parse(fileList)
-				console.log('【检查更新】解析后的 fileList:', fileList)
-				console.log('【检查更新】解析后是否为数组:', Array.isArray(fileList))
-				console.log('【检查更新】解析后长度:', fileList ? fileList.length : 'null')
 			} catch (e) {
 				console.error('【检查更新】解析 fileList 失败:', e)
 				uni.hideLoading()
@@ -129,7 +116,6 @@ const checkUpdate = async () => {
 		
 		// 检查 fileList 是否为有效数组
 		if (!fileList) {
-			console.log('【检查更新】fileList 为空，返回')
 			uni.hideLoading()
 			showToast('暂无更新文件')
 			return
@@ -137,11 +123,9 @@ const checkUpdate = async () => {
 		
 		// 如果不是数组，尝试转换为数组
 		if (!Array.isArray(fileList)) {
-			console.log('【检查更新】fileList 不是数组，尝试转换，当前类型:', typeof fileList)
 			// 如果是对象，尝试包装成数组
 			if (typeof fileList === 'object') {
 				fileList = [fileList]
-				console.log('【检查更新】已转换为数组后的 fileList:', fileList)
 			} else {
 				uni.hideLoading()
 				console.error('【检查更新】fileList 不是数组也不是对象:', fileList)
@@ -150,25 +134,18 @@ const checkUpdate = async () => {
 			}
 		}
 		
-		console.log('【检查更新】最终 fileList 长度:', fileList.length)
 		if (fileList.length === 0) {
-			console.log('【检查更新】fileList 长度为 0，返回')
 			uni.hideLoading()
 			showToast('暂无更新文件')
 			return
 		}
 		
-		console.log('【检查更新】fileList 验证通过，继续处理')
-
 		// 4. 获取第一个文件（最新版本）
 		const fileData = fileList[0]
-		console.log('【检查更新】选中的 fileData:', fileData)
 
 		// 5. 提取下载地址（优先使用 DownloadUrl，其次使用 file_path + file_name）
 		const wgtUrl = fileData.DownloadUrl || (fileData.file_path + fileData.file_name)
-		console.log('【检查更新】计算得到的 wgtUrl:', wgtUrl)
 		if (!wgtUrl) {
-			console.log('【检查更新】wgtUrl 为空，返回')
 			uni.hideLoading()
 			showToast('更新文件地址无效')
 			return
@@ -181,20 +158,15 @@ const checkUpdate = async () => {
 		const fileName = fileData.original_file_name || fileData.file_name || '更新包'
 
 		// 7. 弹出更新提示框
-		console.log('【检查更新】准备弹出更新提示框')
 		uni.showModal({
 			title: '发现新版本',
 			content: `当前版本：${currentVersion || '未知'}\n更新版本：${newVersion || '未知'}\n文件名：${fileName}\n文件大小：${fileSize}`,
 			confirmText: '立即更新',
 			cancelText: '稍后',
 			success: (modalRes) => {
-				console.log('【检查更新】用户点击结果:', modalRes)
 				if (modalRes.confirm) {
-					console.log('【检查更新】用户选择立即更新，开始下载与安装')
 					// 8. 下载并安装更新（传入新版本号，更新成功后保存到 pinia）
 					downloadAndInstall(wgtUrl, newVersion)
-				} else {
-					console.log('【检查更新】用户取消更新')
 				}
 			}
 		})
@@ -203,12 +175,12 @@ const checkUpdate = async () => {
 		uni.hideLoading()
 		console.error('【检查更新】检查更新失败:', error)
 		// #ifdef APP-PLUS
-		uni.showModal({
-			title: '检查更新失败(调试)',
-			content: `错误信息：${error.message || JSON.stringify(error)}`,
-			showCancel: false,
-			confirmText: '知道了'
-		})
+		// uni.showModal({ // 调试弹窗，已按需注释
+		// 	title: '检查更新失败(调试)',
+		// 	content: `错误信息：${error.message || JSON.stringify(error)}`,
+		// 	showCancel: false,
+		// 	confirmText: '知道了'
+		// })
 		// #endif
 		showToast('检查更新失败：' + (error.message || '未知错误'))
 	}
@@ -216,8 +188,6 @@ const checkUpdate = async () => {
 
 // 下载并安装更新包
 const downloadAndInstall = (wgtUrl, newVersion) => {
-	console.log('【检查更新】进入 downloadAndInstall，wgtUrl:', wgtUrl, 'newVersion:', newVersion)
-
 	// 显示下载进度
 	uni.showLoading({
 		title: '正在下载更新...',
@@ -228,25 +198,20 @@ const downloadAndInstall = (wgtUrl, newVersion) => {
 	const downloadTask = uni.downloadFile({
 		url: wgtUrl,
 		success: (downloadRes) => {
-			console.log('【检查更新】下载完成，downloadRes:', downloadRes)
 			if (downloadRes.statusCode === 200) {
 				// #ifdef APP-PLUS
-				console.log('【检查更新】当前环境 APP-PLUS，plus 是否存在:', typeof plus !== 'undefined')
 				if (typeof plus !== 'undefined' && plus.runtime) {
-					console.log('【检查更新】plus.runtime 可用，开始安装 wgt 包，路径:', downloadRes.tempFilePath)
 					// 安装 wgt 资源包
 					plus.runtime.install(
 						downloadRes.tempFilePath,
 						{
 							force: false // 是否强制安装
 						},
-						() => {
-							console.log('【检查更新】wgt 安装成功')
+								() => {
 							// 安装成功，保存新版本到 pinia
-							if (newVersion) {
-								userStore.appVersion = newVersion
-								console.log('【检查更新】新版本已保存到 pinia:', newVersion)
-							}
+								if (newVersion) {
+									userStore.appVersion = newVersion
+								}
 							uni.hideLoading()
 							uni.showModal({
 								title: '更新完成',
@@ -255,7 +220,6 @@ const downloadAndInstall = (wgtUrl, newVersion) => {
 								confirmText: '确定',
 								success: () => {
 									// 重启应用
-									console.log('【检查更新】准备重启应用 plus.runtime.restart()')
 									plus.runtime.restart()
 								}
 							})
@@ -287,42 +251,22 @@ const downloadAndInstall = (wgtUrl, newVersion) => {
 						}
 					)
 				} else {
-					console.warn('【检查更新】plus.runtime 不可用，当前环境不支持热更新')
 					uni.hideLoading()
 					showToast('当前环境不支持热更新')
 				}
 				// #endif
 
 				// #ifndef APP-PLUS
-				console.warn('【检查更新】非 APP-PLUS 环境，调用检查更新仅做调试使用')
 				uni.hideLoading()
 				showToast('当前环境不支持热更新，请在APP中使用')
 				// #endif
 			} else {
 				uni.hideLoading()
-				console.error('【检查更新】下载失败，状态码:', downloadRes.statusCode)
-				// #ifdef APP-PLUS
-				uni.showModal({
-					title: '下载失败(调试)',
-					content: `状态码：${downloadRes.statusCode}\nURL：${wgtUrl}`,
-					showCancel: false,
-					confirmText: '知道了'
-				})
-				// #endif
 				showToast('下载失败，状态码：' + downloadRes.statusCode)
 			}
 		},
 		fail: (error) => {
 			uni.hideLoading()
-			console.error('【检查更新】下载失败:', error)
-			// #ifdef APP-PLUS
-			uni.showModal({
-				title: '下载失败(调试)',
-				content: `错误信息：${error.errMsg || JSON.stringify(error)}\nURL：${wgtUrl}`,
-				showCancel: false,
-				confirmText: '知道了'
-			})
-			// #endif
 			showToast('下载失败：' + (error.errMsg || '未知错误'))
 		}
 	})
@@ -330,7 +274,6 @@ const downloadAndInstall = (wgtUrl, newVersion) => {
 	// 监听下载进度
 	downloadTask.onProgressUpdate((res) => {
 		const progress = Math.floor(res.progress)
-		console.log('【检查更新】下载进度:', progress, '%', '已下载/总字节:', res.totalBytesWritten, '/', res.totalBytesExpectedToWrite)
 		uni.showLoading({
 			title: `下载中 ${progress}%`,
 			mask: true
@@ -366,11 +309,6 @@ const login = async () => {
 	}
 	showToast('登录成功')
 	
-	// 打印登录响应中的limits字段
-	console.log('登录响应 res:', res)
-	console.log('登录响应中的 limits:', res.limits)
-	console.log('仓库中的 loginLimits (登录前):', userStore.loginLimits)
-	
 	// 判断用户列表是否已经存在
 	const index = userStore.userlist.findIndex(item => item.rowid === res.rowid)
 	if (index === -1) {
@@ -388,12 +326,7 @@ const login = async () => {
 	// 如果登录响应中有limits字段，保存到仓库的loginLimits
 	if (res.limits !== undefined && res.limits !== null && res.limits !== '') {
 		userStore.loginLimits = res.limits
-		console.log('已保存 limits 到仓库 loginLimits:', userStore.loginLimits)
-	} else {
-		console.log('登录响应中没有 limits 字段或值为空')
 	}
-	
-	console.log('仓库中的 loginLimits (登录后):', userStore.loginLimits)
 	
 	// 清空输入框
 	if (userStore.rememberPassword === false) {

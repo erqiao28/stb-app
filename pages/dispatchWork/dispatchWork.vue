@@ -779,11 +779,19 @@ const lookSop = (item) => {
 
   const first = sopArray[0] || {}
   // 优先使用 DownloadUrl，其次 original_file_full_path，最后 file_path + file_name 兜底
-  const url = first.DownloadUrl || first.original_file_full_path || (first.file_path && first.file_name ? first.file_path + first.file_name : '')
+  let url = first.DownloadUrl || first.original_file_full_path || (first.file_path && first.file_name ? first.file_path + first.file_name : '')
 
   if (!url) {
     uni.showToast({ title: 'SOP文件地址不存在', icon: 'none' })
     return
+  }
+
+  // H5 环境下通过本地代理转发，去掉固定域名，避免 CORS；App 等其他端保留完整地址
+  if (process.env.UNI_PLATFORM === 'h5') {
+    const domainPrefix = 'https://www.dachen.vip'
+    if (url.startsWith(domainPrefix)) {
+      url = url.slice(domainPrefix.length)
+    }
   }
 
   const fileName = first.original_file_name || first.file_name || 'SOP文件'
@@ -802,6 +810,14 @@ const lookSop = (item) => {
           },
           fail: () => {
             uni.showToast({ title: '无法打开SOP文件', icon: 'none' })
+            // APP 端兜底：尝试使用系统浏览器打开链接
+            // #ifdef APP-PLUS
+            try {
+              plus.runtime.openURL(url)
+            } catch (e) {
+              // 兜底也失败就不再额外处理
+            }
+            // #endif
           },
           complete: () => {
             uni.hideLoading()
@@ -812,7 +828,7 @@ const lookSop = (item) => {
         uni.showToast({ title: 'SOP文件下载失败', icon: 'none' })
       }
     },
-    fail: () => {
+    fail: (err) => {
       uni.hideLoading()
       uni.showToast({ title: 'SOP文件下载失败', icon: 'none' })
     }
