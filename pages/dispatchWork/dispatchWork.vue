@@ -15,17 +15,32 @@
       :visible="showAddEmployeeModal" @update:visible="handleAddEmployeeModalClose" @confirm="handleAddEmployeeConfirm"
       :workshopOptions="workshopOptions" :workshop="modalWorkshop" @update:workshop="onModalWorkshopChange" />
     
-    <!-- 图片预览模态框 -->
+    <!-- 图片预览模态框（多图轮播） -->
     <view class="image-preview-modal" v-if="showImagePreview" @click="closeImagePreview" :style="{ paddingTop: statusBarHeight + 'px' }">
       <button class="btn-close" @click="closeImagePreview">关闭</button>
-      <img 
-        v-if="currentImageUrl"
-        :src="currentImageUrl" 
-        class="preview-image"
-        @error="handleImageError"
-        @load="handleImageLoad"
-        alt="预览图片"
-      />
+      <view class="preview-content" @click.stop>
+        <swiper
+          v-if="previewImageUrls.length > 0"
+          class="preview-swiper"
+          :current="previewImageIndex"
+          @change="onPreviewSwiperChange"
+          :indicator-dots="previewImageUrls.length > 1"
+          indicator-active-color="#5884f1"
+          indicator-color="rgba(255,255,255,0.5)"
+        >
+          <swiper-item v-for="(url, idx) in previewImageUrls" :key="idx">
+            <view class="swiper-item-inner">
+              <image
+                :src="url"
+                class="preview-image"
+                mode="aspectFit"
+                :lazy-load="false"
+                @error="handleImageError"
+              />
+            </view>
+          </swiper-item>
+        </swiper>
+      </view>
     </view>
     
     <!-- 终止派工模态框 -->
@@ -373,7 +388,8 @@ const listKey = ref(0)
 
 // ---------- 图片预览相关 ----------
 const showImagePreview = ref(false)
-const currentImageUrl = ref('')
+const previewImageUrls = ref([])   // 多图预览的 URL 列表
+const previewImageIndex = ref(0)  // 当前显示的图片下标
 
 // ---------- 工序模态相关 ----------
 const showProcessModal = ref(false)
@@ -660,6 +676,7 @@ const search = async () => {
         // 解析失败，保持原值
       }
     }
+    console.log('获取单据中的 imageData:', imageData)
     
     return {
       orderGoods,
@@ -719,30 +736,35 @@ const lookImage = (item) => {
     return
   }
   
-  const firstImage = imageArray[0]
-  const downloadUrl = firstImage?.DownloadUrl
+  // 从对象数组中提取所有 DownloadUrl，支持多图
+  const urls = imageArray
+    .map(img => img?.DownloadUrl)
+    .filter(Boolean)
   
-  if (!downloadUrl) {
+  if (urls.length === 0) {
     uni.showToast({ title: '图片地址不存在', icon: 'none' })
     return
   }
   
-  currentImageUrl.value = downloadUrl
+  previewImageUrls.value = urls
+  previewImageIndex.value = 0
   showImagePreview.value = true
+}
+
+const onPreviewSwiperChange = (e) => {
+  previewImageIndex.value = e.detail?.current ?? 0
 }
 
 const closeImagePreview = () => {
   showImagePreview.value = false
-  currentImageUrl.value = ''
+  previewImageUrls.value = []
+  previewImageIndex.value = 0
 }
 
 const handleImageError = (e) => {
   uni.showToast({ title: '图片加载失败', icon: 'none' })
 }
 
-const handleImageLoad = () => {
-  // 图片加载成功处理
-}
 
 // ---------- 工序模态相关方法 ----------
 // 选择工序
@@ -2299,13 +2321,37 @@ onUnload(() => {
     }
   }
 
-  .preview-image {
-    max-width: 50vw;
-    max-height: 50vh;
-    width: auto;
-    height: auto;
-    display: block;
-    object-fit: contain;
+  .preview-content {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
   }
+
+  .preview-swiper {
+    width: 100%;
+    height: 80vh;
+  }
+
+  .swiper-item-inner {
+    width: 100%;
+    height: 100%;
+    min-height: 60vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-sizing: border-box;
+  }
+
+  .preview-image {
+    width: 90vw;
+    height: 70vh;
+    min-width: 200px;
+    min-height: 200px;
+    display: block;
+  }
+
 }
 </style>
