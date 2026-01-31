@@ -31,8 +31,8 @@
 		<image src="/static/recode.svg" class="recode-btn" @click="isShow">
 		</image>
 		<view class="setting-box">
-			<button class="login-setting" @click="goLoginSetting()">
-				<image src="/static/setting.svg"></image>登录设置
+			<button class="login-setting" @click="goFieldTypes()">
+				<image src="/static/setting.svg"></image>查看字段类型
 			</button>
 			<button class="check-update" @click="checkUpdate()">
 				<image src="/static/update.svg"></image>检查更新
@@ -366,7 +366,7 @@ const goDispatchWork = () => {
 		})
 	}
 
-// 跳转登录页面
+// 跳转登录设置页面
 const goLoginSetting = () => {
 	uni.navigateTo({
 		url: '/pages/loginSetting/loginSetting'
@@ -378,6 +378,15 @@ const goChangePassword = () => {
 	uni.navigateTo({
 		url: '/pages/changePassword/changePassword'
 	})
+}
+
+// 查看字段类型
+const goFieldTypes = async () => {
+	let res = await callWorkflowListAPIPaged({
+		worksheetId: 'yggs',
+		filters: []
+	})
+	console.log(res.data[0]['697b12b13b5e707f84cd9407'])
 }
 </script>
 
