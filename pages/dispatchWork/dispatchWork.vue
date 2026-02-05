@@ -67,6 +67,76 @@
       </view>
     </view>
     
+    <!-- 多对多派工模态框 -->
+    <view class="process-modal" v-if="showMultiDispatchModal" @click.self="closeMultiDispatchModal">
+      <view class="process-content" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">多对多派工</text>
+          <view class="modal-close" @click="closeMultiDispatchModal">×</view>
+        </view>
+        
+        <!-- 可滚动内容区域（包含表单信息和员工表格） -->
+        <scroll-view scroll-y class="modal-scroll-content">
+          <!-- 表单信息区域 -->
+          <view class="modal-body">
+            <!-- 排产数量和派工数量 -->
+            <view class="row-group">
+              <view class="form-group">
+                <text class="label">排产数量：</text>
+                <text class="value-readonly">{{ multiDispatchData.productionCount }}</text>
+              </view>
+              <view class="form-group">
+                <text class="label">派工数量：</text>
+                <input v-model.number="multiDispatchData.quantity" type="number" placeholder="请输入数量"
+                  min="0" class="input-field" />
+              </view>
+            </view>
+            
+            <!-- 所选工序展示 -->
+            <view class="row-group">
+              <view class="form-group full">
+                <text class="label">所选工序：</text>
+                <view class="processes-display-inline">
+                  <view v-for="(process, index) in selectedMultiProcesses" :key="index" class="process-display-inline-wrapper">
+                    <view class="process-display-inline-box">
+                      <text class="process-display-inline-name">{{ process.process.processName }}</text>
+                    </view>
+                    <view v-if="index < selectedMultiProcesses.length - 1" class="process-display-connector">→</view>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </view>
+          
+          <!-- 员工选择表格 -->
+          <view class="employee-section">
+            <view class="table-header">
+              <view class="col selected">选中</view>
+              <view class="col name">姓名</view>
+              <view class="col totalHours">总工时数</view>
+              <view class="col unrecordedHours">未派工时</view>
+            </view>
+            <checkbox-group @change="onMultiEmployeeCheckboxChange" class="employee-table">
+              <label v-for="emp in multiEmployeeList" :key="emp.id" class="table-row">
+                <view class="col selected">
+                  <checkbox :value="emp.id" :checked="isMultiEmployeeSelected(emp.id)" />
+                </view>
+                <view class="col name">{{ emp.name }}</view>
+                <view class="col totalHours">{{ emp.totalHours }} 时</view>
+                <view class="col unrecordedHours">{{ emp.unrecordedHours }} 时</view>
+              </label>
+            </checkbox-group>
+          </view>
+        </scroll-view>
+        
+        <!-- 模态框底部按钮 -->
+        <view class="modal-footer">
+          <button class="btn-confirm" @click="addMultiEmployee">添加员工</button>
+          <button class="btn-confirm" @click="confirmMultiDispatch" :disabled="!canMultiDispatch">确认派工</button>
+        </view>
+      </view>
+    </view>
+    
     <!-- 工序派工模态框 -->
     <view class="process-modal" v-if="showProcessModal" @click.self="closeProcessModal">
       <view class="process-content" @click.stop>
@@ -271,9 +341,10 @@
             <view class="buttons">
               <button class="btn-dispatch" @click="lookImage(item)">查看图片</button>
               <button class="btn-sop" @click="lookSop(item)">查看SOP</button>
-              <button class="btn-detail" @click="dispatchWork(item)">操作</button>
+              <button class="btn-detail" :disabled="!canClickDispatch(item)" @click="dispatchWork(item)">操作</button>
               <button class="btn-delete" @click="addProcess(item)">添加工序</button>
               <button class="btn-normal-process" v-if="item.billType === '返工排产'" @click="useNormalProcess(item)">使用正常工序</button>
+              <button class="btn-multi-dispatch" v-if="workshop === '组装车间'" :disabled="!canClickMultiDispatch(item)" @click="openMultiDispatchModal(item)">多对多派工</button>
             </view>
           </view>
           
@@ -291,6 +362,10 @@
               <view>订单数量：</view>
               <view>{{ item.orderCount }}</view>
             </view>
+            <view class="productionCount">
+              <view>排产数量：</view>
+              <view>{{ item.productionCount }}</view>
+            </view>
           </view>
           
           <!-- 问题描述 -->
@@ -305,12 +380,13 @@
               <view v-for="(process, index) in item.processes" :key="`${item.orderCode}-${process.processName}-${index}-${listKey}`" class="process-wrapper">
                 <view class="process-item" :class="{ 
                   'process-selected': isProcessSelected(item, process), 
-                  'process-over': process.isOver == 1
-                }">
+                  'process-over': process.isOver == 1,
+                  'process-multi-selected': workshop === '组装车间' && isMultiProcessSelected(item, process)
+                }"
+                @click="workshop === '组装车间' ? toggleMultiProcess(item, process) : selectProcess(item, process)">
                   <view class="process-sequence">{{ process.sequence || '' }}</view>
                   <view class="progress-circle"
-                    :style="{ '--percent': Math.round((process.finishCount / Math.max((parseFloat(process.needCount) || 0) + (parseFloat(process.finishCount) || 0), 1)) * 100) + '%' }"
-                    @click="selectProcess(item, process)">
+                    :style="{ '--percent': Math.round((process.finishCount / Math.max((parseFloat(process.needCount) || 0) + (parseFloat(process.finishCount) || 0), 1)) * 100) + '%' }">
                     <view class="progress-inner">
                       <view class="progress-text">{{ process.finishCount }}/{{ Math.round((parseFloat(process.needCount) || 0) + (parseFloat(process.finishCount) || 0)) }}</view>
                     </view>
@@ -428,6 +504,18 @@ const selectedEmployeesForAdd = ref([])
 const allEmployeesOptions = ref([])
 const allEmployeesMap = ref({})
 
+// ---------- 多对多派工相关 ----------
+const showMultiDispatchModal = ref(false)
+const selectedMultiProcesses = ref([]) // 多选的工序列表 [{ item, process }]
+const multiDispatchData = ref({
+  orderCount: 0,
+  productionCount: 0,
+  quantity: 0
+})
+const multiEmployeeList = ref([])
+const selectedMultiEmployees = ref([])
+const currentMultiDispatchItem = ref(null) // 当前多对多派工的单据
+
 // ==================== 计算属性 ====================
 // 最大派工数量：需派工数量
 const maxQuantity = computed(() => {
@@ -444,6 +532,32 @@ const canDispatch = computed(() => {
 const isProcessOver = computed(() => {
   return selectedProcessData.value?.process?.isOver === 1
 })
+
+// 获取指定订单的选中工序数量
+const getSelectedProcessCount = (item) => {
+  if (workshop.value === '组装车间') {
+    // 组装车间：统计多选的工序数量
+    return selectedMultiProcesses.value.filter(p => p.item.orderCode === item.orderCode).length
+  } else {
+    // 其他车间：检查是否有单选工序
+    return selectedProcess.value && selectedProcess.value.item.orderCode === item.orderCode ? 1 : 0
+  }
+}
+
+// 判断是否可以点击操作按钮（单个派工）
+const canClickDispatch = (item) => {
+  const count = getSelectedProcessCount(item)
+  return count === 1
+}
+
+// 判断是否可以点击多对多派工按钮
+const canClickMultiDispatch = (item) => {
+  if (workshop.value !== '组装车间') {
+    return false
+  }
+  const count = getSelectedProcessCount(item)
+  return count >= 2
+}
 
 // 打开终止派工模态框
 const overProcess = () => {
@@ -502,6 +616,10 @@ const confirmTerminate = async () => {
 const handleWorkshopConfirm = (value) => {
   workshop.value = value
   showWorkshopModal.value = false
+  // 切换车间时，如果不是组装车间，清空多选状态
+  if (value !== '组装车间') {
+    selectedMultiProcesses.value = []
+  }
   search()
 }
 
@@ -618,6 +736,10 @@ const getBillsListRaw = async (searchVal = '') => {
 const search = async () => {
   // 清除选中状态
   selectedProcess.value = null
+  // 如果是组装车间，不清空多选状态；否则清空
+  if (workshop.value !== '组装车间') {
+    selectedMultiProcesses.value = []
+  }
   
   if (!searchValue.value || !searchValue.value.trim()) {
     billsList.value = []
@@ -643,7 +765,7 @@ const search = async () => {
   const allProcesses = processResults.flatMap(res => res.data.map(item => ({
     processName: item['656ffd1bba5ef3863bf3ec1e'],
     needCount: item['690dc19f8d797ee211e7fc60'],
-    finishCount: item['690c794ccf407aa3d938ba28'],
+    finishCount: item['69840b633b5e707f84cf341e'],
     processOrder: item['6593b07ae97eb866a50eeba1'],
     worktime: item['69211dac21066a9f124f62df'],
     sequence: item['693a62040f64427fac25ae80'],
@@ -683,8 +805,9 @@ const search = async () => {
     return {
       orderGoods,
       orderCount: item['681b0b53b139204fd264c5fd'],
+      productionCount: item['67de8eb5c5377d50a523ef9b'], // 排产数量
       name: item['6937d255ff2b019b3cb34be3'],
-      productionCode: item['691d6336535b29cbd5c6c0ca'],
+      productionCode: item['698438933b5e707f84cf51fd'],
       image: imageData,
       sop,
       completedProcess: processes.length > 0 ? `${processes.filter(p => p.finishCount === p.needCount).length}/${processes.length}` : '0',
@@ -853,11 +976,24 @@ const handleImageError = (e) => {
 // ---------- 工序模态相关方法 ----------
 // 选择工序
 const selectProcess = (item, process) => {
-  // 如果点击的是已选中的工序，则取消选中
-  if (isProcessSelected(item, process)) {
-    selectedProcess.value = null
+  if (workshop.value === '组装车间') {
+    // 组装车间：使用多选逻辑
+    toggleMultiProcess(item, process)
+    // 同时更新单选状态，用于兼容
+    if (isMultiProcessSelected(item, process)) {
+      selectedProcess.value = { item, process }
+    } else {
+      // 如果取消多选，检查是否还有其他选中的
+      const remaining = selectedMultiProcesses.value.find(p => p.item.orderCode === item.orderCode)
+      selectedProcess.value = remaining ? { item: remaining.item, process: remaining.process } : null
+    }
   } else {
-    selectedProcess.value = { item, process }
+    // 其他车间：使用单选逻辑
+    if (isProcessSelected(item, process)) {
+      selectedProcess.value = null
+    } else {
+      selectedProcess.value = { item, process }
+    }
   }
 }
 
@@ -866,6 +1002,244 @@ const isProcessSelected = (item, process) => {
   if (!selectedProcess.value) return false
   return selectedProcess.value.item.orderCode === item.orderCode && 
          selectedProcess.value.process.processName === process.processName
+}
+
+// 多选工序相关方法
+const toggleMultiProcess = (item, process) => {
+  const index = selectedMultiProcesses.value.findIndex(p => 
+    p.item.orderCode === item.orderCode && p.process.processName === process.processName
+  )
+  
+  if (index >= 0) {
+    // 取消选中
+    selectedMultiProcesses.value.splice(index, 1)
+  } else {
+    // 选中
+    selectedMultiProcesses.value.push({ item, process })
+  }
+}
+
+// 判断工序是否被多选
+const isMultiProcessSelected = (item, process) => {
+  return selectedMultiProcesses.value.some(p => 
+    p.item.orderCode === item.orderCode && p.process.processName === process.processName
+  )
+}
+
+// 打开多对多派工模态框
+const openMultiDispatchModal = (item) => {
+  // 检查是否有选中的工序
+  if (selectedMultiProcesses.value.length === 0) {
+    uni.showToast({ title: '请至少选择一个工序', icon: 'none' })
+    return
+  }
+  
+  // 检查选中的工序是否都属于当前订单
+  const allFromSameOrder = selectedMultiProcesses.value.every(p => p.item.orderCode === item.orderCode)
+  if (!allFromSameOrder) {
+    uni.showToast({ title: '请选择同一订单的工序', icon: 'none' })
+    return
+  }
+  
+  currentMultiDispatchItem.value = item
+  multiDispatchData.value = {
+    orderCount: item.orderCount || 0,
+    productionCount: item.productionCount || 0,
+    quantity: 0
+  }
+  multiEmployeeList.value = []
+  selectedMultiEmployees.value = []
+  
+  // 初始化模态框车间为页面当前车间
+  modalWorkshop.value = workshop.value
+  
+  // 不自动加载员工列表，只有点击添加员工按钮后才加载
+  showMultiDispatchModal.value = true
+}
+
+// 关闭多对多派工模态框
+const closeMultiDispatchModal = () => {
+  showMultiDispatchModal.value = false
+  multiDispatchData.value = {
+    orderCount: 0,
+    productionCount: 0,
+    quantity: 0
+  }
+  multiEmployeeList.value = []
+  selectedMultiEmployees.value = []
+  currentMultiDispatchItem.value = null
+  modalWorkshop.value = ''
+}
+
+
+// 多对多派工添加员工
+const addMultiEmployee = async () => {
+  // 如果模态框车间值还没有设置，使用当前页面车间值
+  if (!modalWorkshop.value) {
+    modalWorkshop.value = workshop.value
+  }
+  
+  // 加载所有可选的员工列表（用于添加员工模态框）
+  await loadMultiEmployeesForAdd()
+  
+  selectedEmployeesForAdd.value = []
+  showAddEmployeeModal.value = true
+}
+
+// 加载多对多派工可选员工列表（用于添加员工模态框）
+const loadMultiEmployeesForAdd = async () => {
+  try {
+    const currentDate = getCurrentDate()
+    const selectedWorkshop = modalWorkshop.value || workshop.value
+    
+    const res = await callWorkflowListAPIPaged({
+      worksheetId: 'yggs',
+      filters: [{
+        "controlId": "696075d19223cfe3a0c169dc",
+        "dataType": 30,
+        "spliceType": 1,
+        "filterType": 2,
+        "values": [selectedWorkshop]
+      }],
+      pageSize: 1000,
+      pageNum: 1
+    })
+
+    if (res.data && res.data.length > 0) {
+      const mappedEmployees = res.data.map(item => {
+        const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
+        const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
+        const dispatchWorkDate = item['69524e7b7a59e0522d855df6'] || ''
+        
+        // 打印 dispatchWorkDate 字段的值
+        console.log('多对多派工 - 员工 dispatchWorkDate 字段值:', {
+          name: item['6938db8bda0981f67b352af3'] || '',
+          id: item['6943bd902161a0fc58bad5ab'] || '',
+          dispatchWorkDate: dispatchWorkDate,
+          dispatchWorkDateType: typeof dispatchWorkDate,
+          dispatchWorkDateRaw: item['69524e7b7a59e0522d855df6'],
+          currentDate: currentDate,
+          isMatch: dispatchWorkDate === currentDate
+        })
+        
+        return {
+          id: item['6943bd902161a0fc58bad5ab'] || '',
+          name: item['6938db8bda0981f67b352af3'] || '',
+          totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
+          unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
+          dispatchWorkDate: dispatchWorkDate
+        }
+      })
+      .filter(emp => emp.id)
+      .filter(emp => emp.dispatchWorkDate === currentDate)
+
+      console.log('多对多派工 - 加载员工数据:', {
+        totalFromAPI: res.data.length,
+        afterDateFilter: mappedEmployees.length,
+        currentDate: currentDate,
+        selectedWorkshop: selectedWorkshop
+      })
+
+      // 更新allEmployeesOptions和allEmployeesMap，供添加员工模态框使用
+      allEmployeesOptions.value = mappedEmployees.map(emp => ({
+        label: emp.name,
+        value: emp.id,
+        totalHours: emp.totalHours || 0,
+        unrecordedHours: emp.unrecordedHours || 0
+      }))
+
+      allEmployeesMap.value = {}
+      mappedEmployees.forEach(emp => {
+        allEmployeesMap.value[emp.id] = emp
+      })
+    } else {
+      allEmployeesOptions.value = []
+      allEmployeesMap.value = {}
+    }
+  } catch (error) {
+    console.error('加载员工失败:', error)
+    allEmployeesOptions.value = []
+    allEmployeesMap.value = {}
+  }
+}
+
+// 多对多派工员工选择变化
+const onMultiEmployeeCheckboxChange = (e) => {
+  selectedMultiEmployees.value = e.detail.value || []
+}
+
+// 判断员工是否被选中（多对多派工）
+const isMultiEmployeeSelected = (employeeId) => {
+  return selectedMultiEmployees.value.includes(employeeId)
+}
+
+// 判断是否可以多对多派工
+const canMultiDispatch = computed(() => {
+  return multiDispatchData.value.quantity > 0 && 
+         selectedMultiProcesses.value.length > 0 && 
+         selectedMultiEmployees.value.length > 0
+})
+
+// 确认多对多派工
+const confirmMultiDispatch = async () => {
+  if (!multiDispatchData.value.quantity || multiDispatchData.value.quantity <= 0) {
+    uni.showToast({ title: '请填写有效的派工数量 (>0)', icon: 'none' })
+    return
+  }
+  
+  if (selectedMultiProcesses.value.length === 0) {
+    uni.showToast({ title: '请至少选择一个工序', icon: 'none' })
+    return
+  }
+  
+  if (selectedMultiEmployees.value.length === 0) {
+    uni.showToast({ title: '请至少选择一个员工', icon: 'none' })
+    return
+  }
+  
+  // 获取选中的员工信息
+  const selectedEmployees = multiEmployeeList.value.filter(emp => selectedMultiEmployees.value.includes(emp.id))
+  
+  // 从选中的工序中获取所属单据的信息（所有工序应该属于同一个订单）
+  const firstProcess = selectedMultiProcesses.value[0]
+  const billItem = firstProcess?.item
+  
+  // 构建请求参数
+  const dispatchParams = {  
+    productionCount: billItem?.productionCount || billItem?.orderCount || 0,
+    billRowid: billItem?.billRowid || '',
+    orderCode: billItem?.orderCode || '',
+    processes: selectedMultiProcesses.value.map(p => ({
+      rowid: p.process.rowid,
+    })),
+    quantity: multiDispatchData.value.quantity,
+    employees: selectedEmployees.map(emp => ({
+      id: emp.id,
+    }))
+  }
+  
+  try {
+    const res = await http.post('https://www.dachen.vip/api/workflow/hooks/Njk4MmRkMTUwZjBkMGFkODBmZTM1YjAy', dispatchParams)
+    
+    if (res.status === 1) {
+      uni.showToast({ title: res.message || '派工失败', icon: 'none' })
+      return
+    }
+    
+    uni.showToast({ title: '派工成功' })
+    showMultiDispatchModal.value = false
+    selectedMultiProcesses.value = []
+    
+    // 派工成功后刷新数据
+    if (searchValue.value && searchValue.value.trim()) {
+      setTimeout(async () => {
+        await search()
+      }, 1000)
+    }
+  } catch (error) {
+    console.error('多对多派工失败:', error)
+    uni.showToast({ title: '派工失败：' + (error.message || '未知错误'), icon: 'none' })
+  }
 }
 
 // 打开工序派工模态框
@@ -1045,17 +1419,36 @@ const loadEmployees = async () => {
       const mappedEmployees = res.data.map(item => {
         const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
         const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
+        const dispatchWorkDate = item['69524e7b7a59e0522d855df6'] || ''
+        
+        // 打印 dispatchWorkDate 字段的值
+        console.log('普通派工 - 员工 dispatchWorkDate 字段值:', {
+          name: item['6938db8bda0981f67b352af3'] || '',
+          id: item['6943bd902161a0fc58bad5ab'] || '',
+          dispatchWorkDate: dispatchWorkDate,
+          dispatchWorkDateType: typeof dispatchWorkDate,
+          dispatchWorkDateRaw: item['69524e7b7a59e0522d855df6'],
+          currentDate: currentDate,
+          isMatch: dispatchWorkDate === currentDate
+        })
         
         return {
           id: item['6943bd902161a0fc58bad5ab'] || '',
           name: item['6938db8bda0981f67b352af3'] || '',
           totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
           unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
-          dispatchWorkDate: item['69524e7b7a59e0522d855df6'] || ''
+          dispatchWorkDate: dispatchWorkDate
         }
       })
       .filter(emp => emp.id)
       .filter(emp => emp.dispatchWorkDate === currentDate)
+
+      console.log('普通派工 - 加载员工数据:', {
+        totalFromAPI: res.data.length,
+        afterDateFilter: mappedEmployees.length,
+        currentDate: currentDate,
+        selectedWorkshop: selectedWorkshop
+      })
 
       allEmployeesOptions.value = mappedEmployees.map(emp => ({
         label: emp.name,
@@ -1102,51 +1495,118 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
     return
   }
   
-  if (Object.keys(allEmployeesMap.value).length === 0) {
-    await loadEmployees()
-  }
+  // 判断是在哪个模态框中添加员工
+  const isMultiDispatch = showMultiDispatchModal.value
   
-  let addedCount = 0
-  
-  selectedIds.forEach(id => {
-    const exists = employeeList.value.find(emp => emp.id === id)
-    if (!exists) {
-      const fullEmployee = allEmployeesMap.value[id]
-      if (fullEmployee) {
-        employeeList.value.push({
-          id: fullEmployee.id,
-          name: fullEmployee.name,
-          totalHours: fullEmployee.totalHours || 0,
-          unrecordedHours: fullEmployee.unrecordedHours || 0
-        })
-        addedCount++
-      } else {
-        const option = allEmployeesOptions.value.find(opt => opt.value === id)
-        if (option) {
-          employeeList.value.push({
-            id: option.value,
-            name: option.label,
-            totalHours: 0,
-            unrecordedHours: 0
+  if (isMultiDispatch) {
+    // 多对多派工模态框
+    if (Object.keys(allEmployeesMap.value).length === 0) {
+      await loadMultiEmployeesForAdd()
+    }
+    
+    let addedCount = 0
+    
+    selectedIds.forEach(id => {
+      const exists = multiEmployeeList.value.find(emp => emp.id === id)
+      console.log('多对多派工 - 检查员工是否存在:', {
+        employeeId: id,
+        exists: exists,
+        multiEmployeeListLength: multiEmployeeList.value.length,
+        allEmployeesOptionsLength: allEmployeesOptions.value.length
+      })
+      if (!exists) {
+        const fullEmployee = allEmployeesMap.value[id]
+        if (fullEmployee) {
+          multiEmployeeList.value.push({
+            id: fullEmployee.id,
+            name: fullEmployee.name,
+            totalHours: fullEmployee.totalHours || 0,
+            unrecordedHours: fullEmployee.unrecordedHours || 0
           })
           addedCount++
+        } else {
+          const option = allEmployeesOptions.value.find(opt => opt.value === id)
+          if (option) {
+            multiEmployeeList.value.push({
+              id: option.value,
+              name: option.label,
+              totalHours: option.totalHours || 0,
+              unrecordedHours: option.unrecordedHours || 0
+            })
+            addedCount++
+          }
         }
       }
+    })
+    
+    showAddEmployeeModal.value = false
+    
+    // 自动选中新添加的员工
+    selectedIds.forEach(id => {
+      if (!selectedMultiEmployees.value.includes(id)) {
+        selectedMultiEmployees.value.push(id)
+      }
+    })
+    
+    if (addedCount > 0) {
+      uni.showToast({ title: `已添加 ${addedCount} 名员工`, icon: 'success' })
+    } else {
+      uni.showToast({ title: '所选员工已存在', icon: 'none' })
     }
-  })
-  
-  showAddEmployeeModal.value = false
-  
-  selectedIds.forEach(id => {
-    if (!selectedEmployee.value.includes(id)) {
-      selectedEmployee.value.push(id)
-    }
-  })
-  
-  if (addedCount > 0) {
-    uni.showToast({ title: `已添加 ${addedCount} 名员工`, icon: 'success' })
   } else {
-    uni.showToast({ title: '所选员工已存在', icon: 'none' })
+    // 普通派工模态框
+    if (Object.keys(allEmployeesMap.value).length === 0) {
+      await loadEmployees()
+    }
+    
+    let addedCount = 0
+    
+    selectedIds.forEach(id => {
+      const exists = employeeList.value.find(emp => emp.id === id)
+      console.log('普通派工 - 检查员工是否存在:', {
+        employeeId: id,
+        exists: exists,
+        employeeListLength: employeeList.value.length,
+        allEmployeesOptionsLength: allEmployeesOptions.value.length
+      })
+      if (!exists) {
+        const fullEmployee = allEmployeesMap.value[id]
+        if (fullEmployee) {
+          employeeList.value.push({
+            id: fullEmployee.id,
+            name: fullEmployee.name,
+            totalHours: fullEmployee.totalHours || 0,
+            unrecordedHours: fullEmployee.unrecordedHours || 0
+          })
+          addedCount++
+        } else {
+          const option = allEmployeesOptions.value.find(opt => opt.value === id)
+          if (option) {
+            employeeList.value.push({
+              id: option.value,
+              name: option.label,
+              totalHours: 0,
+              unrecordedHours: 0
+            })
+            addedCount++
+          }
+        }
+      }
+    })
+    
+    showAddEmployeeModal.value = false
+    
+    selectedIds.forEach(id => {
+      if (!selectedEmployee.value.includes(id)) {
+        selectedEmployee.value.push(id)
+      }
+    })
+    
+    if (addedCount > 0) {
+      uni.showToast({ title: `已添加 ${addedCount} 名员工`, icon: 'success' })
+    } else {
+      uni.showToast({ title: '所选员工已存在', icon: 'none' })
+    }
   }
 }
 
@@ -1222,19 +1682,38 @@ const addProcess = async (item) => {
 
 const dispatchWork = (item) => {
   // 检查是否有选中的工序
-  if (!selectedProcess.value) {
-    uni.showToast({ title: '请先选择一个工序', icon: 'none' })
-    return
+  if (workshop.value === '组装车间') {
+    // 组装车间：检查多选工序
+    const selectedCount = selectedMultiProcesses.value.filter(p => p.item.orderCode === item.orderCode).length
+    if (selectedCount === 0) {
+      uni.showToast({ title: '请先选择一个工序', icon: 'none' })
+      return
+    }
+    if (selectedCount > 1) {
+      uni.showToast({ title: '选择了多个工序，请使用多对多派工', icon: 'none' })
+      return
+    }
+    // 只有一个选中工序，使用第一个
+    const selected = selectedMultiProcesses.value.find(p => p.item.orderCode === item.orderCode)
+    if (selected) {
+      openProcessModal(selected.item, selected.process)
+    }
+  } else {
+    // 其他车间：检查单选工序
+    if (!selectedProcess.value) {
+      uni.showToast({ title: '请先选择一个工序', icon: 'none' })
+      return
+    }
+    
+    // 检查选中的工序是否属于当前订单
+    if (selectedProcess.value.item.orderCode !== item.orderCode) {
+      uni.showToast({ title: '请选择当前订单的工序', icon: 'none' })
+      return
+    }
+    
+    // 打开派工模态框
+    openProcessModal(selectedProcess.value.item, selectedProcess.value.process)
   }
-  
-  // 检查选中的工序是否属于当前订单
-  if (selectedProcess.value.item.orderCode !== item.orderCode) {
-    uni.showToast({ title: '请选择当前订单的工序', icon: 'none' })
-    return
-  }
-  
-  // 打开派工模态框
-  openProcessModal(selectedProcess.value.item, selectedProcess.value.process)
 }
 
 // 使用正常工序
@@ -1679,6 +2158,28 @@ onUnload(() => {
                 background: white;
                 color: #5884f1;
               }
+              
+              &.btn-multi-dispatch {
+                width: px2vw(180px);
+                background: white;
+                color: #5884f1;
+                
+                &:disabled {
+                  background: #f5f5f5;
+                  color: #ccc;
+                  border-color: #ddd;
+                  cursor: not-allowed;
+                  opacity: 0.6;
+                }
+              }
+              
+              &.btn-detail:disabled {
+                background: #f5f5f5;
+                color: #ccc;
+                border-color: #ddd;
+                cursor: not-allowed;
+                opacity: 0.6;
+              }
             }
           }
         }
@@ -1691,6 +2192,7 @@ onUnload(() => {
 
           .orderItem,
           .orderCount,
+          .productionCount,
           .productCode,
           .name {
             font-size: px2vw(25px);
@@ -1751,6 +2253,9 @@ onUnload(() => {
           position: relative;
           padding: px2vw(8px);
           border-radius: px2vw(12px);
+          min-width: px2vw(150px);
+          width: px2vw(150px);
+          box-sizing: border-box;
 
           &.process-selected {
             border: px2vw(3px) solid #4CAF50;
@@ -1758,6 +2263,11 @@ onUnload(() => {
 
           &.process-selected.process-over {
             border-color: #f44336;
+          }
+          
+          &.process-multi-selected {
+            border: px2vw(3px) solid #2196F3;
+            background-color: rgba(33, 150, 243, 0.1);
           }
 
           &.process-over {
@@ -2344,6 +2854,47 @@ onUnload(() => {
         }
       }
     }
+  }
+}
+
+/* 工序展示内联样式 */
+.processes-display-inline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: px2vw(10px);
+  padding: px2vw(10px);
+  background-color: #f9f9f9;
+  border-radius: px2vw(5px);
+  min-height: px2vw(50px);
+  flex: 1;
+  
+  .process-display-inline-wrapper {
+    display: flex;
+    align-items: center;
+  }
+  
+  .process-display-inline-box {
+    padding: px2vw(8px) px2vw(15px);
+    background-color: #333;
+    border-radius: px2vw(5px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    .process-display-inline-name {
+      color: white;
+      font-size: px2vw(26px);
+      text-align: center;
+      white-space: nowrap;
+    }
+  }
+  
+  .process-display-connector {
+    margin: 0 px2vw(8px);
+    color: #333;
+    font-size: px2vw(30px);
+    font-weight: bold;
   }
 }
 

@@ -32,7 +32,7 @@
 		</image>
 		<view class="setting-box">
 			<button class="login-setting" @click="goFieldTypes()">
-				<image src="/static/setting.svg"></image>查看字段类型
+				<image src="/static/setting.svg"></image>查看字段
 			</button>
 			<button class="check-update" @click="checkUpdate()">
 				<image src="/static/update.svg"></image>检查更新

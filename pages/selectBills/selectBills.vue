@@ -65,37 +65,19 @@
 							<view>产品名称：</view>
 							<view>{{ item.name }}</view>
 						</view>
-					<view class="model">
-						<view class="model-text">规格型号：</view>
-						<view class="model-value">{{ item.model }}</view>
-					</view>
-					<view class="problemDescription" v-if="item.problemDescription && item.problemDescription.trim()">
-						<view>问题描述：</view>
-						<view>{{ item.problemDescription }}</view>
-					</view>
-				</view>
-					<view class="processes-section" v-if="item.processes && item.processes.length > 0">
-						<view class="processes-container">
-							<view v-for="(process, index) in item.processes" :key="index" class="process-wrapper">
-								<view class="process-item" :class="{ 
-									'process-over': process.isOver == 1
-								}">
-									<view class="progress-circle"
-										:style="{ '--percent': Math.round((process.finishCount / Math.max((parseFloat(process.needCount) || 0) + (parseFloat(process.finishCount) || 0), 1)) * 100) + '%' }">
-										<view class="progress-inner">
-											<view class="progress-text">{{ process.finishCount }}/{{ Math.round((parseFloat(process.needCount) || 0) + (parseFloat(process.finishCount) || 0))
-												}}</view>
-										</view>
-									</view>
-									<text class="process-name">{{ process.processName }}</text>
-								</view>
-								<view v-if="index < item.processes.length - 1" class="connector"></view>
-							</view>
+						<view class="model">
+							<view class="model-text">规格型号：</view>
+							<view class="model-value">{{ item.model }}</view>
+						</view>
+						<view class="problemDescription"
+							v-if="item.problemDescription && item.problemDescription.trim()">
+							<view>问题描述：</view>
+							<view>{{ item.problemDescription }}</view>
 						</view>
 					</view>
 				</view>
 				<view class="goodsProcess">
-					<view class="bill-type-badge" 
+					<view class="bill-type-badge"
 						:class="{ 'badge-normal': item.billType === '正常排产', 'badge-rework': item.billType === '返工排产' }"
 						v-if="item.billType">{{ item.billType }}</view>
 				</view>
@@ -114,51 +96,12 @@ const { statusBarHeight } = useStatusBar()
 const workshop = ref('')
 const billTypeFilter = ref('正常排产')  // 单据类型过滤参数：正常排产、返工排产（用于获取单据）
 const billsList = ref([])  // 单据列表
-const processList = ref([])  // 工序列表
 const searchValue = ref({
 	salesOrder: '',
 	batch: '',
 	productionOrder: '',
 	orderItem: ''
 })  // 搜索输入值
-// 根据单据的billType获取对应的工序类型参数
-const getProcessTypeParam = (billType) => {
-	return billType === '返工排产' ? '返工派工' : '正常派工'
-}
-
-const getProcessRaw = async (billTypeValue = '') => {
-	// 根据单据的billType决定processTypeParam
-	const processTypeParam = getProcessTypeParam(billTypeValue || '正常排产')
-	
-	const filters = [{
-		"controlId": "669a6cae2503723eec1b49bb",
-		"dataType": 30,
-		"spliceType": 1,
-		"filterType": 2,
-		"values": [workshop.value]
-	}, {
-		"controlId": "6954ad997a59e0522d85df35",
-		"dataType": 30,
-		"spliceType": 1,
-		"filterType": 2,
-		"values": [processTypeParam]
-	}]
-	// 添加订单物品过滤 (假设 orderItem 对应 processOrder)
-	if (searchValue.value.orderItem) {
-		filters.push({
-			"controlId": "6593b07ae97eb866a50eeba1",
-			"dataType": 30,
-			"spliceType": 1,
-			"filterType": 2,
-			"values": [searchValue.value.orderItem]
-		})
-	}
-	const res = await callWorkflowListAPIPaged({
-		worksheetId: 'paigongdan',
-		filters
-	})
-	return res
-}
 
 onLoad((options) => {
 	if (options.workshop) {
@@ -186,7 +129,7 @@ const getBillsListRaw = async () => {
 		"filterType": 2,
 		"values": [billTypeFilter.value]
 	}
-]
+	]
 	// 添加搜索过滤 (假设 salesOrder 对应订单编号 '655e1cbbbd2094b316347f92')
 	if (searchValue.value.salesOrder) {
 		filters.push({
@@ -208,53 +151,22 @@ const getBillsListRaw = async () => {
 const search = async () => {
 	// 先获取单据列表
 	const billsRes = await getBillsListRaw()
-	
+
 	if (billsRes.data.length === 0) {
 		billsList.value = []
-		processList.value = []
 		return
 	}
-	
-	// 根据每个单据的billType分别获取对应的工序
-	const billTypes = [...new Set(billsRes.data.map(item => item['694a3954687045435008a7c3'] || '正常排产'))]
-	const processPromises = billTypes.map(billType => getProcessRaw(billType))
-	const processResults = await Promise.all(processPromises)
-	
-	// 合并所有工序结果
-	const allProcesses = processResults.flatMap(res => res.data.map(item => ({
-		processName: item['656ffd1bba5ef3863bf3ec1e'],
-		needCount: item['690dc19f8d797ee211e7fc60'],
-		finishCount: item['690c794ccf407aa3d938ba28'],
-		processOrder: item['6593b07ae97eb866a50eeba1'],
-		sequence: item['693a62040f64427fac25ae80'],
-		isOver: item['6940f719c81c746aae8ede5d'],
-		sonoutput: item['66974d062503723eec1af614']
-	})))
-	
-	// 先过滤掉sonoutput为"[]"的工序
-	const filteredProcesses = allProcesses.filter(p => p.sonoutput !== "[]")
-	
-	processList.value = filteredProcesses.map(item => ({ ...item }))
-	
+
 	billsList.value = billsRes.data.map(item => {
 		const orderCode = item['655e1cbbbd2094b316347f92']  // 旧订单编码 ID
 		const billType = item['694a3954687045435008a7c3'] || '正常排产'
-		
-		// 再匹配订单编号，订单编号相同的就将工序渲染到单据上
-		const processes = processList.value.filter(p => p.processOrder === orderCode)
-			.sort((a, b) => {
-				// 按sequence字段从小到大排序
-				const seqA = a.sequence || 0
-				const seqB = b.sequence || 0
-				return seqA - seqB
-			})
+
 		return {
 			orderCode,
 			orderCount: item['681b0b53b139204fd264c5fd'],
 			name: item['6937d255ff2b019b3cb34be3'],
 			model: item['6937d255ff2b019b3cb34be4'],
-			productionCode: item['691d6336535b29cbd5c6c0ca'],
-			processes,
+			productionCode: item['698438933b5e707f84cf51fd'],
 			billType: billType,
 			problemDescription: item['694ba108dc025d98887fd782'] || '' // 问题描述字段
 		}
@@ -315,7 +227,7 @@ const selectOrder = (orderCode) => {
 		background-color: #fff;
 		height: px2vw(100px);
 		padding: px2vw(15px);
-		margin: px2vw(10px) px2vw(10px);	
+		margin: px2vw(10px) px2vw(10px);
 		border-radius: px2vw(18px);
 
 		.salesOrder {
@@ -450,7 +362,7 @@ const selectOrder = (orderCode) => {
 			position: relative;
 
 			.goodsInfo {
-				width: 100%;
+				flex: 1;
 				display: flex;
 				flex-wrap: wrap;
 				position: relative;
@@ -485,6 +397,7 @@ const selectOrder = (orderCode) => {
 					display: flex;
 					width: 100%;
 					justify-content: space-between;
+
 					.name {
 						display: flex;
 						margin: px2vw(30px);
@@ -502,136 +415,29 @@ const selectOrder = (orderCode) => {
 							white-space: nowrap;
 						}
 
-					.model-value {
-						flex: 1;
-					}
-				}
-
-				.problemDescription {
-					width: px2vw(600px);
-					display: flex;
-					margin: px2vw(30px);
-					font-size: px2vw(25px);
-					color: #f44336;
-					
-					view:first-child {
-						font-weight: bold;
-						margin-right: px2vw(10px);
-						white-space: nowrap;
-					}
-					
-					view:last-child {
-						flex: 1;
-						word-break: break-word;
-					}
-				}
-			}
-
-			.processes-section {
-					width: 100%;
-					display: flex;
-					justify-content: center;
-					margin-top: px2vw(20px);
-					padding: 0 px2vw(20px);
-				}
-
-				/* 更新进程相关CSS样式，使排列更紧凑 */
-
-				.processes-container {
-					display: flex;
-					align-items: flex-start;
-					justify-content: flex-start;
-					/* 从左往右紧凑排列 */
-					width: 100%;
-					flex-wrap: wrap;
-					gap: px2vw(10px);
-					/* 使用gap控制间距 */
-				}
-
-				.process-wrapper {
-					display: flex;
-					align-items: center;
-					margin: 0;
-					/* 移除原有margin */
-				}
-
-				.process-item {
-					display: flex;
-					flex-direction: column;
-					align-items: center;
-					margin-right: 0;
-					position: relative;
-					padding: px2vw(8px);
-					border-radius: px2vw(12px);
-
-					&.process-over {
-						.progress-circle {
-							background: conic-gradient(#f44336 0%, #f44336 var(--percent), #E0E0E0 var(--percent), #E0E0E0 100%) !important;
-						}
-
-						.progress-text {
-							color: #f44336 !important;
-						}
-
-						.process-name {
-							color: #f44336 !important;
+						.model-value {
+							flex: 1;
 						}
 					}
-				}
 
-				/* 更新进程CSS：增大圆圈并调整横线位置 */
+					.problemDescription {
+						width: px2vw(600px);
+						display: flex;
+						margin: px2vw(30px);
+						font-size: px2vw(25px);
+						color: #f44336;
 
-				.progress-circle {
-					width: px2vw(120px);
-					height: px2vw(120px);
-					border-radius: 50%;
-					background: conic-gradient(#4CAF50 0%, #4CAF50 var(--percent), #E0E0E0 var(--percent), #E0E0E0 100%);
-					display: flex;
-					align-items: center;
-					justify-content: center;
-					position: relative;
-					cursor: pointer;
-				}
+						view:first-child {
+							font-weight: bold;
+							margin-right: px2vw(10px);
+							white-space: nowrap;
+						}
 
-				.progress-inner {
-					position: absolute;
-					width: 80%;
-					height: 80%;
-					border-radius: 50%;
-					background: white;
-					display: flex;
-					align-items: center;
-					justify-content: center;
-					font-size: px2vw(12px);
-					top: 10%;
-					left: 10%;
-				}
-
-				.progress-text {
-					font-size: px2vw(20px);
-					font-weight: bold;
-					color: #333;
-					text-align: center;
-				}
-
-				.process-name {
-					margin-top: px2vw(10px);
-					/* 略增名称间距适应大圆 */
-					font-size: px2vw(24px);
-					color: #555;
-					text-align: center;
-					max-width: px2vw(150px);
-					word-break: break-word;
-				}
-
-				.connector {
-					width: px2vw(30px);
-					height: px2vw(3px);
-					background-color: #ccc;
-					margin: 0 px2vw(8px) 0 px2vw(10px);
-					position: relative;
-					top: px2vw(-10px);
-					/* 往上移20px，靠近圆圈底部 */
+						view:last-child {
+							flex: 1;
+							word-break: break-word;
+						}
+					}
 				}
 			}
 			
