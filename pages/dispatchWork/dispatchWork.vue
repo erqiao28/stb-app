@@ -92,6 +92,26 @@
               </view>
             </view>
             
+            <!-- 派工日期和是否包含最终工序 -->
+            <view class="row-group">
+              <view class="form-group">
+                <text class="label">派工日期：</text>
+                <picker mode="date" :value="multiDispatchData.date" @change="onMultiDateChange">
+                  <view class="value">
+                    {{ multiDispatchData.date || '请选择日期' }}
+                  </view>
+                </picker>
+              </view>
+              <view class="form-group">
+                <text class="label">是否包含最终工序：</text>
+                <picker mode="selector" :range="isLastOptions" :value="multiIsLastIndex" @change="onMultiIsLastChange">
+                  <view class="value">
+                    {{ multiDispatchData.isLast || '请选择' }}
+                  </view>
+                </picker>
+              </view>
+            </view>
+            
             <!-- 所选工序展示 -->
             <view class="row-group">
               <view class="form-group full">
@@ -510,8 +530,11 @@ const selectedMultiProcesses = ref([]) // 多选的工序列表 [{ item, process
 const multiDispatchData = ref({
   orderCount: 0,
   productionCount: 0,
-  quantity: 0
+  quantity: 0,
+  date: '', // 派工日期
+  isLast: '否' // 是否包含最终工序：是、否，默认值为否
 })
+const multiIsLastIndex = ref(1) // 多对多派工最终工序索引，默认选中第二个选项（否）
 const multiEmployeeList = ref([])
 const selectedMultiEmployees = ref([])
 const currentMultiDispatchItem = ref(null) // 当前多对多派工的单据
@@ -1042,11 +1065,21 @@ const openMultiDispatchModal = (item) => {
   }
   
   currentMultiDispatchItem.value = item
+  // 初始化日期为今天，格式：YYYY-MM-DD
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+  const todayStr = `${year}-${month}-${day}`
+  
   multiDispatchData.value = {
     orderCount: item.orderCount || 0,
     productionCount: item.productionCount || 0,
-    quantity: 0
+    quantity: 0,
+    date: todayStr, // 默认今天
+    isLast: '否' // 默认值为否
   }
+  multiIsLastIndex.value = 1 // 默认选中第二个选项（否）
   multiEmployeeList.value = []
   selectedMultiEmployees.value = []
   
@@ -1063,8 +1096,11 @@ const closeMultiDispatchModal = () => {
   multiDispatchData.value = {
     orderCount: 0,
     productionCount: 0,
-    quantity: 0
+    quantity: 0,
+    date: '',
+    isLast: '否'
   }
+  multiIsLastIndex.value = 1
   multiEmployeeList.value = []
   selectedMultiEmployees.value = []
   currentMultiDispatchItem.value = null
@@ -1197,6 +1233,11 @@ const confirmMultiDispatch = async () => {
     return
   }
   
+  if (!multiDispatchData.value.date) {
+    uni.showToast({ title: '请选择派工日期', icon: 'none' })
+    return
+  }
+  
   // 获取选中的员工信息
   const selectedEmployees = multiEmployeeList.value.filter(emp => selectedMultiEmployees.value.includes(emp.id))
   
@@ -1213,11 +1254,13 @@ const confirmMultiDispatch = async () => {
       rowid: p.process.rowid,
     })),
     quantity: multiDispatchData.value.quantity,
+    date: multiDispatchData.value.date || '',
+    isLast: multiDispatchData.value.isLast === '是' ? 1 : 0, // 是为1，否为0
     employees: selectedEmployees.map(emp => ({
       id: emp.id,
     }))
   }
-  
+
   try {
     const res = await http.post('https://www.dachen.vip/api/workflow/hooks/Njk4MmRkMTUwZjBkMGFkODBmZTM1YjAy', dispatchParams)
     
@@ -1290,6 +1333,17 @@ const closeProcessModal = () => {
 // 日期选择变化处理
 const onDateChange = (e) => {
   processDispatchData.value.date = e.detail.value
+}
+
+// 多对多派工日期选择变化处理
+const onMultiDateChange = (e) => {
+  multiDispatchData.value.date = e.detail.value
+}
+
+// 多对多派工是否包含最终工序选择变化处理
+const onMultiIsLastChange = (e) => {
+  multiIsLastIndex.value = e.detail.value
+  multiDispatchData.value.isLast = isLastOptions.value[e.detail.value]
 }
 
 // 模态框车间选择变化处理

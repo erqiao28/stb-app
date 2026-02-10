@@ -158,6 +158,13 @@ onLoad((options) => {
 		// 如果没有传顺序，默认为1
 		productionSequence.value = '1.00'
 	}
+	// 初始化计划生产日期为今天，格式：YYYY-MM-DD
+	const today = new Date()
+	const year = today.getFullYear()
+	const month = String(today.getMonth() + 1).padStart(2, '0')
+	const day = String(today.getDate()).padStart(2, '0')
+	const todayStr = `${year}-${month}-${day}`
+	plannedProductionDate.value = todayStr
 	getProcessList(1, true)  // 初次加载全部
 })
 
