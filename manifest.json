@@ -2,8 +2,8 @@
     "name" : "施坦博派工系统",
     "appid" : "__UNI__CAA0892",
     "description" : "",
-    "versionName" : "1.1.3",
-    "versionCode" : 113,
+    "versionName" : "1.1.4",
+    "versionCode" : 114,
     "transformPx" : true,
     "designWidth" : 1334,
     "screenWidth" : 1334,
@@ -51,23 +51,23 @@
             "sdkConfigs" : {},
             "icons" : {
                 "android" : {
-                    "hdpi" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczn.png",
-                    "xhdpi" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczn.png",
-                    "xxhdpi" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczn.png",
-                    "xxxhdpi" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczn.png"
+                    "hdpi" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczj.png",
+                    "xhdpi" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczj.png",
+                    "xxhdpi" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczj.png",
+                    "xxxhdpi" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczj.png"
                 },
                 "ios" : {
                     "appstore" : "",
                     "ipad" : {
-                        "app" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczn.png",
-                        "app@2x" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczn.png",
-                        "proapp@2x" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczn.png",
-                        "spotlight" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczn.png",
-                        "spotlight@2x" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczn.png",
-                        "settings" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczn.png",
-                        "settings@2x" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczn.png",
-                        "notification" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczn.png",
-                        "notification@2x" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczn.png"
+                        "app" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczj.png",
+                        "app@2x" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczj.png",
+                        "proapp@2x" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczj.png",
+                        "spotlight" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczj.png",
+                        "spotlight@2x" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczj.png",
+                        "settings" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczj.png",
+                        "settings@2x" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczj.png",
+                        "notification" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczj.png",
+                        "notification@2x" : "C:/Users/C'heng'quan'feng/OneDrive/图片/Saved Pictures/dczj.png"
                     }
                 }
             }

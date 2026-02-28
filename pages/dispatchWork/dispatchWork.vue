@@ -790,6 +790,7 @@ const search = async () => {
     needCount: item['690dc19f8d797ee211e7fc60'],
     finishCount: item['69840b633b5e707f84cf341e'],
     processOrder: item['6593b07ae97eb866a50eeba1'],
+    productcode: item['691d6160535b29cbd5c6c0a9'],
     worktime: item['69211dac21066a9f124f62df'],
     sequence: item['693a62040f64427fac25ae80'],
     hourlyoutput: item['693a879a0f64427fac25da92'],
@@ -805,8 +806,14 @@ const search = async () => {
   const newBillsList = billsRes.data.map(item => {
     const orderGoods = item['691c47ee1c02c451c72a81c5']
     const orderCode = item['655e1cbbbd2094b316347f92']
+    const productionCode = item['698438933b5e707f84cf51fd'] // 生产编码
     const billType = item['694a3954687045435008a7c3'] || '正常排产'
-    const processes = processList.value.filter(p => p.processOrder === orderCode && p.sonoutput !== "[]")
+    // 匹配工序：同时匹配订单编码和生产编码
+    const processes = processList.value.filter(p => 
+      p.processOrder === orderCode && 
+      p.productcode === productionCode && 
+      p.sonoutput !== "[]"
+    )
       .sort((a, b) => {
         // 按sequence字段从小到大排序
         const seqA = a.sequence || 0
@@ -1936,7 +1943,7 @@ onUnload(() => {
 <style scoped lang="scss">
 /* 整体容器样式 */
 .process-container {
-  height: 100vh;
+  min-height: 100vh;
   width: 100vw;
   background-color: #f0f0f0;
 
@@ -2100,6 +2107,7 @@ onUnload(() => {
     flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    background-color: #f0f0f0;
 
     .orderItem {
       width: 98%;
