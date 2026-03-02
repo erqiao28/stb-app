@@ -375,6 +375,10 @@
               <view>{{ item.name }}</view>
             </view>
             <view class="productCode">
+              <view>规格型号：</view>
+              <view>{{ item.models }}</view>
+            </view>
+            <view class="productCode">
               <view>生产执行单：</view>
               <view>{{ item.productionCode }}</view>
             </view>
@@ -837,6 +841,7 @@ const search = async () => {
       orderCount: item['681b0b53b139204fd264c5fd'],
       productionCount: item['67de8eb5c5377d50a523ef9b'], // 排产数量
       name: item['6937d255ff2b019b3cb34be3'],
+      models: item['6937d255ff2b019b3cb34be4'], // 规格型号
       productionCode: item['698438933b5e707f84cf51fd'],
       image: imageData,
       sop,
