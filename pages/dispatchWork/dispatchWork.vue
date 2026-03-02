@@ -1027,17 +1027,17 @@ const selectProcess = (item, process) => {
   }
 }
 
-// 判断工序是否被选中
+// 判断工序是否被选中（以订单编码 + 工序 rowid 为基准，避免同名工序全部高亮）
 const isProcessSelected = (item, process) => {
   if (!selectedProcess.value) return false
-  return selectedProcess.value.item.orderCode === item.orderCode && 
-         selectedProcess.value.process.processName === process.processName
+  return selectedProcess.value.item.orderCode === item.orderCode &&
+         selectedProcess.value.process.rowid === process.rowid
 }
 
-// 多选工序相关方法
+// 多选工序相关方法（以订单编码 + 工序 rowid 为基准）
 const toggleMultiProcess = (item, process) => {
-  const index = selectedMultiProcesses.value.findIndex(p => 
-    p.item.orderCode === item.orderCode && p.process.processName === process.processName
+  const index = selectedMultiProcesses.value.findIndex(p =>
+    p.item.orderCode === item.orderCode && p.process.rowid === process.rowid
   )
   
   if (index >= 0) {
@@ -1049,10 +1049,10 @@ const toggleMultiProcess = (item, process) => {
   }
 }
 
-// 判断工序是否被多选
+// 判断工序是否被多选（以订单编码 + 工序 rowid 为基准）
 const isMultiProcessSelected = (item, process) => {
-  return selectedMultiProcesses.value.some(p => 
-    p.item.orderCode === item.orderCode && p.process.processName === process.processName
+  return selectedMultiProcesses.value.some(p =>
+    p.item.orderCode === item.orderCode && p.process.rowid === process.rowid
   )
 }
 
@@ -1392,10 +1392,10 @@ const confirmProcessDispatch = async () => {
   }
   
   const hourlyOutput = selectedProcessData.value?.process?.hourlyoutput || 0
-  if (!hourlyOutput || hourlyOutput <= 0) {
-    uni.showToast({ title: '该工序的小时产量数据异常，无法计算派工工时', icon: 'none' })
-    return
-  }
+  // if (!hourlyOutput || hourlyOutput <= 0) {
+  //   uni.showToast({ title: '该工序的小时产量数据异常，无法计算派工工时', icon: 'none' })
+  //   return
+  // }
   
   if (!processDispatchData.value.time || processDispatchData.value.time <= 0) {
     uni.showToast({ title: '派工工时计算错误，请检查派工数量', icon: 'none' })
