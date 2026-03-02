@@ -1397,10 +1397,10 @@ const confirmProcessDispatch = async () => {
   //   return
   // }
   
-  if (!processDispatchData.value.time || processDispatchData.value.time <= 0) {
-    uni.showToast({ title: '派工工时计算错误，请检查派工数量', icon: 'none' })
-    return
-  }
+  // if (!processDispatchData.value.time || processDispatchData.value.time <= 0) {
+  //   uni.showToast({ title: '派工工时计算错误，请检查派工数量', icon: 'none' })
+  //   return
+  // }
   if (!machine.value?.code) {
     uni.showToast({ title: '请选择机台', icon: 'none' })
     return
