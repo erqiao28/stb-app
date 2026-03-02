@@ -27,7 +27,7 @@
 
 		<!-- 订单列表 -->
 		<view class="orderList">
-			<view class="orderItem" v-for="item in billsList" @click="selectOrder(item.orderCode)">
+			<view class="orderItem" v-for="item in billsList" @click="selectOrder(item)">
 				<view class="goodsInfo">
 					<view class="goodsInfo-up">
 						<view class="orderCode">
@@ -74,9 +74,10 @@
 import { onLoad } from '@dcloudio/uni-app'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import http from '../../utils/request'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 const { statusBarHeight } = useStatusBar()
+const STORAGE_KEY = 'selectBillsSearch'
 const workshop = ref('')
 const billTypeFilter = ref('正常排产')  // 单据类型过滤参数：正常排产、返工排产（用于获取单据）
 const billsList = ref([])  // 单据列表
@@ -93,8 +94,34 @@ onLoad((options) => {
 		const type = decodeURIComponent(options.type)  // 接收单据类型参数：正常排产 或 返工排产
 		billTypeFilter.value = type
 	}
+	// 读取本地保存的搜索条件
+	try {
+		const saved = uni.getStorageSync(STORAGE_KEY)
+		if (saved && typeof saved === 'object') {
+			searchValue.value.salesOrder = saved.salesOrder || ''
+			searchValue.value.orderItem = saved.orderItem || ''
+		}
+	} catch (e) {
+		// ignore
+	}
 	search()  // 默认加载时搜索
 })
+
+// 监听搜索条件变化，持久化到本地，避免页面跳转或刷新后被清空
+watch(
+	() => searchValue.value,
+	(val) => {
+		try {
+			uni.setStorageSync(STORAGE_KEY, {
+				salesOrder: val.salesOrder || '',
+				orderItem: val.orderItem || ''
+			})
+		} catch (e) {
+			// ignore
+		}
+	},
+	{ deep: true }
+)
 
 const getBillsListRaw = async () => {
 	const filters = [{
@@ -172,9 +199,13 @@ const quit = () => {
 	})
 }
 
-const selectOrder = (orderCode) => {
-	uni.$emit('selectOrder', orderCode)
-	uni.navigateBack()
+const selectOrder = (item) => {
+	// 直接跳转到派工页面，并通过参数传递订单号、生产单号和当前类型/车间
+	const orderCode = item.orderCode || ''
+	const productionCode = item.productionCode || ''
+	uni.navigateTo({
+		url: `/pages/dispatchWork/dispatchWork?type=${encodeURIComponent(billTypeFilter.value)}&workshop=${encodeURIComponent(workshop.value)}&orderCode=${encodeURIComponent(orderCode)}&productionCode=${encodeURIComponent(productionCode)}`
+	})
 }
 
 </script>

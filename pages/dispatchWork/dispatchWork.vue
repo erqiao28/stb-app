@@ -316,26 +316,20 @@
     <view class="btn-list">
       <view class="btn-item" @click="goDispatchInquiry">派工查询</view>
       <view class="btn-item" @click="goWorkload">员工工作量查询</view>
-      <view class="btn-item" @click="goWorkGuide">作业指导书</view>
+      <view class="btn-item" @click="goWorkGuide">作业指导书查询</view>
     </view>
-    
-    <!-- 搜索区域 -->
-    <view class="search-box">
-      <view class="assemble">
-        <view class="assemble-box" :class="{ 'assemble-box-disabled': isWorkshopLocked }" @click="!isWorkshopLocked && (showWorkshopModal = true)">
-          {{ workshop }}
-        </view>
+
+    <!-- 车间 / 单据选择栏（样式与功能按钮栏一致） -->
+    <view class="btn-list">
+      <view
+        class="btn-item"
+        :class="{ 'btn-item-disabled': isWorkshopLocked }"
+        @click="!isWorkshopLocked && (showWorkshopModal = true)"
+      >
+        {{ workshop }}
       </view>
-      <view class="selectDocument" @click="goSelectBills">选择正常单据</view>
-      <view class="selectDocument" @click="goSelectReworkBills">选择返工单据</view>
-      <view class="device">
-        <view class="input-box">
-          <input type="text" v-model="searchValue" placeholder="请输入客户或单据编码" @input="search" />
-        </view>
-      </view>
-      <view class="scan">
-        <image src="/static/scan.svg"></image>
-      </view>
+      <view class="btn-item" @click="goSelectBills">选择正常单据</view>
+      <view class="btn-item" @click="goSelectReworkBills">选择返工单据</view>
     </view>
 
     <!-- 单据列表 -->
@@ -482,7 +476,11 @@ const machineOptions = ref([])
 const showMachineModal = ref(false)
 
 // ---------- 搜索和列表相关 ----------
+// searchValue 仅作为当前选中订单号的展示/占位使用，不再从输入框录入
 const searchValue = ref('')
+// 当前选中的订单号和生产单号（由选择单据页面传入）
+const selectedOrderCode = ref('')
+const selectedProductionCode = ref('')
 const billTypeFilter = ref('正常排产')  // 单据类型过滤参数：正常排产、返工排产（用于获取单据）
 const billsList = ref([])
 const processList = ref([])
@@ -698,7 +696,7 @@ const getProcessTypeParam = (billType) => {
   return billType === '返工排产' ? '返工派工' : '正常派工'
 }
 
-const getProcessRaw = async (searchVal = '', billTypeValue = '') => {
+const getProcessRaw = async (processOrder = '', productcode = '', billTypeValue = '') => {
   // 根据单据的billType决定processTypeParam
   const processTypeParam = getProcessTypeParam(billTypeValue || '正常排产')
   
@@ -715,13 +713,22 @@ const getProcessRaw = async (searchVal = '', billTypeValue = '') => {
     "filterType": 2,
     "values": [processTypeParam]
   }]
-  if (searchVal) {
+  if (processOrder) {
     filters.push({
       "controlId": "6593b07ae97eb866a50eeba1",
       "dataType": 30,
       "spliceType": 1,
       "filterType": 2,
-      "values": [searchVal]
+      "values": [processOrder]
+    })
+  }
+  if (productcode) {
+    filters.push({
+      "controlId": "691d6160535b29cbd5c6c0a9",
+      "dataType": 30,
+      "spliceType": 1,
+      "filterType": 2,
+      "values": [productcode]
     })
   }
   const res = await callWorkflowListAPIPaged({
@@ -731,7 +738,7 @@ const getProcessRaw = async (searchVal = '', billTypeValue = '') => {
   return res
 }
 
-const getBillsListRaw = async (searchVal = '') => {
+const getBillsListRaw = async (orderCode = '', productionCode = '') => {
   const filters = [{
     "controlId": "67de26c9c5377d50a523c735",
     "dataType": 30,
@@ -745,13 +752,22 @@ const getBillsListRaw = async (searchVal = '') => {
     "filterType": 2,
     "values": [billTypeFilter.value]
   }]
-  if (searchVal) {
+  if (orderCode) {
     filters.push({
       "controlId": "655e1cbbbd2094b316347f92",
       "dataType": 30,
       "spliceType": 1,
       "filterType": 2,
-      "values": [searchVal]
+      "values": [orderCode]
+    })
+  }
+  if (productionCode) {
+    filters.push({
+      "controlId": "698438933b5e707f84cf51fd",
+      "dataType": 30,
+      "spliceType": 1,
+      "filterType": 2,
+      "values": [productionCode]
     })
   }
   const res = await callWorkflowListAPIPaged({
@@ -769,14 +785,15 @@ const search = async () => {
     selectedMultiProcesses.value = []
   }
   
-  if (!searchValue.value || !searchValue.value.trim()) {
+  // 需要已选择的订单号和生产执行单号才能加载数据
+  if (!selectedOrderCode.value || !selectedProductionCode.value) {
     billsList.value = []
     processList.value = []
     return
   }
   
   // 先获取单据列表
-  const billsRes = await getBillsListRaw(searchValue.value)
+  const billsRes = await getBillsListRaw(selectedOrderCode.value, selectedProductionCode.value)
   
   if (billsRes.data.length === 0) {
     billsList.value = []
@@ -786,7 +803,7 @@ const search = async () => {
 
   // 根据每个单据的billType分别获取对应的工序
   const billTypes = [...new Set(billsRes.data.map(item => item['694a3954687045435008a7c3'] || '正常排产'))]
-  const processPromises = billTypes.map(billType => getProcessRaw(searchValue.value, billType))
+  const processPromises = billTypes.map(billType => getProcessRaw(selectedOrderCode.value, selectedProductionCode.value, billType))
   const processResults = await Promise.all(processPromises)
   
   // 合并所有工序结果
@@ -864,7 +881,8 @@ const search = async () => {
 }
 
 const loadAllData = async () => {
-  if (!searchValue.value || !searchValue.value.trim()) {
+  // 需要已选择的订单号和生产执行单号才能加载数据
+  if (!selectedOrderCode.value || !selectedProductionCode.value) {
     billsList.value = []
     processList.value = []
     return
@@ -1287,7 +1305,7 @@ const confirmMultiDispatch = async () => {
     selectedMultiProcesses.value = []
     
     // 派工成功后刷新数据
-    if (searchValue.value && searchValue.value.trim()) {
+    if (selectedOrderCode.value && selectedProductionCode.value) {
       setTimeout(async () => {
         await search()
       }, 1000)
@@ -1449,7 +1467,7 @@ const confirmProcessDispatch = async () => {
     uni.showToast({ title: '派工成功' })
     showProcessModal.value = false
     // 派工成功后刷新数据，确保进度条更新
-    if (searchValue.value && searchValue.value.trim()) {
+    if (selectedOrderCode.value && selectedProductionCode.value) {
       // 添加延迟，确保后端数据已更新
       setTimeout(async () => {
         await search()
@@ -1850,7 +1868,7 @@ const deleteProcess = async () => {
           // 关闭模态框
           showProcessModal.value = false
           // 刷新数据，确保数据更新
-          if (searchValue.value && searchValue.value.trim()) {
+          if (selectedOrderCode.value && selectedProductionCode.value) {
             // 添加延迟，确保后端数据已更新
             setTimeout(async () => {
               await search()
@@ -1913,20 +1931,28 @@ onLoad((options) => {
     }
   }
 
+  // 如果从选择单据页面带回了订单号和生产单号，则优先使用这两个参数加载对应单据和工序
+  if (options && options.orderCode) {
+    selectedOrderCode.value = decodeURIComponent(options.orderCode)
+    searchValue.value = selectedOrderCode.value
+  }
+  if (options && options.productionCode) {
+    selectedProductionCode.value = decodeURIComponent(options.productionCode)
+  }
+
   // 检查仓库中的权限字段（车间）
   if (userStore.loginLimits && userStore.loginLimits.trim()) {
     workshop.value = userStore.loginLimits
     isWorkshopLocked.value = true // 锁定车间，不允许修改
   }
-  
-  uni.$on('selectOrder', (order) => {
-    searchValue.value = order
-  })
+
   uni.$on('processAdded', (data) => {
     // 事件已接收，刷新由 onShow 处理
   })
   uni.$on('clearDispatchData', () => {
     searchValue.value = ''
+    selectedOrderCode.value = ''
+    selectedProductionCode.value = ''
     billsList.value = []
     processList.value = []
   })
@@ -1943,7 +1969,7 @@ onShow(() => {
     }
   }
   
-  if (searchValue.value && searchValue.value.trim()) {
+  if (selectedOrderCode.value && selectedProductionCode.value) {
     setTimeout(() => {
       loadAllData()
     }, 500)
@@ -1951,7 +1977,6 @@ onShow(() => {
 })
 
 onUnload(() => {
-  uni.$off('selectOrder')
   uni.$off('processAdded')
   uni.$off('clearDispatchData')
 })
@@ -2029,93 +2054,12 @@ onUnload(() => {
       align-items: center;
       background-color: #2755f1;
       font-size: px2vw(25px);
-    }
-  }
-
-  /* 搜索区域样式 */
-  .search-box {
-    display: flex;
-    height: px2vw(100px);
-    width: 100%;
-    background-color: #fff;
-
-    .device {
-      display: flex;
-      align-items: center;
-
-      .input-box {
-        width: px2vw(1100px);
-        height: px2vw(80px);
-        margin-right: px2vw(10px);
-        border: px2vw(3px) solid #5884f1;
-        border-radius: px2vw(18px);
-        display: flex;
-        align-items: center;
-        padding: 0 px2vw(35px);
-        margin-left: px2vw(10px);
-
-        input {
-          width: 100%;
-          font-size: px2vw(30px);
-        }
-      }
-    }
-
-    .scan {
-      display: flex;
-      align-items: center;
-
-      image {
-        width: px2vw(80px);
-        height: px2vw(80px);
-      }
-    }
-
-    .assemble {
-      width: px2vw(280px);
-      height: px2vw(80px);
-      margin: px2vw(10px);
-      padding: px2vw(16px) px2vw(25px);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      border-radius: px2vw(18px);
-      color: #fff;
-      display: flex;
-      align-items: center;
-      background-color: #2755f1;
-      font-size: px2vw(25px);
       
-      .assemble-box {
-        width: 100%;
-        height: 100%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        cursor: pointer;
-        
-        &.assemble-box-disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-          pointer-events: none;
-        }
+      &.btn-item-disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        pointer-events: none;
       }
-    }
-    
-    .selectDocument {
-      width: px2vw(280px);
-      height: px2vw(80px);
-      margin: px2vw(10px);
-      padding: px2vw(16px) px2vw(25px);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      border-radius: px2vw(18px);
-      color: #fff;
-      display: flex;
-      align-items: center;
-      background-color: #2755f1;
-      font-size: px2vw(25px);
     }
   }
 
