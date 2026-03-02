@@ -374,10 +374,7 @@
               <view>产品名称：</view>
               <view>{{ item.name }}</view>
             </view>
-            <view class="productCode">
-              <view>规格型号：</view>
-              <view>{{ item.models }}</view>
-            </view>
+            
             <view class="productCode">
               <view>生产执行单：</view>
               <view>{{ item.productionCode }}</view>
@@ -391,6 +388,10 @@
               <view>{{ item.productionCount }}</view>
             </view>
           </view>
+          <view class="models">
+              <view>规格型号：</view>
+              <view>{{ item.models }}</view>
+            </view>
           
           <!-- 问题描述 -->
           <view class="problemDescription" v-if="item.problemDescription && item.problemDescription.trim()">
@@ -2270,7 +2271,14 @@ onUnload(() => {
           }
         }
 
-        .problemDescription {
+        .models {
+          display: flex;
+          margin: px2vw(20px) px2vw(20px);
+          font-size: px2vw(25px);
+          width: px2vw(1800px);
+        }
+
+        .problemDescription{
           display: flex;
           margin: px2vw(10px) px2vw(20px);
           font-size: px2vw(25px);
