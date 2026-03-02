@@ -156,8 +156,16 @@ const search = async () => {
 		return
 	}
 
+	// 固定过滤：字段 66974cda2503723eec1af600 不为 "[]"
+	const filteredData = billsRes.data.filter(item => item['66974cda2503723eec1af600'] !== '[]')
+
+	if (!filteredData.length) {
+		billsList.value = []
+		return
+	}
+
 	// 基础映射
-	let mappedList = billsRes.data.map(item => {
+	let mappedList = filteredData.map(item => {
 		const orderCode = item['655e1cbbbd2094b316347f92']  // 旧订单编码 ID
 		const billType = item['694a3954687045435008a7c3'] || '正常排产'
 
