@@ -175,7 +175,10 @@ const search = async () => {
 
 // 退出
 const quit = () => {
-	uni.navigateBack()
+	// 返回派工页面时，带上当前的单据类型（正常排产 / 返工排产），方便派工页继续按同类型处理
+	uni.redirectTo({
+		url: `/pages/dispatchWork/dispatchWork?type=${encodeURIComponent(billTypeFilter.value)}&workshop=${encodeURIComponent(workshop.value)}`
+	})
 }
 
 const selectOrder = (orderCode) => {

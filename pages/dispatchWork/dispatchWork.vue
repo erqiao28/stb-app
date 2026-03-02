@@ -1867,7 +1867,10 @@ const deleteProcess = async () => {
 }
 
 const quit = () => {
-  uni.navigateBack()
+  // 根据当前单据类型过滤参数（正常排产 / 返工排产）返回对应的选择单据页面
+  uni.redirectTo({
+    url: `/pages/selectBills/selectBills?workshop=${workshop.value}&type=${encodeURIComponent(billTypeFilter.value)}`
+  })
 }
 
 // ==================== Watch监听器 ====================
@@ -1901,7 +1904,15 @@ const calculateWorkTime = () => {
 }
 
 // ==================== 生命周期钩子 ====================
-onLoad(() => {
+onLoad((options) => {
+  // 如果从选择单据页面带回了单据类型参数（正常排产 / 返工排产），优先使用该参数
+  if (options && options.type) {
+    const type = decodeURIComponent(options.type)
+    if (type === '正常排产' || type === '返工排产') {
+      billTypeFilter.value = type
+    }
+  }
+
   // 检查仓库中的权限字段（车间）
   if (userStore.loginLimits && userStore.loginLimits.trim()) {
     workshop.value = userStore.loginLimits
