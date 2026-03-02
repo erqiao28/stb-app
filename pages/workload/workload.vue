@@ -19,6 +19,17 @@
 			</view>
 		</view>
 
+		<!-- 车间选择 -->
+		<view class="workshop-filter">
+			<text class="filter-label">车间：</text>
+			<picker mode="selector" :range="workshopOptions" range-key="label" @change="onWorkshopChange">
+				<view class="picker-display">
+					<text class="picker-text">{{ selectedWorkshop }}</text>
+					<text class="picker-arrow">▼</text>
+				</view>
+			</picker>
+		</view>
+
 		<!-- 表格区域 -->
 		<view class="table">
 			<scroll-view scroll-y class="table-content" @scrolltolower="loadMore" lower-threshold="50">
@@ -81,6 +92,29 @@ const pageSize = ref(10)
 const hasMore = ref(true)
 const loading = ref(false)
 
+// 车间单选
+const workshopOptions = ref([
+	{ label: '拉伸车间', value: '拉伸车间' },
+	{ label: '抛光车间', value: '抛光车间' },
+	{ label: '组装车间', value: '组装车间' }
+])
+const selectedWorkshop = ref('拉伸车间')
+
+const onWorkshopChange = (e) => {
+	const index = e.detail.value
+	const item = workshopOptions.value[index]
+	if (!item) return
+
+	// 更新当前选中车间
+	selectedWorkshop.value = item.value
+
+	// 重置分页状态并重新拉取数据
+	currentPage.value = 1
+	hasMore.value = true
+	tableData.value = []
+	getWorkloadList(1, true)
+}
+
 onLoad(() => {
 	getWorkloadList(1, true)
 })
@@ -110,7 +144,13 @@ const getWorkloadList = async (pageNum, isRefresh = false) => {
 	
 	const res = await callWorkflowListAPIPaged({
 		worksheetId: 'yggs',
-		filters: []
+		filters: [{
+        "controlId": "696075d19223cfe3a0c169dc",
+        "dataType": 30,
+        "spliceType": 1,
+        "filterType": 2,
+        "values": [selectedWorkshop.value]
+      }]
 	}, pageSize.value, pageNum)
 	
 	const mappedData = res.data.map(item => ({
@@ -189,6 +229,39 @@ const quit = () => {
 				}
 			}
 		}
+	}
+
+	/* 车间选择 */
+	.workshop-filter {
+		padding: px2vw(16px) px2vw(24px);
+		display: flex;
+		align-items: center;
+		background-color: #f7f7f7;
+	}
+
+	.filter-label {
+		font-size: px2vw(30px);
+		margin-right: px2vw(20px);
+	}
+
+	.picker-display {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		min-width: px2vw(360px);
+		padding: px2vw(12px) px2vw(20px);
+		border-radius: px2vw(12px);
+		background-color: #ffffff;
+		border: 1px solid #e0e0e0;
+	}
+
+	.picker-text {
+		font-size: px2vw(28px);
+	}
+
+	.picker-arrow {
+		font-size: px2vw(24px);
+		color: #999999;
 	}
 }
 
