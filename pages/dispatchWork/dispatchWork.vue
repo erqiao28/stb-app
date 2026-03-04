@@ -1425,10 +1425,10 @@ const confirmProcessDispatch = async () => {
   //   uni.showToast({ title: '派工工时计算错误，请检查派工数量', icon: 'none' })
   //   return
   // }
-  if (!machine.value?.code) {
-    uni.showToast({ title: '请选择机台', icon: 'none' })
-    return
-  }
+  // if (!machine.value?.code) {
+  //   uni.showToast({ title: '请选择机台', icon: 'none' })
+  //   return
+  // }
   if (!selectedEmployee.value || selectedEmployee.value.length === 0) {
     uni.showToast({ title: '请至少选择一个员工', icon: 'none' })
     return
