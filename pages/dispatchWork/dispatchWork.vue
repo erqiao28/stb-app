@@ -294,42 +294,63 @@
     
     <!-- ==================== 页面主体内容 ==================== -->
     
-    <!-- 导航栏 -->
+    <!-- 导航栏（显示左侧返回箭头和标题，隐藏右侧按钮） -->
     <view class="header">
+      <!-- 左侧返回箭头保留 -->
       <image src="/static/left-arrow.svg" @click="quit"></image>
       <view class="title">
         派工( {{ userStore?.loginName || '' }} )
       </view>
+      <!-- 右侧切换 / 退出按钮按需求全部隐藏 -->
+      <!--
       <view class="btn-box">
         <view class="btn-one" @click="userStore?.logout()">
           <image src="/static/Quit.svg"></image>
-          <text>切换</text>
+          <text>退出</text>
         </view>
         <view class="btn-one">
           <image src="/static/Quit.svg"></image>
           <text>退出</text>
         </view>
       </view>
+      -->
     </view>
     
-    <!-- 功能按钮栏 -->
+    <!-- 功能按钮栏（派工查询、员工工作量查询、排产类型按钮） -->
     <view class="btn-list">
       <view class="btn-item" @click="goDispatchInquiry">派工查询</view>
       <view class="btn-item" @click="goWorkload">员工工作量查询</view>
-      <view class="btn-item" @click="goWorkGuide">作业指导书查询</view>
+      <!-- 排产类型按钮：正常排产 / 返工排产 -->
+      <view class="btn-item" @click="setBillType('正常排产')">正常排产</view>
+      <view class="btn-item" @click="setBillType('返工排产')">返工排产</view>
     </view>
 
-    <!-- 车间 / 单据选择栏（样式与功能按钮栏一致） -->
-    <view class="btn-list">
-      <view
-        class="btn-item"
-        :class="{ 'btn-item-disabled': isWorkshopLocked }"
-        @click="!isWorkshopLocked && (showWorkshopModal = true)"
-      >
-        {{ workshop }}
+    <!-- 搜索区域（只保留销售订单、订单物品） -->
+    <view class="search-box">
+      <view class="salesOrder">
+        <text class="salesOrder-text">销售订单</text>
+        <view class="input-box">
+          <input
+            type="text"
+            v-model="searchForm.salesOrder"
+            placeholder="请输入销售订单"
+            @input="search"
+          />
+        </view>
       </view>
-      <view class="btn-item" @click="goSelectBills">选择正常单据</view>
-      <view class="btn-item" @click="goSelectReworkBills">选择返工单据</view>
+
+      <view class="orderItem">
+        <text class="orderItem-text">订单物品</text>
+        <view class="input-box">
+          <input
+            type="text"
+            v-model="searchForm.orderItem"
+            placeholder="请输入订单物品"
+            @input="search"
+          />
+        </view>
+      </view>
+
     </view>
 
     <!-- 单据列表 -->
@@ -353,8 +374,9 @@
               </view>
             </view>
             <view class="buttons">
-              <button class="btn-dispatch" @click="lookImage(item)">查看图片</button>
-              <button class="btn-sop" @click="lookSop(item)">查看SOP</button>
+              <button class="btn-sop" @click="lookSop(item)">指导书</button>
+              <button class="btn-dispatch" @click="lookImage(item)">技术图纸</button>
+              <button class="btn-pack" @click="lookPackImage(item)">包装图纸</button>
               <button class="btn-detail" :disabled="!canClickDispatch(item)" @click="dispatchWork(item)">操作</button>
               <button class="btn-delete" @click="addProcess(item)">添加工序</button>
               <button class="btn-normal-process" v-if="item.billType === '返工排产'" @click="useNormalProcess(item)">使用正常工序</button>
@@ -478,10 +500,18 @@ const showMachineModal = ref(false)
 // ---------- 搜索和列表相关 ----------
 // searchValue 仅作为当前选中订单号的展示/占位使用，不再从输入框录入
 const searchValue = ref('')
-// 当前选中的订单号和生产单号（由选择单据页面传入）
+// 搜索条件：销售订单、订单物品
+const searchForm = ref({
+  salesOrder: '',
+  orderItem: ''
+})
+// 当前选中的订单号和生产单号（由选择单据页面传入，兼容历史逻辑，不再作为筛选必填项）
 const selectedOrderCode = ref('')
 const selectedProductionCode = ref('')
 const billTypeFilter = ref('正常排产')  // 单据类型过滤参数：正常排产、返工排产（用于获取单据）
+// 排产类型下拉选项
+const billTypeOptions = ref(['正常排产', '返工排产'])
+const billTypeIndex = ref(0)
 const billsList = ref([])
 const processList = ref([])
 const listKey = ref(0)
@@ -696,10 +726,10 @@ const getProcessTypeParam = (billType) => {
   return billType === '返工排产' ? '返工派工' : '正常派工'
 }
 
-const getProcessRaw = async (processOrder = '', productcode = '', billTypeValue = '') => {
-  // 根据单据的billType决定processTypeParam
+// 根据当前车间和单据类型获取工序列表（统一获取后在前端按订单匹配）
+const getProcessRaw = async (billTypeValue = '') => {
   const processTypeParam = getProcessTypeParam(billTypeValue || '正常排产')
-  
+
   const filters = [{
     "controlId": "669a6cae2503723eec1b49bb",
     "dataType": 30,
@@ -713,24 +743,7 @@ const getProcessRaw = async (processOrder = '', productcode = '', billTypeValue 
     "filterType": 2,
     "values": [processTypeParam]
   }]
-  if (processOrder) {
-    filters.push({
-      "controlId": "6593b07ae97eb866a50eeba1",
-      "dataType": 30,
-      "spliceType": 1,
-      "filterType": 2,
-      "values": [processOrder]
-    })
-  }
-  if (productcode) {
-    filters.push({
-      "controlId": "691d6160535b29cbd5c6c0a9",
-      "dataType": 30,
-      "spliceType": 1,
-      "filterType": 2,
-      "values": [productcode]
-    })
-  }
+
   const res = await callWorkflowListAPIPaged({
     worksheetId: 'paigongdan',
     filters
@@ -738,141 +751,180 @@ const getProcessRaw = async (processOrder = '', productcode = '', billTypeValue 
   return res
 }
 
-const getBillsListRaw = async (orderCode = '', productionCode = '') => {
+// 根据当前车间和单据类型获取单据列表
+const getBillsListRaw = async () => {
   const filters = [{
     "controlId": "67de26c9c5377d50a523c735",
     "dataType": 30,
     "spliceType": 1,
     "filterType": 2,
     "values": [workshop.value]
-  },{
+  }, {
     "controlId": "694a3954687045435008a7c3",
     "dataType": 30,
     "spliceType": 1,
     "filterType": 2,
     "values": [billTypeFilter.value]
   }]
-  if (orderCode) {
-    filters.push({
-      "controlId": "655e1cbbbd2094b316347f92",
-      "dataType": 30,
-      "spliceType": 1,
-      "filterType": 2,
-      "values": [orderCode]
-    })
-  }
-  if (productionCode) {
-    filters.push({
-      "controlId": "698438933b5e707f84cf51fd",
-      "dataType": 30,
-      "spliceType": 1,
-      "filterType": 2,
-      "values": [productionCode]
-    })
-  }
+
   const res = await callWorkflowListAPIPaged({
     worksheetId: 'paichanjihua',
-    filters,
+    filters
   })
   return res
+}
+
+// 排产类型下拉变化
+const onBillTypeChange = (e) => {
+  const index = e.detail.value
+  billTypeIndex.value = index
+  const type = billTypeOptions.value[index] || '正常排产'
+  billTypeFilter.value = type
+  search()
+}
+
+// 顶部按钮快速切换排产类型
+const setBillType = (type) => {
+  billTypeFilter.value = type
+  const index = billTypeOptions.value.indexOf(type)
+  billTypeIndex.value = index >= 0 ? index : 0
+  search()
 }
 
 const search = async () => {
   // 清除选中状态
   selectedProcess.value = null
-  // 如果是组装车间，不清空多选状态；否则清空
   if (workshop.value !== '组装车间') {
     selectedMultiProcesses.value = []
   }
-  
-  // 需要已选择的订单号和生产执行单号才能加载数据
-  if (!selectedOrderCode.value || !selectedProductionCode.value) {
-    billsList.value = []
-    processList.value = []
-    return
-  }
-  
-  // 先获取单据列表
-  const billsRes = await getBillsListRaw(selectedOrderCode.value, selectedProductionCode.value)
-  
-  if (billsRes.data.length === 0) {
+
+  // 获取单据列表（按车间和单据类型从后端筛选）
+  const billsRes = await getBillsListRaw()
+
+  if (!billsRes.data || billsRes.data.length === 0) {
     billsList.value = []
     processList.value = []
     return
   }
 
-  // 根据每个单据的billType分别获取对应的工序
-  const billTypes = [...new Set(billsRes.data.map(item => item['694a3954687045435008a7c3'] || '正常排产'))]
-  const processPromises = billTypes.map(billType => getProcessRaw(selectedOrderCode.value, selectedProductionCode.value, billType))
-  const processResults = await Promise.all(processPromises)
-  
-  // 合并所有工序结果
-  const allProcesses = processResults.flatMap(res => res.data.map(item => ({
-    processName: item['656ffd1bba5ef3863bf3ec1e'],
-    needCount: item['690dc19f8d797ee211e7fc60'],
-    finishCount: item['69840b633b5e707f84cf341e'],
-    processOrder: item['6593b07ae97eb866a50eeba1'],
-    productcode: item['691d6160535b29cbd5c6c0a9'],
-    worktime: item['69211dac21066a9f124f62df'],
-    sequence: item['693a62040f64427fac25ae80'],
-    hourlyoutput: item['693a879a0f64427fac25da92'],
-    rowid: item['rowid'],
-    isOver: item['6940f719c81c746aae8ede5d'],
-    price: item['657b282cd13eaaec2c6606b5'],
-    sonoutput: item['66974d062503723eec1af614'],
-    mold: item['695222a27a59e0522d853edf']
-  })))
-  
-  processList.value = allProcesses.map(item => ({ ...item }))
+  // 固定过滤：字段 66974cda2503723eec1af600 不为 "[]"
+  const filteredBillsData = billsRes.data.filter(item => item['66974cda2503723eec1af600'] !== '[]')
 
-  const newBillsList = billsRes.data.map(item => {
+  if (!filteredBillsData.length) {
+    billsList.value = []
+    processList.value = []
+    return
+  }
+
+  // 先做基础映射（不带工序）
+  let baseBills = filteredBillsData.map(item => {
     const orderGoods = item['691c47ee1c02c451c72a81c5']
     const orderCode = item['655e1cbbbd2094b316347f92']
-    const productionCode = item['698438933b5e707f84cf51fd'] // 生产编码
+    const productionCode = item['698438933b5e707f84cf51fd']
     const billType = item['694a3954687045435008a7c3'] || '正常排产'
-    // 匹配工序：同时匹配订单编码和生产编码
-    const processes = processList.value.filter(p => 
-      p.processOrder === orderCode && 
-      p.productcode === productionCode && 
-      p.sonoutput !== "[]"
-    )
-      .sort((a, b) => {
-        // 按sequence字段从小到大排序
-        const seqA = a.sequence || 0
-        const seqB = b.sequence || 0
-        return seqA - seqB
-      })
-    
+
     let imageData = item['6683a0448d2110bec155ac64']
     if (typeof imageData === 'string' && imageData.trim()) {
       try {
         imageData = JSON.parse(imageData)
       } catch (e) {
-        // 解析失败，保持原值
+        // ignore
       }
     }
 
     const sop = item['697b206a3b5e707f84cd9c48']
-    
+
     return {
       orderGoods,
       orderCount: item['681b0b53b139204fd264c5fd'],
-      productionCount: item['67de8eb5c5377d50a523ef9b'], // 排产数量
+      productionCount: item['67de8eb5c5377d50a523ef9b'],
       name: item['6937d255ff2b019b3cb34be3'],
-      models: item['6937d255ff2b019b3cb34be4'], // 规格型号
-      productionCode: item['698438933b5e707f84cf51fd'],
+      models: item['6937d255ff2b019b3cb34be4'],
+      productionCode,
       image: imageData,
       sop,
-      completedProcess: processes.length > 0 ? `${processes.filter(p => p.finishCount === p.needCount).length}/${processes.length}` : '0',
       productCode: item['691d6336535b29cbd5c6c0ca'],
-      processes: processes.map(p => ({ ...p })),
       orderCode,
-      problemDescription: item['694ba108dc025d98887fd782'] || '', // 问题描述字段
+      problemDescription: item['694ba108dc025d98887fd782'] || '',
       billRowid: item['rowid'],
-      billType: billType // 单据类型
+      billType
     }
   })
-  
+
+  // 前端模糊过滤：销售订单 -> orderCode，订单物品 -> name
+  const salesOrderKeyword = (searchForm.value.salesOrder || '').trim().toLowerCase()
+  const orderItemKeyword = (searchForm.value.orderItem || '').trim().toLowerCase()
+
+  if (salesOrderKeyword || orderItemKeyword) {
+    baseBills = baseBills.filter(item => {
+      const orderCodeStr = (item.orderCode || '').toString().toLowerCase()
+      const nameStr = (item.name || '').toString().toLowerCase()
+
+      const matchSalesOrder = !salesOrderKeyword || orderCodeStr.includes(salesOrderKeyword)
+      const matchOrderItem = !orderItemKeyword || nameStr.includes(orderItemKeyword)
+
+      return matchSalesOrder && matchOrderItem
+    })
+  }
+
+  if (!baseBills.length) {
+    billsList.value = []
+    processList.value = []
+    return
+  }
+
+  // 获取当前单据类型对应的工序列表（按车间 + 工序类型）
+  const processRes = await getProcessRaw(billTypeFilter.value)
+
+  if (!processRes.data || processRes.data.length === 0) {
+    processList.value = []
+  } else {
+    const allProcesses = processRes.data.map(item => ({
+      processName: item['656ffd1bba5ef3863bf3ec1e'],
+      needCount: item['690dc19f8d797ee211e7fc60'],
+      finishCount: item['69840b633b5e707f84cf341e'],
+      processOrder: item['6593b07ae97eb866a50eeba1'],
+      productcode: item['691d6160535b29cbd5c6c0a9'],
+      worktime: item['69211dac21066a9f124f62df'],
+      sequence: item['693a62040f64427fac25ae80'],
+      hourlyoutput: item['693a879a0f64427fac25da92'],
+      rowid: item['rowid'],
+      isOver: item['6940f719c81c746aae8ede5d'],
+      price: item['657b282cd13eaaec2c6606b5'],
+      sonoutput: item['66974d062503723eec1af614'],
+      mold: item['695222a27a59e0522d853edf']
+    }))
+
+    processList.value = allProcesses.map(p => ({ ...p }))
+  }
+
+  const allProcesses = processList.value || []
+
+  const newBillsList = baseBills.map(bill => {
+    const processes = allProcesses
+      .filter(p =>
+        p.processOrder === bill.orderCode &&
+        p.productcode === bill.productionCode &&
+        p.sonoutput !== '[]'
+      )
+      .sort((a, b) => {
+        const seqA = a.sequence || 0
+        const seqB = b.sequence || 0
+        return seqA - seqB
+      })
+
+    const completedProcessText =
+      processes.length > 0
+        ? `${processes.filter(p => p.finishCount === p.needCount).length}/${processes.length}`
+        : '0'
+
+    return {
+      ...bill,
+      processes: processes.map(p => ({ ...p })),
+      completedProcess: completedProcessText
+    }
+  })
+
   billsList.value = []
   await nextTick()
   billsList.value = newBillsList
@@ -880,23 +932,13 @@ const search = async () => {
   await nextTick()
 }
 
-const loadAllData = async () => {
-  // 需要已选择的订单号和生产执行单号才能加载数据
-  if (!selectedOrderCode.value || !selectedProductionCode.value) {
-    billsList.value = []
-    processList.value = []
-    return
-  }
-  
-  await search()
-}
-
 // ---------- 图片 / SOP 相关方法 ----------
+// 技术图纸（原查看图片）
 const lookImage = (item) => {
   let imageData = item?.image
   
   if (!imageData) {
-    uni.showToast({ title: '暂无图片', icon: 'none' })
+    uni.showToast({ title: '暂无技术图纸', icon: 'none' })
     return
   }
   
@@ -904,7 +946,7 @@ const lookImage = (item) => {
     try {
       imageData = JSON.parse(imageData)
     } catch (e) {
-      uni.showToast({ title: '图片数据格式错误', icon: 'none' })
+      uni.showToast({ title: '技术图纸数据格式错误', icon: 'none' })
       return
     }
   }
@@ -912,17 +954,55 @@ const lookImage = (item) => {
   const imageArray = Array.isArray(imageData) ? imageData : (imageData ? [imageData] : [])
   
   if (!imageArray || imageArray.length === 0) {
-    uni.showToast({ title: '暂无图片', icon: 'none' })
+    uni.showToast({ title: '暂无技术图纸', icon: 'none' })
     return
   }
   
-  // 从对象数组中提取所有 DownloadUrl，支持多图
   const urls = imageArray
     .map(img => img?.DownloadUrl)
     .filter(Boolean)
   
   if (urls.length === 0) {
-    uni.showToast({ title: '图片地址不存在', icon: 'none' })
+    uni.showToast({ title: '技术图纸地址不存在', icon: 'none' })
+    return
+  }
+  
+  previewImageUrls.value = urls
+  previewImageIndex.value = 0
+  showImagePreview.value = true
+}
+
+// 包装图纸（当前无单独字段，优先使用 packImage，退化为 image）
+const lookPackImage = (item) => {
+  let imageData = item?.packImage || item?.image
+  
+  if (!imageData) {
+    uni.showToast({ title: '暂无包装图纸', icon: 'none' })
+    return
+  }
+  
+  if (typeof imageData === 'string') {
+    try {
+      imageData = JSON.parse(imageData)
+    } catch (e) {
+      uni.showToast({ title: '包装图纸数据格式错误', icon: 'none' })
+      return
+    }
+  }
+  
+  const imageArray = Array.isArray(imageData) ? imageData : (imageData ? [imageData] : [])
+  
+  if (!imageArray || imageArray.length === 0) {
+    uni.showToast({ title: '暂无包装图纸', icon: 'none' })
+    return
+  }
+  
+  const urls = imageArray
+    .map(img => img?.DownloadUrl)
+    .filter(Boolean)
+  
+  if (urls.length === 0) {
+    uni.showToast({ title: '包装图纸地址不存在', icon: 'none' })
     return
   }
   
@@ -1824,12 +1904,9 @@ const useNormalProcess = async (item) => {
     
     uni.showToast({ title: '操作成功' })
     // 刷新数据，确保数据更新
-    if (searchValue.value && searchValue.value.trim()) {
-      // 添加延迟，确保后端数据已更新
-      setTimeout(async () => {
-        await search()
-      }, 1000)
-    }
+    setTimeout(async () => {
+      await search()
+    }, 1000)
   } catch (error) {
     uni.hideLoading()
     console.error('使用正常工序失败:', error)
@@ -1868,12 +1945,9 @@ const deleteProcess = async () => {
           // 关闭模态框
           showProcessModal.value = false
           // 刷新数据，确保数据更新
-          if (selectedOrderCode.value && selectedProductionCode.value) {
-            // 添加延迟，确保后端数据已更新
-            setTimeout(async () => {
-              await search()
-            }, 1000)
-          }
+          setTimeout(async () => {
+            await search()
+          }, 1000)
         } catch (error) {
           uni.hideLoading()
           console.error('删除工序失败:', error)
@@ -1885,10 +1959,8 @@ const deleteProcess = async () => {
 }
 
 const quit = () => {
-  // 根据当前单据类型过滤参数（正常排产 / 返工排产）返回对应的选择单据页面
-  uni.redirectTo({
-    url: `/pages/selectBills/selectBills?workshop=${workshop.value}&type=${encodeURIComponent(billTypeFilter.value)}`
-  })
+  // 返回上一个页面（例如登录页）
+  uni.navigateBack()
 }
 
 // ==================== Watch监听器 ====================
@@ -1923,18 +1995,21 @@ const calculateWorkTime = () => {
 
 // ==================== 生命周期钩子 ====================
 onLoad((options) => {
-  // 如果从选择单据页面带回了单据类型参数（正常排产 / 返工排产），优先使用该参数
+  // 如果从其它页面带回了单据类型参数（正常排产 / 返工排产），优先使用该参数
   if (options && options.type) {
     const type = decodeURIComponent(options.type)
     if (type === '正常排产' || type === '返工排产') {
       billTypeFilter.value = type
+      const index = billTypeOptions.value.indexOf(type)
+      billTypeIndex.value = index >= 0 ? index : 0
     }
   }
 
-  // 如果从选择单据页面带回了订单号和生产单号，则优先使用这两个参数加载对应单据和工序
+  // 如果从其它页面带回了订单号和生产单号，则可用于初始化搜索条件（兼容旧参数传递）
   if (options && options.orderCode) {
     selectedOrderCode.value = decodeURIComponent(options.orderCode)
     searchValue.value = selectedOrderCode.value
+    searchForm.value.salesOrder = selectedOrderCode.value
   }
   if (options && options.productionCode) {
     selectedProductionCode.value = decodeURIComponent(options.productionCode)
@@ -1951,8 +2026,6 @@ onLoad((options) => {
   })
   uni.$on('clearDispatchData', () => {
     searchValue.value = ''
-    selectedOrderCode.value = ''
-    selectedProductionCode.value = ''
     billsList.value = []
     processList.value = []
   })
@@ -1969,11 +2042,10 @@ onShow(() => {
     }
   }
   
-  if (selectedOrderCode.value && selectedProductionCode.value) {
-    setTimeout(() => {
-      loadAllData()
-    }, 500)
-  }
+  // 页面展示时，根据当前车间与排产类型加载所有符合条件的单据和工序
+  setTimeout(() => {
+    search()
+  }, 500)
 })
 
 onUnload(() => {
@@ -1997,6 +2069,7 @@ onUnload(() => {
     justify-content: space-between;
     align-items: center;
     background-color: #5884f1;
+    position: relative;
 
     image {
       margin: px2vw(20px);
@@ -2005,7 +2078,10 @@ onUnload(() => {
     }
 
     .title {
-      margin-left: px2vw(300px);
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-left: 0;
       font-size: px2vw(35px);
       color: white;
     }
@@ -2059,6 +2135,92 @@ onUnload(() => {
         opacity: 0.6;
         cursor: not-allowed;
         pointer-events: none;
+      }
+    }
+  }
+
+  /* 顶部排产类型按钮样式（与按钮一致） */
+  .bill-type-btn {
+    padding: 0;
+    box-sizing: border-box;
+
+    picker {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .bill-type-text {
+      font-size: px2vw(25px);
+      color: #fff;
+      text-align: center;
+      width: 100%;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+  }
+
+  /* 搜索区域样式 */
+  .search-box {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    background-color: #fff;
+    height: px2vw(100px);
+    padding: px2vw(15px) px2vw(20px);
+    box-sizing: border-box;
+    margin: px2vw(10px) px2vw(10px);
+    border-radius: px2vw(18px);
+    justify-content: flex-start;
+
+    .salesOrder,
+    .orderItem {
+      display: flex;
+      align-items: center;
+      flex: 0 0 30%;
+      max-width: 30%;
+      margin: 0 px2vw(10px) 0 0;
+    }
+
+    .orderItem {
+      margin: 0 px2vw(10px);
+    }
+
+    .salesOrder-text,
+    .orderItem-text {
+      font-size: px2vw(25px);
+      margin-right: px2vw(10px);
+      white-space: nowrap;
+    }
+
+    .input-box,
+    .picker-box {
+      flex: 1;
+      min-width: 0;
+      width: auto;
+      height: px2vw(80px);
+      border: px2vw(3px) solid #5884f1;
+      border-radius: px2vw(18px);
+      display: flex;
+      align-items: center;
+      padding: 0 px2vw(30px);
+      margin-left: px2vw(10px);
+      box-sizing: border-box;
+
+      input {
+        font-size: px2vw(25px);
+      }
+
+      .picker-value {
+        font-size: px2vw(25px);
+        color: #333;
+        width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
     }
   }
