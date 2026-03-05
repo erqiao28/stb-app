@@ -294,26 +294,14 @@
     
     <!-- ==================== 页面主体内容 ==================== -->
     
-    <!-- 导航栏（显示左侧返回箭头和标题，隐藏右侧按钮） -->
+    <!-- 导航栏（仅左侧返回箭头 + 中间标题） -->
     <view class="header">
       <!-- 左侧返回箭头保留 -->
       <image src="/static/left-arrow.svg" @click="quit"></image>
       <view class="title">
         派工( {{ userStore?.loginName || '' }} )
       </view>
-      <!-- 右侧切换 / 退出按钮按需求全部隐藏 -->
-      <!--
-      <view class="btn-box">
-        <view class="btn-one" @click="userStore?.logout()">
-          <image src="/static/Quit.svg"></image>
-          <text>退出</text>
-        </view>
-        <view class="btn-one">
-          <image src="/static/Quit.svg"></image>
-          <text>退出</text>
-        </view>
-      </view>
-      -->
+      <view></view>
     </view>
     
     <!-- 功能按钮栏（派工查询、员工工作量查询、排产类型按钮） -->
@@ -334,6 +322,7 @@
             type="text"
             v-model="searchForm.salesOrder"
             placeholder="请输入销售订单"
+            disabled
           />
         </view>
       </view>
@@ -2101,28 +2090,6 @@ onUnload(() => {
       font-size: px2vw(35px);
       color: white;
     }
-
-    .btn-box {
-      display: flex;
-      align-items: center;
-
-      .btn-one {
-        height: px2vw(80px);
-        width: px2vw(170px);
-        display: flex;
-        align-items: center;
-        background-color: white;
-        margin: px2vw(20px);
-        font-size: px2vw(25px);
-        border-radius: px2vw(20px);
-
-        image {
-          height: px2vw(50px);
-          width: px2vw(50px);
-          margin-right: px2vw(20px);
-        }
-      }
-    }
   }
 
   /* 按钮栏样式 */
@@ -2197,8 +2164,8 @@ onUnload(() => {
     .orderItem {
       display: flex;
       align-items: center;
-      flex: 0 0 28%;
-      max-width: 28%;
+      flex: 0 0 35%;
+      max-width: 36%;
       margin: 0;
     }
 
@@ -2478,10 +2445,10 @@ onUnload(() => {
           align-items: center;
           margin-right: 0;
           position: relative;
-          padding: px2vw(8px);
+          padding: px2vw(11px);
           border-radius: px2vw(12px);
-          min-width: px2vw(150px);
-          width: px2vw(150px);
+          min-width: px2vw(200px);
+          width: px2vw(200px);
           box-sizing: border-box;
 
           &.process-selected {
@@ -2551,8 +2518,8 @@ onUnload(() => {
 
         .progress-inner {
           position: absolute;
-          width: 80%;
-          height: 80%;
+          width: 88%;
+          height: 88%;
           border-radius: 50%;
           background: white;
           display: flex;
@@ -2560,8 +2527,8 @@ onUnload(() => {
           align-items: center;
           justify-content: center;
           font-size: px2vw(12px);
-          top: 10%;
-          left: 10%;
+          top: 6%;
+          left: 6%;
           padding: px2vw(6px) px2vw(4px);
           box-sizing: border-box;
           gap: px2vw(4px);

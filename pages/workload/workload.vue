@@ -1,22 +1,12 @@
 <template>
 	<view class="dispatchInquiry-container" :style="{ paddingTop: statusBarHeight + 'px' }">
-		<!-- 导航栏 -->
+		<!-- 导航栏（与派工页面一致：仅左侧返回 + 中间标题） -->
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="quit"></image>
 			<view class="title">
 				员工工作量查询
 			</view>
-
-			<view class="btn-box">
-				<view class="btn-one" @click="userStore?.logout()">
-					<image src="/static/Quit.svg"></image>
-					<text>切换</text>
-				</view>
-				<view class="btn-one">
-					<image src="/static/Quit.svg"></image>
-					<text>退出</text>
-				</view>
-			</view>
+			<view></view>
 		</view>
 
 		<!-- 车间选择 -->
@@ -195,39 +185,21 @@ const quit = () => {
 		justify-content: space-between;
 		align-items: center;
 		background-color: #5884f1;
+		position: relative;
 
 		image {
-			margin-left: px2vw(20px);
+			margin: px2vw(20px);
 			height: px2vw(60px);
 			width: px2vw(60px);
 		}
 
 		.title {
-			margin-left: px2vw(300px);
+			position: absolute;
+			left: 50%;
+			transform: translateX(-50%);
+			margin-left: 0;
 			font-size: px2vw(35px);
 			color: white;
-		}
-
-		.btn-box {
-			display: flex;
-			align-items: center;
-
-			.btn-one {
-				height: px2vw(80px);
-				width: px2vw(170px);
-				display: flex;
-				align-items: center;
-				background-color: white;
-				margin: px2vw(20px);
-				border-radius: px2vw(18px);
-				font-size: px2vw(25px);
-
-				image {
-					height: px2vw(50px);
-					width: px2vw(50px);
-					margin-right: px2vw(20px);
-				}
-			}
 		}
 	}
 

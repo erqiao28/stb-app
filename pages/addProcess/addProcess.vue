@@ -57,7 +57,16 @@
 						class="process-input" 
 						placeholder="请输入生产顺序" 
 						v-model="productionSequence"
-						step="0.01" />
+						step="0.01"
+						disabled />
+				</view>
+				<view class="input-group">
+					<view class="input-label">修改方式</view>
+					<picker mode="selector" :range="modifyModeOptions" :value="modifyModeIndex" @change="onModifyModeChange" class="picker-wrapper">
+						<view class="process-input date-picker">
+							{{ modifyModeOptions[modifyModeIndex] }}
+						</view>
+					</picker>
 				</view>
 				<view class="input-group">
 					<view class="input-label">返工工价</view>
@@ -120,6 +129,15 @@ const manualProcessName = ref('')
 
 // 生产顺序
 const productionSequence = ref('')
+
+// 修改方式：添加、替换
+const modifyModeOptions = ['添加', '替换']
+const modifyModeIndex = ref(0)
+const modifyMode = computed(() => modifyModeOptions[modifyModeIndex.value])
+
+const onModifyModeChange = (e) => {
+	modifyModeIndex.value = Number(e.detail.value) || 0
+}
 
 // 本工序工价
 const processPrice = ref('')
@@ -277,6 +295,7 @@ const addProcess = async () => {
 		processName: processName,
 		isNew: isNewProcess.value,
 		sequence: parseFloat(productionSequence.value) || 0,
+		modifyMode: modifyMode.value,
 		processPrice: parseFloat(processPrice.value) || 0,
 		plannedProductionDate: plannedProductionDate.value || '',
 		billRowid: orderData.value.billRowid,
