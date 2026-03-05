@@ -185,7 +185,7 @@
             <view class="row-group">
               <view class="form-group">
                 <text class="label">已派工数量：</text>
-                <text class="value">{{ selectedProcessData?.process?.finishCount }}</text>
+                <text class="value">{{ selectedProcessData?.process?.dispatchedCount }}</text>
               </view>
               <view class="form-group">
                 <text class="label">需派工数量：</text>
@@ -221,7 +221,7 @@
               </view>
             </view>
             
-            <!-- 日期选择和最终工序 -->
+            <!-- 日期选择和日产量 -->
             <view class="row-group">
               <view class="form-group">
                 <text class="label">派工日期：</text>
@@ -232,12 +232,10 @@
                 </picker>
               </view>
               <view class="form-group">
-                <text class="label">最终工序：</text>
-                <picker mode="selector" :range="isLastOptions" :value="isLastIndex" @change="onIsLastChange">
-                  <view class="value">
-                    {{ processDispatchData.isLast || '请选择最终工序' }}
-                  </view>
-                </picker>
+                <text class="label">日产量：</text>
+                <text class="value-readonly">
+                  {{ selectedProcessData?.process?.dailyoutput || 0 }}
+                </text>
               </view>
             </view>
             
@@ -255,6 +253,18 @@
                 <text class="label">工价：</text>
                 <input v-model.number="processDispatchData.price" type="number" placeholder="请输入工价"
                   min="0" step="0.01" class="input-field" />
+              </view>
+            </view>
+            
+            <!-- 最终工序 -->
+            <view class="row-group single">
+              <view class="form-group full">
+                <text class="label">最终工序：</text>
+                <picker mode="selector" :range="isLastOptions" :value="isLastIndex" @change="onIsLastChange">
+                  <view class="value">
+                    {{ processDispatchData.isLast || '请选择最终工序' }}
+                  </view>
+                </picker>
               </view>
             </view>
           </view>
@@ -334,6 +344,7 @@
             type="text"
             v-model="searchForm.orderItem"
             placeholder="请输入订单物品"
+            disabled
           />
         </view>
       </view>
@@ -415,16 +426,26 @@
                 @click="workshop === '组装车间' ? toggleMultiProcess(item, process) : selectProcess(item, process)">
                   <view class="process-sequence">{{ process.sequence || '' }}</view>
                   <view class="progress-circle"
-                    :style="{ '--percent': Math.round((process.finishCount / Math.max((parseFloat(process.needCount) || 0) + (parseFloat(process.finishCount) || 0), 1)) * 100) + '%' }">
+                    :style="{
+                      '--percent': Math.round(
+                        (parseFloat(process.dispatchedCount) || 0) /
+                        Math.max(
+                          // 优先使用 allcount 作为总数；没有时回退到 needCount + dispatchedCount
+                          (parseFloat(process.allcount) || 0) ||
+                          ((parseFloat(process.needCount) || 0) + (parseFloat(process.dispatchedCount) || 0)),
+                          1
+                        ) * 100
+                      ) + '%'
+                    }">
                     <view class="progress-inner">
                       <view class="progress-top">
-                        {{ Math.round((parseFloat(process.needCount) || 0) + (parseFloat(process.finishCount) || 0)) }}
+                        {{ item.orderCount }}
                       </view>
                       <view class="progress-divider"></view>
                       <view class="progress-bottom">
-                        <text class="bottom-left">{{ process.finishCount }}</text>
+                        <text class="bottom-left">{{ process.allcount }}</text>
                         <view class="progress-bottom-divider"></view>
-                        <text class="bottom-right">{{ process.recordCount || 0 }}</text>
+                        <text class="bottom-right">{{ process.finishCount || 0 }}</text>
                       </view>
                     </view>
                   </view>
@@ -881,13 +902,16 @@ const search = async () => {
   } else {
     const allProcesses = processRes.data.map(item => ({
       processName: item['656ffd1bba5ef3863bf3ec1e'],
-      needCount: item['690dc19f8d797ee211e7fc60'],
-      finishCount: item['69840b633b5e707f84cf341e'],
+      needCount: item['690dc19f8d797ee211e7fc60'], // 需派工数量
+      finishCount: item['697c8b023b5e707f84ce02cc'], // 完成总数量
+      allcount: item['68099ac75d6fc47331574e82'], // 需完成数量
+      dispatchedCount: item['69840b633b5e707f84cf341e'], // 已派工数量
       processOrder: item['6593b07ae97eb866a50eeba1'],
       productcode: item['691d6160535b29cbd5c6c0a9'],
       worktime: item['69211dac21066a9f124f62df'],
       sequence: item['693a62040f64427fac25ae80'],
       hourlyoutput: item['693a879a0f64427fac25da92'],
+      dailyoutput: item['69a96d623b5e707f84d380b6'], // 日产量
       rowid: item['rowid'],
       isOver: item['6940f719c81c746aae8ede5d'],
       price: item['657b282cd13eaaec2c6606b5'],
@@ -1386,12 +1410,10 @@ const confirmMultiDispatch = async () => {
     showMultiDispatchModal.value = false
     selectedMultiProcesses.value = []
     
-    // 派工成功后刷新数据
-    if (selectedOrderCode.value && selectedProductionCode.value) {
-      setTimeout(async () => {
-        await search()
-      }, 1000)
-    }
+    // 派工成功后刷新数据（不再依赖是否带入订单/生产单号）
+    setTimeout(async () => {
+      await search()
+    }, 1000)
   } catch (error) {
     console.error('多对多派工失败:', error)
     uni.showToast({ title: '派工失败：' + (error.message || '未知错误'), icon: 'none' })
@@ -1492,8 +1514,18 @@ const confirmProcessDispatch = async () => {
   
   // 检查派工数量是否超过需派工数量
   const maxQty = maxQuantity.value
-  if (processDispatchData.value.quantity > maxQty) {
-    uni.showToast({ title: `派工数量不能超过需派工数量 ${maxQty}`, icon: 'none' })
+  // 当前工序的日产量（如果有的话）
+  const dailyOutputRaw = selectedProcessData.value?.process?.dailyoutput
+  const dailyOutput = dailyOutputRaw === '' || dailyOutputRaw == null ? 0 : Number(dailyOutputRaw) || 0
+
+  // 允许的最大数量：不能超过需派工数量；如果有日产量，则同时不能超过日产量
+  const limit = dailyOutput > 0 ? Math.min(maxQty, dailyOutput) : maxQty
+
+  if (processDispatchData.value.quantity > limit) {
+    const tip = dailyOutput > 0
+      ? `派工数量不能超过需派工数量 ${maxQty}，且不能超过日产量 ${dailyOutput}`
+      : `派工数量不能超过需派工数量 ${maxQty}`
+    uni.showToast({ title: tip, icon: 'none' })
     return
   }
   
@@ -1548,13 +1580,10 @@ const confirmProcessDispatch = async () => {
   if (res.status === 1) {
     uni.showToast({ title: '派工成功' })
     showProcessModal.value = false
-    // 派工成功后刷新数据，确保进度条更新
-    if (selectedOrderCode.value && selectedProductionCode.value) {
-      // 添加延迟，确保后端数据已更新
-      setTimeout(async () => {
-        await search()
-      }, 1000)
-    }
+    // 派工成功后刷新数据，确保进度条更新（不再依赖是否带入订单/生产单号）
+    setTimeout(async () => {
+      await search()
+    }, 1000)
   } else {
     uni.showToast({ title: res.message })
   }
@@ -1960,10 +1989,12 @@ const deleteProcess = async () => {
   })
 }
 
-// 左箭头固定返回到选择订单页面
+// 左箭头固定返回到选择产品页面
 const quit = () => {
   uni.redirectTo({
-    url: '/pages/selectBills/selectBills'
+    url: `/pages/selectProduct/selectProduct?workshop=${encodeURIComponent(
+      workshop.value || ''
+    )}&orderCode=${encodeURIComponent(selectedOrderCode.value || '')}`
   })
 }
 
@@ -1971,9 +2002,19 @@ const quit = () => {
 // 监听派工数量变化，验证并计算派工工时
 watch(() => processDispatchData.value.quantity, (newVal) => {
   const maxQty = maxQuantity.value
-  if (newVal > maxQty) {
-    uni.showToast({ title: `数量不能超过需派工数量 ${maxQty}`, icon: 'none' })
-    processDispatchData.value.quantity = maxQty
+  // 当前工序的日产量（如果有的话）
+  const dailyOutputRaw = selectedProcessData.value?.process?.dailyoutput
+  const dailyOutput = dailyOutputRaw === '' || dailyOutputRaw == null ? 0 : Number(dailyOutputRaw) || 0
+
+  // 允许的最大数量：不能超过需派工数量；如果有日产量，则同时不能超过日产量
+  const limit = dailyOutput > 0 ? Math.min(maxQty, dailyOutput) : maxQty
+
+  if (newVal > limit) {
+    const tip = dailyOutput > 0
+      ? `数量不能超过需派工数量 ${maxQty}，且不能超过日产量 ${dailyOutput}`
+      : `数量不能超过需派工数量 ${maxQty}`
+    uni.showToast({ title: tip, icon: 'none' })
+    processDispatchData.value.quantity = limit
     return
   } else if (newVal < 0) {
     processDispatchData.value.quantity = 0
@@ -2018,6 +2059,11 @@ onLoad((options) => {
   }
   if (options && options.productionCode) {
     selectedProductionCode.value = decodeURIComponent(options.productionCode)
+  }
+  // 从选择产品页面带入的物品名称，用于初始化订单物品搜索条件
+  if (options && options.orderItem) {
+    const orderItem = decodeURIComponent(options.orderItem)
+    searchForm.value.orderItem = orderItem
   }
 
   // 检查仓库中的权限字段（车间）

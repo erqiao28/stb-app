@@ -1,5 +1,6 @@
 import http from './request'
 import config from './config'
+import { useUserStore } from '../store/user.store'
 
 /**
  * 获取数据详情
@@ -147,7 +148,7 @@ export const callWorkflowListAPI = async (
  */
 export const callWorkflowListAPIPaged = async (
   queryParams = {},
-  pageSize = 999,
+  pageSize = 300,
   pageNum = 1,
   delaySeconds = 0
 ) => {
@@ -169,19 +170,22 @@ export const callWorkflowListAPIPaged = async (
       ...queryParams,
     }
 
-    console.log('分页查询 - 请求参数:', params)
-
     const res = await http.post(config.WORKFLOW_API.LIST_URL, params)
 
-    if (res && res.data) {
-      const responseData = JSON.parse(res.data)
-      console.log('响应数据：' + responseData)
+    if (res && res.data != null) {
+      // 兼容两种返回格式：
+      // 1）res.data 为 JSON 字符串
+      // 2）res.data 已经是对象（某些账号 / 接口会这样返回）
+      let responseData
+      if (typeof res.data === 'string') {
+        responseData = JSON.parse(res.data)
+      } else if (typeof res.data === 'object') {
+        responseData = res.data
+      } else {
+        throw new Error('未知的返回数据格式：' + String(res.data))
+      }
 
-      console.log('分页查询 - total值:', responseData.total)
-      console.log(
-        '分页查询 - rows数据条数:',
-        responseData.rows ? responseData.rows.length : 0
-      )
+      // 控制台调试信息已去掉，仅保留返回结构化数据
 
       // 隐藏加载动画
       uni.hideLoading()

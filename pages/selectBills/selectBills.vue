@@ -142,16 +142,6 @@ const search = async () => {
 	}
 
 	// 调试：打印订单号为 STB260119-004 的原始数据及 66974cda2503723eec1af600 字段
-	const debugOrderCode = 'STB260119-004'
-	const debugItems = billsRes.data.filter(item => (item['655e1cbbbd2094b316347f92'] || '') === debugOrderCode)
-	console.log(`[选择订单] 订单号 ${debugOrderCode} 原始条数:`, debugItems.length)
-	debugItems.forEach((it, idx) => {
-		console.log(
-			`[选择订单] 订单号 ${debugOrderCode} 第 ${idx + 1} 条 66974cda2503723eec1af600:`,
-			it['66974cda2503723eec1af600']
-		)
-	})
-
 	// 再按订单（655e1cbbbd2094b316347f92）汇总：同一订单只显示一条，产品数量为该订单的条数，客户名称取该订单第一条的 69a8ed3c3b5e707f84d33f8b
 	const orderMap = {}
 	filteredData.forEach(item => {
@@ -187,8 +177,11 @@ const quit = () => {
 }
 
 const selectOrder = (item) => {
+	// 先进入选择产品页面，带上车间和订单编号
 	uni.navigateTo({
-		url: `/pages/dispatchWork/dispatchWork?workshop=${encodeURIComponent(workshop.value)}&orderCode=${encodeURIComponent(item.orderCode || '')}`
+		url: `/pages/selectProduct/selectProduct?workshop=${encodeURIComponent(
+			workshop.value
+		)}&orderCode=${encodeURIComponent(item.orderCode || '')}`
 	})
 }
 </script>
