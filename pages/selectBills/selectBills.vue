@@ -4,66 +4,37 @@
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="quit"></image>
 			<view class="title">
-				选择单据
+				选择订单
 			</view>
 			<view></view>
 		</view>
-		<!-- 搜索区域 -->
+		<!-- 搜索区域：仅销售订单 + 查询按钮 -->
 		<view class="search-box">
 			<view class="salesOrder">
 				<text class="salesOrder-text">销售订单</text>
 				<view class="input-box">
-					<input type="text" v-model="searchValue.salesOrder" placeholder="请输入销售订单" @input="search" />
+					<input type="text" v-model="searchForm.salesOrder" placeholder="请输入销售订单" />
 				</view>
 			</view>
-
-			<view class="orderItem">
-				<text class="orderItem-text">订单物品</text>
-				<view class="input-box">
-					<input type="text" v-model="searchValue.orderItem" placeholder="请输入订单物品" @input="search" />
-				</view>
-			</view>
+			<view class="btn-item search-btn" @click="search">查询</view>
 		</view>
 
-		<!-- 订单列表 -->
+		<!-- 订单列表：左中右弹性布局，订单编号、客户名称、产品数量完整显示 -->
 		<view class="orderList">
-			<view class="orderItem" v-for="item in billsList" @click="selectOrder(item)">
-				<view class="goodsInfo">
-					<view class="goodsInfo-up">
-						<view class="orderCode">
-							<view>订单编号：</view>
-							<view>{{ item.orderCode }}</view>
-						</view>
-						<view class="productCode">
-							<view>生产执行单：</view>
-							<view>{{ item.productionCode }}</view>
-						</view>
-
-						<view class="orderCount">
-							<view>订单数量：</view>
-							<view>{{ item.orderCount }}</view>
-						</view>
+			<view class="orderItem" v-for="item in billsList" :key="item.orderCode" @click="selectOrder(item)">
+				<view class="goodsInfo row-single">
+					<view class="col col-left">
+						<text class="label">订单编号：</text>
+						<text class="value">{{ item.orderCode }}</text>
 					</view>
-					<view class="goodsInfo-down">
-						<view class="name">
-							<view>产品名称：</view>
-							<view>{{ item.name }}</view>
-						</view>
-						<view class="model">
-							<view class="model-text">规格型号：</view>
-							<view class="model-value">{{ item.model }}</view>
-						</view>
-						<view class="problemDescription"
-							v-if="item.problemDescription && item.problemDescription.trim()">
-							<view>问题描述：</view>
-							<view>{{ item.problemDescription }}</view>
-						</view>
+					<view class="col col-center">
+						<text class="label">客户名称：</text>
+						<text class="value">{{ item.customerName || '-' }}</text>
 					</view>
-				</view>
-				<view class="goodsProcess">
-					<view class="bill-type-badge"
-						:class="{ 'badge-normal': item.billType === '正常排产', 'badge-rework': item.billType === '返工排产' }"
-						v-if="item.billType">{{ item.billType }}</view>
+					<view class="col col-right">
+						<text class="label">产品数量：</text>
+						<text class="value">{{ item.productCount }}</text>
+					</view>
 				</view>
 			</view>
 		</view>
@@ -71,164 +42,162 @@
 </template>
 
 <script setup>
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
-import http from '../../utils/request'
 import { ref, watch } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
+import { useUserStore } from '../../store/user.store'
+
 const { statusBarHeight } = useStatusBar()
+const userStore = useUserStore()
+
 const STORAGE_KEY = 'selectBillsSearch'
-const workshop = ref('')
-const billTypeFilter = ref('正常排产')  // 单据类型过滤参数：正常排产、返工排产（用于获取单据）
-const billsList = ref([])  // 单据列表
-const searchValue = ref({
-	salesOrder: '',
-	orderItem: ''
-})  // 搜索输入值
+
+// 车间：与派工页面一致，根据登录账号固定（loginLimits）
+const workshop = ref('拉伸车间')
+// 排产类型固定为正常排产
+const billTypeFilter = '正常排产'
+
+const billsList = ref([])
+const searchForm = ref({ salesOrder: '' })
 
 onLoad((options) => {
-	if (options.workshop) {
+	// 优先从登录权限取车间
+	if (userStore.loginLimits && userStore.loginLimits.trim()) {
+		workshop.value = userStore.loginLimits
+	} else if (options && options.workshop) {
 		workshop.value = options.workshop
 	}
-	if (options.type) {
-		const type = decodeURIComponent(options.type)  // 接收单据类型参数：正常排产 或 返工排产
-		billTypeFilter.value = type
-	}
-	// 读取本地保存的搜索条件
+	// 恢复持久化的销售订单搜索条件
 	try {
 		const saved = uni.getStorageSync(STORAGE_KEY)
-		if (saved && typeof saved === 'object') {
-			searchValue.value.salesOrder = saved.salesOrder || ''
-			searchValue.value.orderItem = saved.orderItem || ''
+		if (saved && typeof saved === 'object' && saved.salesOrder !== undefined) {
+			searchForm.value.salesOrder = saved.salesOrder || ''
 		}
 	} catch (e) {
 		// ignore
 	}
-	search()  // 默认加载时搜索
+	search()
 })
 
-// 监听搜索条件变化，持久化到本地，避免页面跳转或刷新后被清空
+// 销售订单搜索条件变化时持久化
 watch(
-	() => searchValue.value,
+	() => searchForm.value.salesOrder,
 	(val) => {
 		try {
-			uni.setStorageSync(STORAGE_KEY, {
-				salesOrder: val.salesOrder || '',
-				orderItem: val.orderItem || ''
-			})
+			uni.setStorageSync(STORAGE_KEY, { salesOrder: val || '' })
 		} catch (e) {
 			// ignore
 		}
-	},
-	{ deep: true }
+	}
 )
 
-const getBillsListRaw = async () => {
-	const filters = [{
-		"controlId": "67de26c9c5377d50a523c735",
-		"dataType": 30,
-		"spliceType": 1,
-		"filterType": 2,
-		"values": [workshop.value]
-	},
-	{
-		"controlId": "694a3954687045435008a7c3",
-		"dataType": 30,
-		"spliceType": 1,
-		"filterType": 2,
-		"values": [billTypeFilter.value]
+onShow(() => {
+	if (userStore.loginLimits && userStore.loginLimits.trim()) {
+		workshop.value = userStore.loginLimits
 	}
-	]
-	// 其他字段过滤可添加类似
+})
+
+const getBillsListRaw = async () => {
 	const res = await callWorkflowListAPIPaged({
 		worksheetId: 'paichanjihua',
-		filters
+		filters: [
+			{
+				controlId: '67de26c9c5377d50a523c735',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: [workshop.value]
+			},
+			{
+				controlId: '694a3954687045435008a7c3',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: [billTypeFilter]
+			}
+		]
 	})
 	return res
 }
 
 const search = async () => {
-	// 先获取单据列表（按车间和单据类型从后端筛选）
 	const billsRes = await getBillsListRaw()
-
 	if (!billsRes.data || billsRes.data.length === 0) {
 		billsList.value = []
 		return
 	}
 
-	// 固定过滤：字段 66974cda2503723eec1af600 不为 "[]"
-	const filteredData = billsRes.data.filter(item => item['66974cda2503723eec1af600'] !== '[]')
-
+	// 先过滤掉 66974cda2503723eec1af600 为空的（含 []、空字符串、null/undefined）
+	const v = (item) => item['66974cda2503723eec1af600']
+	const filteredData = billsRes.data.filter(item => {
+		const val = v(item)
+		return val != null && val !== '' && String(val).trim() !== '' && val !== '[]'
+	})
 	if (!filteredData.length) {
 		billsList.value = []
 		return
 	}
 
-	// 基础映射
-	let mappedList = filteredData.map(item => {
-		const orderCode = item['655e1cbbbd2094b316347f92']  // 旧订单编码 ID
-		const billType = item['694a3954687045435008a7c3'] || '正常排产'
-
-		return {
-			orderCode,
-			orderCount: item['681b0b53b139204fd264c5fd'],
-			name: item['6937d255ff2b019b3cb34be3'],
-			model: item['6937d255ff2b019b3cb34be4'],
-			productionCode: item['698438933b5e707f84cf51fd'],
-			billType: billType,
-			problemDescription: item['694ba108dc025d98887fd782'] || '' // 问题描述字段
-		}
+	// 调试：打印订单号为 STB260119-004 的原始数据及 66974cda2503723eec1af600 字段
+	const debugOrderCode = 'STB260119-004'
+	const debugItems = billsRes.data.filter(item => (item['655e1cbbbd2094b316347f92'] || '') === debugOrderCode)
+	console.log(`[选择订单] 订单号 ${debugOrderCode} 原始条数:`, debugItems.length)
+	debugItems.forEach((it, idx) => {
+		console.log(
+			`[选择订单] 订单号 ${debugOrderCode} 第 ${idx + 1} 条 66974cda2503723eec1af600:`,
+			it['66974cda2503723eec1af600']
+		)
 	})
 
-	// 前端模糊过滤：销售订单 -> orderCode，订单物品 -> name
-	const salesOrderKeyword = (searchValue.value.salesOrder || '').trim().toLowerCase()
-	const orderItemKeyword = (searchValue.value.orderItem || '').trim().toLowerCase()
+	// 再按订单（655e1cbbbd2094b316347f92）汇总：同一订单只显示一条，产品数量为该订单的条数，客户名称取该订单第一条的 69a8ed3c3b5e707f84d33f8b
+	const orderMap = {}
+	filteredData.forEach(item => {
+		const orderCode = item['655e1cbbbd2094b316347f92'] || ''
+		if (!orderMap[orderCode]) {
+			orderMap[orderCode] = { count: 0, customerName: item['69a8ed3c3b5e707f84d33f8b'] || '' }
+		}
+		orderMap[orderCode].count += 1
+	})
 
-	if (salesOrderKeyword || orderItemKeyword) {
-		mappedList = mappedList.filter(item => {
-			const orderCodeStr = (item.orderCode || '').toString().toLowerCase()
-			const nameStr = (item.name || '').toString().toLowerCase()
+	let list = Object.keys(orderMap).map(orderCode => ({
+		orderCode,
+		customerName: orderMap[orderCode].customerName,
+		productCount: orderMap[orderCode].count
+	}))
 
-			const matchSalesOrder = !salesOrderKeyword || orderCodeStr.includes(salesOrderKeyword)
-			const matchOrderItem = !orderItemKeyword || nameStr.includes(orderItemKeyword)
-
-			return matchSalesOrder && matchOrderItem
-		})
+	// 按销售订单关键字模糊过滤
+	const keyword = (searchForm.value.salesOrder || '').trim().toLowerCase()
+	if (keyword) {
+		list = list.filter(item =>
+			(item.orderCode || '').toString().toLowerCase().includes(keyword)
+		)
 	}
 
-	billsList.value = mappedList
+	billsList.value = list
 }
 
-// 退出
+// 左箭头固定返回到 index 页面
 const quit = () => {
-	// 返回派工页面时，带上当前的单据类型（正常排产 / 返工排产），方便派工页继续按同类型处理
 	uni.redirectTo({
-		url: `/pages/dispatchWork/dispatchWork?type=${encodeURIComponent(billTypeFilter.value)}&workshop=${encodeURIComponent(workshop.value)}`
+		url: '/pages/index/index'
 	})
 }
 
 const selectOrder = (item) => {
-	// 直接跳转到派工页面，并通过参数传递订单号、生产单号和当前类型/车间
-	const orderCode = item.orderCode || ''
-	const productionCode = item.productionCode || ''
 	uni.navigateTo({
-		url: `/pages/dispatchWork/dispatchWork?type=${encodeURIComponent(billTypeFilter.value)}&workshop=${encodeURIComponent(workshop.value)}&orderCode=${encodeURIComponent(orderCode)}&productionCode=${encodeURIComponent(productionCode)}`
+		url: `/pages/dispatchWork/dispatchWork?workshop=${encodeURIComponent(workshop.value)}&orderCode=${encodeURIComponent(item.orderCode || '')}`
 	})
 }
-
 </script>
 
 <style scoped lang="scss">
-/* 更新容器和列表样式，实现内部滚动 */
-
 .selectBills-container {
 	height: 100vh;
 	width: 100vw;
 	background-color: #f0f0f0;
 	display: flex;
 	flex-direction: column;
-	/* 垂直布局 */
-
 
 	.header {
 		height: px2vw(120px);
@@ -238,7 +207,6 @@ const selectOrder = (item) => {
 		align-items: center;
 		background-color: #5884f1;
 		flex-shrink: 0;
-		/* 防止压缩 */
 
 		image {
 			margin-left: px2vw(20px);
@@ -259,17 +227,17 @@ const selectOrder = (item) => {
 		width: 100%;
 		background-color: #fff;
 		height: px2vw(100px);
-			padding: px2vw(15px) px2vw(20px);
-			margin: px2vw(10px) px2vw(10px);
+		padding: px2vw(15px) px2vw(20px);
+		margin: px2vw(10px);
 		border-radius: px2vw(18px);
-		justify-content: flex-start;
+		box-sizing: border-box;
+		gap: px2vw(10px);
 
 		.salesOrder {
 			display: flex;
 			align-items: center;
-			flex: 0 0 30%;
-			max-width: 30%;
-			margin: 0 px2vw(10px) 0 0;
+			flex: 1;
+			min-width: 0;
 
 			.salesOrder-text {
 				font-size: px2vw(25px);
@@ -280,63 +248,42 @@ const selectOrder = (item) => {
 			.input-box {
 				flex: 1;
 				min-width: 0;
-				width: auto;
 				height: px2vw(80px);
 				border: px2vw(3px) solid #5884f1;
 				border-radius: px2vw(18px);
 				display: flex;
 				align-items: center;
 				padding: 0 px2vw(30px);
-				margin-left: px2vw(10px);
 
 				input {
 					font-size: px2vw(25px);
+					width: 100%;
 				}
 			}
 		}
 
-		.orderItem {
+		.search-btn {
+			flex-shrink: 0;
+			margin-left: px2vw(10px);
+			margin-right: 0;
+			width: auto;
+			min-width: px2vw(260px);
+			height: px2vw(80px);
+			padding: px2vw(16px) px2vw(25px);
 			display: flex;
+			justify-content: center;
 			align-items: center;
-			flex: 0 0 30%;
-			max-width: 30%;
-			margin: 0 px2vw(10px);
-
-			.orderItem-text {
-				font-size: px2vw(25px);
-				margin-right: px2vw(10px);
-				white-space: nowrap;
-			}
-
-			.input-box {
-				flex: 1;
-				min-width: 0;
-				width: auto;
-				height: px2vw(80px);
-				border: px2vw(3px) solid #5884f1;
-				border-radius: px2vw(18px);
-				display: flex;
-				align-items: center;
-				padding: 0 px2vw(30px);
-				margin-left: px2vw(10px);
-
-				input {
-					font-size: px2vw(25px);
-				}
-			}
+			border-radius: px2vw(18px);
+			color: #fff;
+			background-color: #2755f1;
+			font-size: px2vw(25px);
 		}
-
-		/* 查询按钮已移除，实时输入筛选 */
 	}
 
-	/* 订单列表 */
 	.orderList {
 		flex: 1;
-		/* 填充剩余高度 */
 		overflow-y: auto;
-		/* 垂直滚动 */
 		-webkit-overflow-scrolling: touch;
-		/* iOS 流畅滚动 */
 
 		.orderItem {
 			width: 98%;
@@ -344,114 +291,48 @@ const selectOrder = (item) => {
 			border-radius: px2vw(18px);
 			margin: px2vw(15px);
 			padding: px2vw(15px);
-			display: flex;
-			position: relative;
 
 			.goodsInfo {
-				flex: 1;
-				display: flex;
-				flex-wrap: wrap;
-				position: relative;
-				z-index: 1;
-
-				.goodsInfo-up {
-					width: 100%;
+				&.row-single {
 					display: flex;
+					align-items: stretch;
 					justify-content: space-between;
-					align-items: center;
+					font-size: px2vw(25px);
+					gap: px2vw(20px);
 
-					.orderCode {
+					.col {
 						display: flex;
-						margin: 0 px2vw(30px);
-						font-size: px2vw(25px);
-					}
+						align-items: center;
+						min-width: 0;
 
-					.productCode {
-						display: flex;
-						margin: 0 px2vw(30px);
-						font-size: px2vw(25px);
-					}
-
-					.orderCount {
-						display: flex;
-						margin: 0 px2vw(30px);
-						font-size: px2vw(25px);
-					}
-				}
-
-				.goodsInfo-down {
-					display: flex;
-					width: 100%;
-					justify-content: space-between;
-
-					.name {
-						display: flex;
-						margin: px2vw(30px);
-						font-size: px2vw(25px);
-					}
-
-					.model {
-						width: px2vw(800px);
-						display: flex;
-						margin: px2vw(30px);
-						font-size: px2vw(25px);
-
-						.model-text {
-							width: px2vw(120px);
+						.label {
+							color: #666;
+							margin-right: px2vw(6px);
 							white-space: nowrap;
+							flex-shrink: 0;
 						}
 
-						.model-value {
-							flex: 1;
-						}
-					}
-
-					.problemDescription {
-						width: px2vw(600px);
-						display: flex;
-						margin: px2vw(30px);
-						font-size: px2vw(25px);
-						color: #f44336;
-
-						view:first-child {
-							font-weight: bold;
-							margin-right: px2vw(10px);
-							white-space: nowrap;
-						}
-
-						view:last-child {
-							flex: 1;
-							word-break: break-word;
+						.value {
+							color: #333;
+							word-break: break-all;
+							white-space: normal;
 						}
 					}
-				}
-			}
 
-			.goodsProcess {
-				position: absolute;
-				bottom: px2vw(10px);
-				right: px2vw(10px);
-				flex-shrink: 0;
-				z-index: 100;
-				pointer-events: none;
-
-				.bill-type-badge {
-					color: white;
-					padding: px2vw(8px) px2vw(16px);
-					border-radius: px2vw(8px);
-					font-size: px2vw(22px);
-					font-weight: bold;
-					white-space: nowrap;
-					z-index: 100;
-					box-shadow: 0 px2vw(2px) px2vw(8px) rgba(0, 0, 0, 0.2);
-
-					&.badge-normal {
-						background-color: #4CAF50; // 绿色 - 正常排产
+					.col-left {
+						flex: 0 0 auto;
+						justify-content: flex-start;
 					}
 
-					&.badge-rework {
-						background-color: #FFC107; // 黄色 - 返工排产
-						color: white; // 白色文字
+					.col-center {
+						flex: 1;
+						justify-content: flex-start;
+						padding: 0 px2vw(10px);
+					}
+
+					.col-right {
+						flex: 0 0 auto;
+						justify-content: flex-end;
 					}
 				}
 			}

@@ -337,8 +337,8 @@ const login = async () => {
 		userStore.loginInfo.username = loginform.value.username
 		userStore.loginInfo.password = loginform.value.password
 	}
-	// 跳转主页面
-	goDispatchWork()
+	// 跳转选择订单页面
+	goSelectBills()
 }
 
 // 选择登入的工作者
@@ -360,11 +360,12 @@ const goMain = () => {
 	})
 }
 
-const goDispatchWork = () => {
-		uni.navigateTo({
-			url: '/pages/dispatchWork/dispatchWork'
-		})
-	}
+// 跳转选择订单页面（登录成功后进入）
+const goSelectBills = () => {
+	uni.navigateTo({
+		url: '/pages/selectBills/selectBills'
+	})
+}
 
 // 跳转登录设置页面
 const goLoginSetting = () => {

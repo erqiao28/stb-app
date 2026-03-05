@@ -251,7 +251,13 @@ const getDispatchInquiryList = async () => {
   pageSize: 1000,
   pageNum: 1
   })
-  dispatchInquiryList.value = res.data.map(item => ({
+  const statusExclude = ['全部报工', '已转派']
+  dispatchInquiryList.value = res.data
+    .filter(item => {
+      const status = item['66c7f8866440b9d16c7bf908'] || ''
+      return !statusExclude.includes(status)
+    })
+    .map(item => ({
     goodsName: item['6944facfdc7b13304885b3ad'],
     goodsCode: item['6921596021066a9f124f6e63'],
     processName: item['6945061adc7b13304885b92a'],

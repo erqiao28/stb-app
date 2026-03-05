@@ -325,7 +325,7 @@
       <view class="btn-item" @click="setBillType('返工排产')">返工排产</view>
     </view>
 
-    <!-- 搜索区域（只保留销售订单、订单物品） -->
+    <!-- 搜索区域（只保留销售订单、订单物品，点击按钮查询） -->
     <view class="search-box">
       <view class="salesOrder">
         <text class="salesOrder-text">销售订单</text>
@@ -334,7 +334,6 @@
             type="text"
             v-model="searchForm.salesOrder"
             placeholder="请输入销售订单"
-            @input="search"
           />
         </view>
       </view>
@@ -346,11 +345,11 @@
             type="text"
             v-model="searchForm.orderItem"
             placeholder="请输入订单物品"
-            @input="search"
           />
         </view>
       </view>
 
+      <view class="btn-item search-btn" @click="search">搜索</view>
     </view>
 
     <!-- 单据列表 -->
@@ -1958,9 +1957,11 @@ const deleteProcess = async () => {
   })
 }
 
+// 左箭头固定返回到选择订单页面
 const quit = () => {
-  // 返回上一个页面（例如登录页）
-  uni.navigateBack()
+  uni.redirectTo({
+    url: '/pages/selectBills/selectBills'
+  })
 }
 
 // ==================== Watch监听器 ====================
@@ -2005,11 +2006,12 @@ onLoad((options) => {
     }
   }
 
-  // 如果从其它页面带回了订单号和生产单号，则可用于初始化搜索条件（兼容旧参数传递）
+  // 从选择订单页进入时：将订单号填入销售订单搜索框，onShow 中会执行 search() 按该订单号过滤列表
   if (options && options.orderCode) {
-    selectedOrderCode.value = decodeURIComponent(options.orderCode)
-    searchValue.value = selectedOrderCode.value
-    searchForm.value.salesOrder = selectedOrderCode.value
+    const orderCode = decodeURIComponent(options.orderCode)
+    selectedOrderCode.value = orderCode
+    searchValue.value = orderCode
+    searchForm.value.salesOrder = orderCode
   }
   if (options && options.productionCode) {
     selectedProductionCode.value = decodeURIComponent(options.productionCode)
@@ -2175,18 +2177,37 @@ onUnload(() => {
     margin: px2vw(10px) px2vw(10px);
     border-radius: px2vw(18px);
     justify-content: flex-start;
+    gap: px2vw(10px);
 
     .salesOrder,
     .orderItem {
       display: flex;
       align-items: center;
-      flex: 0 0 30%;
-      max-width: 30%;
-      margin: 0 px2vw(10px) 0 0;
+      flex: 0 0 28%;
+      max-width: 28%;
+      margin: 0;
     }
 
     .orderItem {
-      margin: 0 px2vw(10px);
+      margin: 0;
+    }
+
+    /* 搜索按钮与上方四个按钮一致（样式与 .btn-list .btn-item 相同） */
+    .search-btn {
+      flex-shrink: 0;
+      margin-left: px2vw(10px);
+      margin-right: 0;
+      width: auto;
+      min-width: px2vw(500px);
+      height: px2vw(80px);
+      padding: px2vw(16px) px2vw(25px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      border-radius: px2vw(18px);
+      color: #fff;
+      background-color: #2755f1;
+      font-size: px2vw(25px);
     }
 
     .salesOrder-text,
