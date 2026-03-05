@@ -128,11 +128,13 @@ const search = async () => {
 		return
 	}
 
-	// 先过滤掉 66974cda2503723eec1af600 为空的（含 []、空字符串、null/undefined）
+	// 先过滤：66974cda2503723eec1af600 不为空；69a8e4563b5e707f84d33c0c 大于 0
 	const v = (item) => item['66974cda2503723eec1af600']
 	const filteredData = billsRes.data.filter(item => {
 		const val = v(item)
-		return val != null && val !== '' && String(val).trim() !== '' && val !== '[]'
+		if (val == null || val === '' || String(val).trim() === '' || val === '[]') return false
+		const num = Number(item['69a8e4563b5e707f84d33c0c'])
+		return !Number.isNaN(num) && num > 0
 	})
 	if (!filteredData.length) {
 		billsList.value = []

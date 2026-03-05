@@ -428,7 +428,15 @@
                   <view class="progress-circle"
                     :style="{ '--percent': Math.round((process.finishCount / Math.max((parseFloat(process.needCount) || 0) + (parseFloat(process.finishCount) || 0), 1)) * 100) + '%' }">
                     <view class="progress-inner">
-                      <view class="progress-text">{{ process.finishCount }}/{{ Math.round((parseFloat(process.needCount) || 0) + (parseFloat(process.finishCount) || 0)) }}</view>
+                      <view class="progress-top">
+                        {{ Math.round((parseFloat(process.needCount) || 0) + (parseFloat(process.finishCount) || 0)) }}
+                      </view>
+                      <view class="progress-divider"></view>
+                      <view class="progress-bottom">
+                        <text class="bottom-left">{{ process.finishCount }}</text>
+                        <view class="progress-bottom-divider"></view>
+                        <text class="bottom-right">{{ process.recordCount || 0 }}</text>
+                      </view>
                     </view>
                   </view>
                   <text class="process-name">{{ process.processName }}</text>
@@ -806,8 +814,12 @@ const search = async () => {
     return
   }
 
-  // 固定过滤：字段 66974cda2503723eec1af600 不为 "[]"
-  const filteredBillsData = billsRes.data.filter(item => item['66974cda2503723eec1af600'] !== '[]')
+  // 固定过滤：字段 66974cda2503723eec1af600 不为 "[]"；69a8e4563b5e707f84d33c0c 大于 0
+  const filteredBillsData = billsRes.data.filter(item => {
+    if (item['66974cda2503723eec1af600'] === '[]') return false
+    const num = Number(item['69a8e4563b5e707f84d33c0c'])
+    return !Number.isNaN(num) && num > 0
+  })
 
   if (!filteredBillsData.length) {
     billsList.value = []
@@ -891,7 +903,9 @@ const search = async () => {
       isOver: item['6940f719c81c746aae8ede5d'],
       price: item['657b282cd13eaaec2c6606b5'],
       sonoutput: item['66974d062503723eec1af614'],
-      mold: item['695222a27a59e0522d853edf']
+      mold: item['695222a27a59e0522d853edf'],
+      // 新增记录次数字段 recordCount
+      recordCount: item['697c8b023b5e707f84ce02cc'] || 0
     }))
 
     processList.value = allProcesses.map(p => ({ ...p }))
@@ -2524,8 +2538,8 @@ onUnload(() => {
         }
 
         .progress-circle {
-          width: px2vw(120px);
-          height: px2vw(120px);
+          width: px2vw(150px);
+          height: px2vw(150px);
           border-radius: 50%;
           background: conic-gradient(#4CAF50 0%, #4CAF50 var(--percent), #E0E0E0 var(--percent), #E0E0E0 100%);
           display: flex;
@@ -2542,18 +2556,55 @@ onUnload(() => {
           border-radius: 50%;
           background: white;
           display: flex;
+          flex-direction: column;
           align-items: center;
           justify-content: center;
           font-size: px2vw(12px);
           top: 10%;
           left: 10%;
+          padding: px2vw(6px) px2vw(4px);
+          box-sizing: border-box;
+          gap: px2vw(4px);
         }
 
-        .progress-text {
-          font-size: px2vw(20px);
+        .progress-top {
+          text-align: center;
+          font-size: px2vw(18px);
           font-weight: bold;
           color: #333;
+        }
+
+        .progress-divider {
+          width: 100%;
+          min-height: 2px;
+          height: 2px;
+          background-color: #ccc;
+          flex-shrink: 0;
+        }
+
+        .progress-bottom {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-size: px2vw(18px);
+          color: #555;
+          width: 100%;
+        }
+
+        .progress-bottom-divider {
+          width: 2px;
+          min-width: 2px;
+          align-self: stretch;
+          min-height: px2vw(14px);
+          background-color: #ccc;
+          flex-shrink: 0;
+        }
+
+        .bottom-left,
+        .bottom-right {
+          flex: 1;
           text-align: center;
+          font-size: px2vw(18px);
         }
 
         .process-name {
