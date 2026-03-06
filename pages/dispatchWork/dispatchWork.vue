@@ -323,33 +323,20 @@
       <view class="btn-item" @click="setBillType('返工排产')">返工排产</view>
     </view>
 
-    <!-- 搜索区域（只保留销售订单、订单物品，点击按钮查询） -->
+    <!-- 顶部信息区域：仅展示订单编号 + 生产单号 + 产品名称 -->
     <view class="search-box">
-      <view class="salesOrder">
-        <text class="salesOrder-text">销售订单</text>
-        <view class="input-box">
-          <input
-            type="text"
-            v-model="searchForm.salesOrder"
-            placeholder="请输入销售订单"
-            disabled
-          />
-        </view>
+      <view class="info-item">
+        <text class="info-label">订单编号</text>
+        <view class="info-value">{{ selectedOrderCode || '-' }}</view>
       </view>
-
-      <view class="orderItem">
-        <text class="orderItem-text">订单物品</text>
-        <view class="input-box">
-          <input
-            type="text"
-            v-model="searchForm.orderItem"
-            placeholder="请输入订单物品"
-            disabled
-          />
-        </view>
+      <view class="info-item">
+        <text class="info-label">生产单号</text>
+        <view class="info-value">{{ selectedProductionCode || '-' }}</view>
       </view>
-
-      <view class="btn-item search-btn" @click="search">搜索</view>
+      <view class="info-item">
+        <text class="info-label">产品名称</text>
+        <view class="info-value">{{ searchForm.orderItem || '-' }}</view>
+      </view>
     </view>
 
     <!-- 单据列表 -->
@@ -748,41 +735,115 @@ const getProcessRaw = async (billTypeValue = '') => {
   const processTypeParam = getProcessTypeParam(billTypeValue || '正常排产')
 
   const filters = [{
-    "controlId": "669a6cae2503723eec1b49bb",
-    "dataType": 30,
-    "spliceType": 1,
-    "filterType": 2,
-    "values": [workshop.value]
+    controlId: '669a6cae2503723eec1b49bb',
+    dataType: 30,
+    spliceType: 1,
+    filterType: 2,
+    values: [workshop.value]
   }, {
-    "controlId": "6954ad997a59e0522d85df35",
-    "dataType": 30,
-    "spliceType": 1,
-    "filterType": 2,
-    "values": [processTypeParam]
+    controlId: '6954ad997a59e0522d85df35',
+    dataType: 30,
+    spliceType: 1,
+    filterType: 2,
+    values: [processTypeParam]
   }]
+
+  // 如果有选中的订单号和生产单号，则在接口层按订单号 + 生产单号一起过滤工序
+  if (selectedOrderCode.value) {
+    filters.push({
+      controlId: '6593b07ae97eb866a50eeba1', // 工序中的订单号字段 processOrder
+      dataType: 30,
+      spliceType: 1,
+      filterType: 2,
+      values: [selectedOrderCode.value]
+    })
+  }
+
+  if (selectedProductionCode.value) {
+    filters.push({
+      controlId: '691d6160535b29cbd5c6c0a9', // 工序中的生产单号 / 产品编号字段 productcode
+      dataType: 30,
+      spliceType: 1,
+      filterType: 2,
+      values: [selectedProductionCode.value]
+    })
+  }
+
+  // 调试：打印工序查询参数
+  console.log('[派工页面][getProcessRaw] 即将获取工序列表', {
+    billTypeValue: billTypeValue || '默认: 正常排产',
+    processTypeParam,
+    workshop: workshop.value,
+    filters
+  })
 
   const res = await callWorkflowListAPIPaged({
     worksheetId: 'paigongdan',
     filters
   })
+
+  // 调试：打印工序接口返回概况
+  try {
+    const total = res && res.data && Array.isArray(res.data) ? res.data.length : 0
+    const first = total > 0 ? res.data[0] : null
+    console.log('[派工页面][getProcessRaw] 工序接口返回', {
+      billTypeValue: billTypeValue || '默认: 正常排产',
+      processTypeParam,
+      workshop: workshop.value,
+      total,
+      firstSample: first
+        ? {
+            processName: first['656ffd1bba5ef3863bf3ec1e'],
+            processOrder: first['6593b07ae97eb866a50eeba1'],
+            productcode: first['691d6160535b29cbd5c6c0a9'],
+            rowid: first['rowid'],
+            sonoutput: first['66974d062503723eec1af614']
+          }
+        : null
+    })
+  } catch (e) {
+    console.error('[派工页面][getProcessRaw] 打印返回数据失败', e)
+  }
+
   return res
 }
 
 // 根据当前车间和单据类型获取单据列表
 const getBillsListRaw = async () => {
   const filters = [{
-    "controlId": "67de26c9c5377d50a523c735",
-    "dataType": 30,
-    "spliceType": 1,
-    "filterType": 2,
-    "values": [workshop.value]
+    controlId: '67de26c9c5377d50a523c735',
+    dataType: 30,
+    spliceType: 1,
+    filterType: 2,
+    values: [workshop.value]
   }, {
-    "controlId": "694a3954687045435008a7c3",
-    "dataType": 30,
-    "spliceType": 1,
-    "filterType": 2,
-    "values": [billTypeFilter.value]
+    controlId: '694a3954687045435008a7c3',
+    dataType: 30,
+    spliceType: 1,
+    filterType: 2,
+    values: [billTypeFilter.value]
   }]
+
+  // 如果有选中的订单号和生产单号，则在接口层按订单号 + 生产单号一起过滤单据
+  if (selectedOrderCode.value) {
+    filters.push({
+      controlId: '655e1cbbbd2094b316347f92', // 单据中的订单号字段
+      dataType: 30,
+      spliceType: 1,
+      filterType: 2,
+      values: [selectedOrderCode.value]
+    })
+  }
+
+  if (selectedProductionCode.value) {
+    filters.push({
+      controlId: '698438933b5e707f84cf51fd', // 单据中的生产单号字段
+      dataType: 30,
+      spliceType: 1,
+      filterType: 2,
+      values: [selectedProductionCode.value]
+    })
+  }
 
   const res = await callWorkflowListAPIPaged({
     worksheetId: 'paichanjihua',
@@ -818,6 +879,29 @@ const search = async () => {
   // 获取单据列表（按车间和单据类型从后端筛选）
   const billsRes = await getBillsListRaw()
 
+  // 调试：打印单据接口返回概况
+  try {
+    const total = billsRes && billsRes.data && Array.isArray(billsRes.data) ? billsRes.data.length : 0
+    console.log('[派工页面][search] 单据接口返回', {
+      workshop: workshop.value,
+      billType: billTypeFilter.value,
+      total
+    })
+
+    // 调试：重点打印单据原始生产编号字段
+    if (total > 0) {
+      console.log('[派工页面][search] 单据原始生产编号示例', {
+        sample: billsRes.data.slice(0, 5).map(item => ({
+          orderCodeRaw: item['655e1cbbbd2094b316347f92'],
+          productionCodeRaw: item['698438933b5e707f84cf51fd'],
+          rowid: item['rowid']
+        }))
+      })
+    }
+  } catch (e) {
+    console.error('[派工页面][search] 打印单据返回失败', e)
+  }
+
   if (!billsRes.data || billsRes.data.length === 0) {
     billsList.value = []
     processList.value = []
@@ -829,6 +913,12 @@ const search = async () => {
     if (item['66974cda2503723eec1af600'] === '[]') return false
     const num = Number(item['69a8e4563b5e707f84d33c0c'])
     return !Number.isNaN(num) && num > 0
+  })
+
+  // 调试：打印过滤后的单据数量
+  console.log('[派工页面][search] 过滤后的单据数量', {
+    before: billsRes.data.length,
+    after: filteredBillsData.length
   })
 
   if (!filteredBillsData.length) {
@@ -888,6 +978,16 @@ const search = async () => {
     })
   }
 
+  // 调试：打印基础单据映射结果
+  console.log('[派工页面][search] 基础单据列表', {
+    count: baseBills.length,
+    sample: baseBills.slice(0, 3).map(b => ({
+      orderCode: b.orderCode,
+      productionCode: b.productionCode,
+      billType: b.billType
+    }))
+  })
+
   if (!baseBills.length) {
     billsList.value = []
     processList.value = []
@@ -897,8 +997,29 @@ const search = async () => {
   // 获取当前单据类型对应的工序列表（按车间 + 工序类型）
   const processRes = await getProcessRaw(billTypeFilter.value)
 
+  // 调试：重点打印工序原始生产编号字段
+  try {
+    const totalProcess = processRes && processRes.data && Array.isArray(processRes.data) ? processRes.data.length : 0
+    if (totalProcess > 0) {
+      console.log('[派工页面][search] 工序原始生产编号示例', {
+        sample: processRes.data.slice(0, 5).map(item => ({
+          processNameRaw: item['656ffd1bba5ef3863bf3ec1e'],
+          processOrderRaw: item['6593b07ae97eb866a50eeba1'],
+          productcodeRaw: item['691d6160535b29cbd5c6c0a9'],
+          rowid: item['rowid']
+        }))
+      })
+    }
+  } catch (e) {
+    console.error('[派工页面][search] 打印工序原始生产编号失败', e)
+  }
+
   if (!processRes.data || processRes.data.length === 0) {
     processList.value = []
+    console.log('[派工页面][search] 工序接口返回为空', {
+      workshop: workshop.value,
+      billType: billTypeFilter.value
+    })
   } else {
     const allProcesses = processRes.data.map(item => ({
       processName: item['656ffd1bba5ef3863bf3ec1e'],
@@ -922,6 +1043,18 @@ const search = async () => {
     }))
 
     processList.value = allProcesses.map(p => ({ ...p }))
+
+    // 调试：打印工序映射结果
+    console.log('[派工页面][search] 映射后的工序列表', {
+      count: allProcesses.length,
+      sample: allProcesses.slice(0, 5).map(p => ({
+        processName: p.processName,
+        processOrder: p.processOrder,
+        productcode: p.productcode,
+        rowid: p.rowid,
+        sonoutput: p.sonoutput
+      }))
+    })
   }
 
   const allProcesses = processList.value || []
@@ -938,6 +1071,20 @@ const search = async () => {
         const seqB = b.sequence || 0
         return seqA - seqB
       })
+
+    // 调试：打印每个订单匹配到的工序
+    console.log('[派工页面][search] 订单关联工序', {
+      orderCode: bill.orderCode,
+      productionCode: bill.productionCode,
+      processCount: processes.length,
+      processesPreview: processes.slice(0, 10).map(p => ({
+        processName: p.processName,
+        processOrder: p.processOrder,
+        productcode: p.productcode,
+        rowid: p.rowid,
+        sonoutput: p.sonoutput
+      }))
+    })
 
     const completedProcessText =
       processes.length > 0
@@ -2203,69 +2350,28 @@ onUnload(() => {
     box-sizing: border-box;
     margin: px2vw(10px) px2vw(10px);
     border-radius: px2vw(18px);
-    justify-content: flex-start;
+    justify-content: space-between;
     gap: px2vw(10px);
 
-    .salesOrder,
-    .orderItem {
-      display: flex;
-      align-items: center;
-      flex: 0 0 35%;
-      max-width: 36%;
-      margin: 0;
-    }
-
-    .orderItem {
-      margin: 0;
-    }
-
-    /* 搜索按钮与上方四个按钮一致（样式与 .btn-list .btn-item 相同） */
-    .search-btn {
-      flex-shrink: 0;
-      margin-left: px2vw(10px);
-      margin-right: 0;
-      width: auto;
-      min-width: px2vw(500px);
-      height: px2vw(80px);
-      padding: px2vw(16px) px2vw(25px);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      border-radius: px2vw(18px);
-      color: #fff;
-      background-color: #2755f1;
-      font-size: px2vw(25px);
-    }
-
-    .salesOrder-text,
-    .orderItem-text {
-      font-size: px2vw(25px);
-      margin-right: px2vw(10px);
-      white-space: nowrap;
-    }
-
-    .input-box,
-    .picker-box {
+    .info-item {
       flex: 1;
       min-width: 0;
-      width: auto;
-      height: px2vw(80px);
-      border: px2vw(3px) solid #5884f1;
-      border-radius: px2vw(18px);
       display: flex;
-      align-items: center;
-      padding: 0 px2vw(30px);
-      margin-left: px2vw(10px);
-      box-sizing: border-box;
+      flex-direction: column;
+      justify-content: center;
+      padding: 0 px2vw(10px);
 
-      input {
-        font-size: px2vw(25px);
+      .info-label {
+        font-size: px2vw(24px);
+        color: #666;
+        margin-bottom: px2vw(4px);
+        white-space: nowrap;
       }
 
-      .picker-value {
-        font-size: px2vw(25px);
+      .info-value {
+        font-size: px2vw(26px);
         color: #333;
-        width: 100%;
+        font-weight: 500;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;

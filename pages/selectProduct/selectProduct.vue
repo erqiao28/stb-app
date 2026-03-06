@@ -45,22 +45,36 @@
         @click="selectProductItem(item)"
       >
         <view class="goodsInfo">
-          <!-- 第一行：订单编号 + 客户名称 + 产品名称 -->
+          <!-- 第一行：订单编号 + 客户名称 + 生产单号 -->
           <view class="row-top">
             <view class="col col-left">
               <text class="label">订单编号：</text>
               <text class="value">{{ item.orderCode }}</text>
             </view>
             <view class="col col-center">
-              <text class="label">客户名称：</text>
-              <text class="value">{{ item.customerName || '-' }}</text>
+              <text class="label">客户：</text>
+              <text class="value value-name">{{ item.customerName || '-' }}</text>
             </view>
             <view class="col col-right">
-              <text class="label">产品名称：</text>
-              <text class="value">{{ item.name || '-' }}</text>
+              <text class="label">生产单号：</text>
+              <text class="value">{{ item.productionCode || '-' }}</text>
             </view>
           </view>
-          <!-- 第二行：规格型号，占整行，允许换行 -->
+          <!-- 第二行：产品名称 + 订单数量（与第一行三列对齐，第三列为空壳占位） -->
+          <view class="row-middle">
+            <view class="col col-left">
+              <text class="label">产品名称：</text>
+              <text class="value product-name-value">{{ item.name || '-' }}</text>
+            </view>
+            <view class="col col-center">
+              <text class="label">订单数量：</text>
+              <text class="value order-count-value">{{ item.orderCount || '-' }}</text>
+            </view>
+            <view class="col col-right col-empty">
+              <!-- 占位空壳，用于保持与第一行一致的布局结构 -->
+            </view>
+          </view>
+          <!-- 第三行：规格型号，占整行，允许换行 -->
           <view class="row-bottom">
             <text class="label">规格型号：</text>
             <text class="value value-models">{{ item.models || '-' }}</text>
@@ -185,18 +199,20 @@ const search = async () => {
     return
   }
 
-  // 单条维度展示：订单编号 + 客户名称 + 产品名称 + 规格型号
+  // 单条维度展示：订单编号 + 客户名称 + 产品名称 + 订单数量 + 规格型号
   let list = filteredData.map(item => {
     const orderCode = item['655e1cbbbd2094b316347f92'] || ''
     const customerName = item['69a8ed3c3b5e707f84d33f8b'] || ''
     const name = item['6937d255ff2b019b3cb34be3'] || ''
     const models = item['6937d255ff2b019b3cb34be4'] || ''
+    const orderCount = item['681b0b53b139204fd264c5fd'] || ''
 
     return {
       orderCode,
       customerName,
       name,
       models,
+      orderCount,
       productionCode: item['698438933b5e707f84cf51fd'] || '',
       productCode: item['691d6336535b29cbd5c6c0ca'] || ''
     }
@@ -228,14 +244,14 @@ const quit = () => {
   })
 }
 
-// 选择产品后，跳转到派工页面，并将物品名称传过去
+// 选择产品后，跳转到派工页面，并将订单号、生产单号、物品名称传过去
 const selectProductItem = (item) => {
   uni.navigateTo({
     url: `/pages/dispatchWork/dispatchWork?workshop=${encodeURIComponent(
       workshop.value
-    )}&orderCode=${encodeURIComponent(item.orderCode || '')}&orderItem=${encodeURIComponent(
-      item.name || ''
-    )}`
+    )}&orderCode=${encodeURIComponent(item.orderCode || '')}&productionCode=${encodeURIComponent(
+      item.productionCode || ''
+    )}&orderItem=${encodeURIComponent(item.name || '')}`
   })
 }
 </script>
@@ -349,7 +365,8 @@ const selectProductItem = (item) => {
         font-size: px2vw(25px);
         gap: px2vw(10px);
 
-        .row-top {
+        .row-top,
+        .row-middle {
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -359,6 +376,7 @@ const selectProductItem = (item) => {
             display: flex;
             align-items: center;
             min-width: 0;
+            flex: 1; // 三列等宽，保证上下行标题对齐
 
             .label {
               color: #666;
@@ -372,22 +390,24 @@ const selectProductItem = (item) => {
               word-break: break-all;
               white-space: normal;
             }
+
+            .value.product-name-value {
+              color: #ff4d4f;
+            }
+
+            .value.order-count-value {
+              color: #2755f1;
+            }
           }
 
-          .col-left {
-            flex: 0 0 auto;
-            justify-content: flex-start;
-          }
-
-          .col-center {
-            flex: 1;
-            justify-content: flex-start;
-            padding: 0 px2vw(10px);
-          }
-
+          .col-left,
+          .col-center,
           .col-right {
-            flex: 1.2;
             justify-content: flex-start;
+          }
+
+          .col-empty {
+            // 空壳占位列，不显示内容，但保持宽度参与对齐
           }
         }
 

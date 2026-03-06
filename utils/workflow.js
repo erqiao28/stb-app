@@ -148,7 +148,7 @@ export const callWorkflowListAPI = async (
  */
 export const callWorkflowListAPIPaged = async (
   queryParams = {},
-  pageSize = 300,
+  pageSize = 100,
   pageNum = 1,
   delaySeconds = 0
 ) => {
