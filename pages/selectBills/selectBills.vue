@@ -8,6 +8,12 @@
 			</view>
 			<view></view>
 		</view>
+		<!-- 顶部功能按钮栏：派工查询、员工工作量查询（与派工页面一致） -->
+		<view class="btn-list">
+			<view class="btn-item" @click="goDispatchInquiry">派工查询</view>
+			<view class="btn-item" @click="goWorkload">员工工作量查询</view>
+		</view>
+
 		<!-- 搜索区域：仅销售订单 + 查询按钮 -->
 		<view class="search-box">
 			<view class="salesOrder">
@@ -184,6 +190,20 @@ const selectOrder = (item) => {
 		)}&orderCode=${encodeURIComponent(item.orderCode || '')}`
 	})
 }
+
+// 派工查询：跳转到派工查询页面，带上当前车间（与派工页面保持一致）
+const goDispatchInquiry = () => {
+	uni.navigateTo({
+		url: `/pages/dispatchInquiry/dispatchInquiry?workshop=${encodeURIComponent(workshop.value)}`
+	})
+}
+
+// 员工工作量查询：跳转到员工工作量查询页面（与派工页面保持一致）
+const goWorkload = () => {
+	uni.navigateTo({
+		url: '/pages/workload/workload'
+	})
+}
 </script>
 
 <style scoped lang="scss">
@@ -213,6 +233,28 @@ const selectOrder = (item) => {
 			margin-right: px2vw(80px);
 			font-size: px2vw(35px);
 			color: white;
+		}
+	}
+
+	/* 顶部功能按钮栏样式（复用派工页面样式） */
+	.btn-list {
+		height: px2vw(120px);
+		width: 100%;
+		display: flex;
+		align-items: center;
+
+		.btn-item {
+			height: px2vw(80px);
+			flex: 1; /* 二等分父容器宽度 */
+			margin: px2vw(10px);
+			padding: px2vw(16px) px2vw(25px);
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			border-radius: px2vw(18px);
+			color: #fff;
+			background-color: #2755f1;
+			font-size: px2vw(25px);
 		}
 	}
 
