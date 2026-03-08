@@ -232,7 +232,7 @@
                 </picker>
               </view>
               <view class="form-group">
-                <text class="label">日产量：</text>
+                <text class="label">标准日产量：</text>
                 <text class="value-readonly">
                   {{ selectedProcessData?.process?.dailyoutput || 0 }}
                 </text>
@@ -314,10 +314,11 @@
       <view></view>
     </view>
     
-    <!-- 功能按钮栏（派工查询、员工工作量查询、排产类型按钮） -->
+    <!-- 功能按钮栏（派工查询、员工工作量查询、多对多派工查询、排产类型按钮） -->
     <view class="btn-list">
       <view class="btn-item" @click="goDispatchInquiry">派工查询</view>
       <view class="btn-item" @click="goWorkload">员工工作量查询</view>
+      <view class="btn-item" v-if="workshop === '组装车间'" @click="goDispatchInquiryMore">多对多派工查询</view>
       <!-- 排产类型按钮：正常排产 / 返工排产 -->
       <view class="btn-item" @click="setBillType('正常排产')">正常排产</view>
       <view class="btn-item" @click="setBillType('返工排产')">返工排产</view>
@@ -1659,20 +1660,10 @@ const confirmProcessDispatch = async () => {
     return
   }
   
-  // 检查派工数量是否超过需派工数量
+  // 检查派工数量是否超过需派工数量（不再限制日产量）
   const maxQty = maxQuantity.value
-  // 当前工序的日产量（如果有的话）
-  const dailyOutputRaw = selectedProcessData.value?.process?.dailyoutput
-  const dailyOutput = dailyOutputRaw === '' || dailyOutputRaw == null ? 0 : Number(dailyOutputRaw) || 0
-
-  // 允许的最大数量：不能超过需派工数量；如果有日产量，则同时不能超过日产量
-  const limit = dailyOutput > 0 ? Math.min(maxQty, dailyOutput) : maxQty
-
-  if (processDispatchData.value.quantity > limit) {
-    const tip = dailyOutput > 0
-      ? `派工数量不能超过需派工数量 ${maxQty}，且不能超过日产量 ${dailyOutput}`
-      : `派工数量不能超过需派工数量 ${maxQty}`
-    uni.showToast({ title: tip, icon: 'none' })
+  if (processDispatchData.value.quantity > maxQty) {
+    uni.showToast({ title: `派工数量不能超过需派工数量 ${maxQty}`, icon: 'none' })
     return
   }
   
@@ -1974,6 +1965,12 @@ const goWorkload = () => {
   })
 }
 
+const goDispatchInquiryMore = () => {
+  uni.navigateTo({
+    url: `/pages/dispatchInquiryMore/dispatchInquiryMore?workshop=${encodeURIComponent(workshop.value)}`
+  })
+}
+
 const goWorkGuide = () => {
   uni.navigateTo({
     url: '/pages/workGuide/workGuide'
@@ -2149,19 +2146,10 @@ const quit = () => {
 // 监听派工数量变化，验证并计算派工工时
 watch(() => processDispatchData.value.quantity, (newVal) => {
   const maxQty = maxQuantity.value
-  // 当前工序的日产量（如果有的话）
-  const dailyOutputRaw = selectedProcessData.value?.process?.dailyoutput
-  const dailyOutput = dailyOutputRaw === '' || dailyOutputRaw == null ? 0 : Number(dailyOutputRaw) || 0
-
-  // 允许的最大数量：不能超过需派工数量；如果有日产量，则同时不能超过日产量
-  const limit = dailyOutput > 0 ? Math.min(maxQty, dailyOutput) : maxQty
-
-  if (newVal > limit) {
-    const tip = dailyOutput > 0
-      ? `数量不能超过需派工数量 ${maxQty}，且不能超过日产量 ${dailyOutput}`
-      : `数量不能超过需派工数量 ${maxQty}`
-    uni.showToast({ title: tip, icon: 'none' })
-    processDispatchData.value.quantity = limit
+  // 允许的最大数量：不能超过需派工数量（不再限制日产量）
+  if (newVal > maxQty) {
+    uni.showToast({ title: `数量不能超过需派工数量 ${maxQty}`, icon: 'none' })
+    processDispatchData.value.quantity = maxQty
     return
   } else if (newVal < 0) {
     processDispatchData.value.quantity = 0

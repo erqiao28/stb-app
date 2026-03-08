@@ -68,6 +68,11 @@ const props = defineProps({
   workshop: {
     type: String,
     default: ''
+  },
+  // 最多可选数量：仅记时派工传 1（单选），其他页面不传则默认 0（不限制）
+  maxSelection: {
+    type: Number,
+    default: 0
   }
 })
 
@@ -146,7 +151,16 @@ const isChecked = (value) => {
 }
 
 const onCheckboxChange = (e) => {
-  internalModel.value = e.detail.value || []
+  let next = e.detail.value || []
+  if (props.maxSelection === 1 && next.length > 1) {
+    // 单选：只保留最后勾选的那一项
+    next = [next[next.length - 1]]
+  } else if (props.maxSelection === 1 && next.length === 1) {
+    // 已是单选，直接使用
+  } else if (props.maxSelection > 0 && next.length > props.maxSelection) {
+    next = next.slice(-props.maxSelection)
+  }
+  internalModel.value = next
 }
 </script>
 

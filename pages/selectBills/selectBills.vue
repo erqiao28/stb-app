@@ -8,10 +8,12 @@
 			</view>
 			<view></view>
 		</view>
-		<!-- 顶部功能按钮栏：派工查询、员工工作量查询（与派工页面一致） -->
+		<!-- 顶部功能按钮栏：派工查询、员工工作量查询、多对多派工查询、记时派工 -->
 		<view class="btn-list">
+			<view class="btn-item" @click="goTimeWork">记时派工</view>
 			<view class="btn-item" @click="goDispatchInquiry">派工查询</view>
 			<view class="btn-item" @click="goWorkload">员工工作量查询</view>
+			<view class="btn-item" v-if="workshop === '组装车间'" @click="goDispatchInquiryMore">多对多派工查询</view>
 		</view>
 
 		<!-- 搜索区域：仅销售订单 + 查询按钮 -->
@@ -25,7 +27,7 @@
 			<view class="btn-item search-btn" @click="search">查询</view>
 		</view>
 
-		<!-- 订单列表：左中右弹性布局，订单编号、客户名称、产品数量完整显示 -->
+		<!-- 订单列表：订单编号、出货时间、客户名称、产品数量 -->
 		<view class="orderList">
 			<view class="orderItem" v-for="item in billsList" :key="item.orderCode" @click="selectOrder(item)">
 				<view class="goodsInfo row-single">
@@ -33,13 +35,17 @@
 						<text class="label">订单编号：</text>
 						<text class="value">{{ item.orderCode }}</text>
 					</view>
+					<view class="col col-delivery">
+						<text class="label">出货时间：</text>
+						<text class="value delivery-time-value">{{ item.deliveryTime || '-' }}</text>
+					</view>
 					<view class="col col-center">
 						<text class="label">客户名称：</text>
 						<text class="value">{{ item.customerName || '-' }}</text>
 					</view>
 					<view class="col col-right">
 						<text class="label">产品数量：</text>
-						<text class="value">{{ item.productCount }}</text>
+						<text class="value product-count-value">{{ item.productCount }}</text>
 					</view>
 				</view>
 			</view>
@@ -148,12 +154,16 @@ const search = async () => {
 	}
 
 	// 调试：打印订单号为 STB260119-004 的原始数据及 66974cda2503723eec1af600 字段
-	// 再按订单（655e1cbbbd2094b316347f92）汇总：同一订单只显示一条，产品数量为该订单的条数，客户名称取该订单第一条的 69a8ed3c3b5e707f84d33f8b
+	// 再按订单（655e1cbbbd2094b316347f92）汇总：同一订单只显示一条，产品数量为该订单的条数，客户名称、出货时间取该订单第一条
 	const orderMap = {}
 	filteredData.forEach(item => {
 		const orderCode = item['655e1cbbbd2094b316347f92'] || ''
 		if (!orderMap[orderCode]) {
-			orderMap[orderCode] = { count: 0, customerName: item['69a8ed3c3b5e707f84d33f8b'] || '' }
+			orderMap[orderCode] = {
+				count: 0,
+				customerName: item['69a8ed3c3b5e707f84d33f8b'] || '',
+				deliveryTime: item['69ad33ee3b5e707f84d43b09'] || ''
+			}
 		}
 		orderMap[orderCode].count += 1
 	})
@@ -161,6 +171,7 @@ const search = async () => {
 	let list = Object.keys(orderMap).map(orderCode => ({
 		orderCode,
 		customerName: orderMap[orderCode].customerName,
+		deliveryTime: orderMap[orderCode].deliveryTime,
 		productCount: orderMap[orderCode].count
 	}))
 
@@ -171,6 +182,16 @@ const search = async () => {
 			(item.orderCode || '').toString().toLowerCase().includes(keyword)
 		)
 	}
+
+	// 按出货时间升序排列，时间越久的在越下方（无出货时间的排到最后）
+	list.sort((a, b) => {
+		const ta = (a.deliveryTime || '').toString().trim()
+		const tb = (b.deliveryTime || '').toString().trim()
+		if (!ta && !tb) return 0
+		if (!ta) return 1
+		if (!tb) return -1
+		return ta.localeCompare(tb)
+	})
 
 	billsList.value = list
 }
@@ -202,6 +223,20 @@ const goDispatchInquiry = () => {
 const goWorkload = () => {
 	uni.navigateTo({
 		url: '/pages/workload/workload'
+	})
+}
+
+// 多对多派工查询：跳转到多对多派工查询页面
+const goDispatchInquiryMore = () => {
+	uni.navigateTo({
+		url: `/pages/dispatchInquiryMore/dispatchInquiryMore?workshop=${encodeURIComponent(workshop.value)}`
+	})
+}
+
+// 记时派工：跳转到记时派工页面
+const goTimeWork = () => {
+	uni.navigateTo({
+		url: `/pages/timeWork/timeWork?workshop=${encodeURIComponent(workshop.value)}`
 	})
 }
 </script>
@@ -354,9 +389,18 @@ const goWorkload = () => {
 							word-break: break-all;
 							white-space: normal;
 						}
+
+						.value.delivery-time-value {
+							color: #ff4d4f;
+						}
+
+						.value.product-count-value {
+							color: #2755f1;
+						}
 					}
 
-					.col-left {
+					.col-left,
+					.col-delivery {
 						flex: 0 0 auto;
 						justify-content: flex-start;
 					}

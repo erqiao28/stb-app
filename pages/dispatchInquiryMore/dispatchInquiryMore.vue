@@ -92,7 +92,7 @@
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="quit"></image>
 			<view class="title">
-				派工查询
+				多对多派工查询
 			</view>
 			<view></view>
 		</view>
@@ -135,6 +135,7 @@
 		<view class="dispatchInquiry-list">
 			<view class="dispatchInquiry-item" v-for="item in dispatchInquiryList" :key="item.id">
 				<button 
+					v-if="false"
 					class="btn-transfer" 
 					:class="{ 'btn-transfer-disabled': !canTransfer(item) }"
 					@click="handleTransfer(item)"
@@ -230,42 +231,49 @@ const dispatchInquiryList = ref([
 const getDispatchInquiryList = async () => {
 	
   const res = await callWorkflowListAPIPaged({
-    worksheetId: 'paigongrenyuan',
-    filters: [{
-    "controlId": "690c30aacf407aa3d9389791",
-    "dataType": 30,
-    "spliceType": 1,
-    "filterType": 2,
-    "values": [workshop.value]
-  }],
+    worksheetId: 'dddpg',
+    filters: [],
   pageSize: 1000,
   pageNum: 1
   })
   const statusExclude = ['全部报工', '已转派']
   dispatchInquiryList.value = res.data
     .filter(item => {
-      const status = item['66c7f8866440b9d16c7bf908'] || ''
+      const status = item['697b11b33b5e707f84cd938e'] || ''
       return !statusExclude.includes(status)
     })
     .map(item => ({
-    goodsName: item['6944facfdc7b13304885b3ad'],
-    goodsCode: item['6921596021066a9f124f6e63'],
-    processName: item['6945061adc7b13304885b92a'],
-    date: item['690d9ae28d797ee211e7e6a4'],
-    orderCode: item['6593b04a666735003d33ba61'],
-    productionOrder: item['6921596021066a9f124f6e61'],
-    worker: item['6938dcf1da0981f67b352b55'],
-    dispatchCount: item['655d9cd8cc4f25a27fb3e858'],
-    finishCount: item['693fe07b284b84255a6ebda5'],
-    worktime: item['693a7d580f64427fac25d070'],
-	reworkCount: item['694e69638c7b5544ee6c3493'],
-	wasteCount: item['694e69638c7b5544ee6c3494'],
+    goodsName: item['698a94e23b5e707f84d090ba'],
+    goodsCode: item['698a94e23b5e707f84d090ba'],
+    processName: item['69ad18473b5e707f84d42fb4'],
+    date: item['698a9d193b5e707f84d0917c'],
+    orderCode: item['69acec3a3b5e707f84d4266b'],
+    productionOrder: item['69ad12213b5e707f84d42b28'],
+    worker: (() => {
+      let raw = item['69ace00c3b5e707f84d42211']
+      if (typeof raw === 'string' && raw.trim()) {
+        try {
+          raw = JSON.parse(raw)
+        } catch (e) {
+          return raw
+        }
+      }
+      if (Array.isArray(raw) && raw.length > 0) {
+        return raw.map(o => (o && o.fullname) != null ? o.fullname : '').filter(Boolean).join(',') || ''
+      }
+      return raw != null ? String(raw) : ''
+    })(),
+    dispatchCount: item['697b0e503b5e707f84cd912f'],
+    finishCount: item['6980728c3b5e707f84ce90e4'],
+    worktime: item['697c61173b5e707f84cdd7c1'],
+	reworkCount: item['697c8f403b5e707f84ce0430'],
+	wasteCount: item['697c8f4f3b5e707f84ce0437'],
 	rowid: item['rowid'],
 	machineNumber: item['695c9af59223cfe3a0c02d5f'],
 	mouldNumber: item['695c9b009223cfe3a0c02d66'],
 	remainCount: item['6901c87f7a33416aedfd6bc4'],
 	workshop: item['66f130864a66ee0d85e400a9'],
-	status: item['66c7f8866440b9d16c7bf908'],
+	status: item['697b11b33b5e707f84cd938e'],
 	isRedeploy: item['695b7efca820885c2979af50'],
 	isredeploy: item['695b7efca820885c2979af4f'],
   }))

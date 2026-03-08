@@ -142,7 +142,10 @@ const getWorkloadList = async (pageNum, isRefresh = false) => {
         "values": [selectedWorkshop.value]
       }]
 	}, pageSize.value, pageNum)
-	
+
+	// 打印员工工作量查询获取的数据
+	console.log('[员工工作量查询] 获取数据', { total: res?.total, dataLength: res?.data?.length, data: res?.data })
+
 	const mappedData = res.data.map(item => ({
 		staff: item['6938db8bda0981f67b352af3'],
 		allWorktime: item['693bcaa5f15635c61ac3507a'],
@@ -152,7 +155,9 @@ const getWorkloadList = async (pageNum, isRefresh = false) => {
 		dispatchWorkDate: item['69524e7b7a59e0522d855df6'] || ''
 	}))
 	.filter(item => item.dispatchWorkDate === currentDate)
-	
+
+	console.log('[员工工作量查询] 映射并过滤后(当前日期)', { currentDate, mappedCount: mappedData.length, mappedData })
+
 	if (isRefresh) {
 		tableData.value = mappedData
 	}
@@ -162,8 +167,8 @@ const getWorkloadList = async (pageNum, isRefresh = false) => {
 		tableData.value.push(...mappedData)
 	}
 	
-	// 判断是否还有更多数据
-	hasMore.value = mappedData.length === pageSize.value && res.total > tableData.value.length
+	// 判断是否还有更多数据：按接口分页判断，不按过滤后条数（过滤后可能不足一页导致误判为无更多）
+	hasMore.value = res.data.length >= pageSize.value && pageNum * pageSize.value < (res.total || 0)
 	loading.value = false
 }
 // 退出
