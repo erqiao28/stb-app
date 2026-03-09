@@ -9,8 +9,93 @@
 			<view></view>
 		</view>
 
-		<!-- 固定在视口右下角的加号按钮 -->
-		<view class="fab-add" @click="onFabAdd"><text class="fab-add-icon">+</text></view>
+		<!-- 顶部筛选 + 记时派工按钮（导航栏下方） -->
+		<view class="top-action-bar">
+			<view class="filter-row">
+				<text class="filter-label">车间：</text>
+				<picker
+					mode="selector"
+					:range="workshopOptions"
+					:value="timeWorkWorkshopIndex"
+					@change="onTimeWorkWorkshopChange"
+				>
+					<view class="filter-picker-value">
+						{{ timeWorkForm.workshop || '请选择车间' }}
+					</view>
+				</picker>
+			</view>
+			<button class="btn-new-timework" @click="onFabAdd">
+				记时派工
+			</button>
+		</view>
+
+		<!-- 记时派工记录列表（根据车间筛选） -->
+		<scroll-view class="timework-bill-list" scroll-y>
+			<view
+				v-for="bill in timeWorkBills"
+				:key="bill.id || bill.dispatchTime + bill.employee"
+				class="bill-item"
+			>
+				<view class="bill-row">
+					<view class="bill-col">
+						<text class="bill-label">车间：</text>
+						<text class="bill-value">{{ bill.workshop || '-' }}</text>
+					</view>
+					<view class="bill-col">
+						<text class="bill-label">员工：</text>
+						<text class="bill-value">{{ bill.employee || '-' }}</text>
+					</view>
+				</view>
+				<view class="bill-row">
+					<view class="bill-col">
+						<text class="bill-label">派工时间：</text>
+						<text class="bill-value">{{ bill.dispatchTime || '-' }}</text>
+					</view>
+					<view class="bill-col">
+						<text class="bill-label">开工时间：</text>
+						<text class="bill-value">{{ bill.startTime || '-' }}</text>
+					</view>
+				</view>
+				<view class="bill-row">
+					<view class="bill-col">
+						<text class="bill-label">派工工时：</text>
+						<text class="bill-value">{{ bill.dispatchHours || '-' }}</text>
+					</view>
+					<view class="bill-col">
+						<text class="bill-label">时薪：</text>
+						<text class="bill-value">{{ bill.hourlyRate || '-' }}</text>
+					</view>
+				</view>
+				<view class="bill-row">
+					<view class="bill-col">
+						<text class="bill-label">完工时间：</text>
+						<text class="bill-value">{{ bill.finishTime || '-' }}</text>
+					</view>
+					<view class="bill-col">
+						<text class="bill-label">用时：</text>
+						<text class="bill-value">{{ bill.duration || '-' }}</text>
+					</view>
+				</view>
+				<view class="bill-row">
+					<view class="bill-col">
+						<text class="bill-label">工资：</text>
+						<text class="bill-value">{{ bill.salary || '-' }}</text>
+					</view>
+					<view class="bill-col">
+						<text class="bill-label">报工备注：</text>
+						<text class="bill-value">{{ bill.reportRemark || '-' }}</text>
+					</view>
+				</view>
+				<view class="bill-detail-row">
+					<text class="bill-label">具体事项：</text>
+					<text class="bill-value detail-text">{{ bill.detail || '-' }}</text>
+				</view>
+				<view class="status-tag" :class="getStatusTagClass(bill.status)">
+					{{ bill.status || '-' }}
+				</view>
+			</view>
+			<view v-if="!timeWorkBills.length" class="bill-empty">暂无记时派工记录</view>
+		</scroll-view>
 
 		<!-- 记时派工模态框 -->
 		<view class="time-work-modal" v-if="showTimeWorkModal" @click.self="closeTimeWorkModal">
@@ -28,7 +113,6 @@
 									<view class="picker-value">{{ timeWorkForm.workshop || '请选择车间' }}</view>
 								</picker>
 							</view>
-							<view class="form-group form-group-empty"></view>
 						</view>
 						<view class="form-row">
 							<view class="form-group">
@@ -68,7 +152,7 @@
 				</scroll-view>
 				<view class="modal-footer">
 					<button class="btn-add-employee" @click="openAddEmployeeModal">添加员工</button>
-					<button class="btn-dispatch" @click="confirmTimeWorkDispatch">派工</button>
+					<button class="btn-dispatch" @click="doTimeWorkDispatch">派工</button>
 				</view>
 			</view>
 		</view>
@@ -94,12 +178,18 @@ import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
+import http from '../../utils/request'
+import { useUserStore } from '../../store/user.store'
 import AddWorkerRadiobox from '../../component/addWorkerRadiobox/addWorkerRadiobox.vue'
 
 const { statusBarHeight } = useStatusBar()
+const userStore = useUserStore()
 
 const showTimeWorkModal = ref(false)
 const showAddEmployeeModal = ref(false)
+
+// 记时派工记录列表
+const timeWorkBills = ref([])
 
 // 车间选项（与派工页面一致）
 const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
@@ -119,10 +209,11 @@ const timeWorkWorkshopIndex = computed(() => {
 	return i >= 0 ? i : 0
 })
 
-function onTimeWorkWorkshopChange(e) {
+async function onTimeWorkWorkshopChange(e) {
 	const index = e.detail.value
 	timeWorkForm.value.workshop = workshopOptions.value[index] || '拉伸车间'
 	modalWorkshop.value = timeWorkForm.value.workshop
+	await loadTimeWorkBills()
 }
 
 // 员工列表（已添加的员工，与派工模态框一致）
@@ -188,6 +279,62 @@ const loadEmployeesForAdd = async () => {
 	}
 }
 
+// 加载记时派工记录（数据表 jspg），按车间筛选，过滤掉已完成
+const loadTimeWorkBills = async () => {
+	try {
+		const currentWorkshop = timeWorkForm.value.workshop || '拉伸车间'
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: 'jspg',
+			filters: [
+				{
+					controlId: '69a7eb4c3b5e707f84d2f8dc',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 2,
+					values: [currentWorkshop]
+				}
+			]
+		})
+
+		if (!res.data || !res.data.length) {
+			timeWorkBills.value = []
+			return
+		}
+
+		const mapped = res.data
+			.map(item => {
+				const status = item['69a7dd4c3b5e707f84d2f319'] || ''
+				return {
+					id: item.rowid || item['rowid'] || '',
+					workshop: item['69a7eb4c3b5e707f84d2f8dc'] || '',
+					employee: item['69ae75563b5e707f84d481df'] || '',
+					dispatchTime: item['69a7dd4c3b5e707f84d2f31c'] || '',
+					startTime: item['69ad32953b5e707f84d43ae2'] || '',
+					dispatchHours: item['69a7dfdf3b5e707f84d2f464'] || '',
+					hourlyRate: item['69a7dd4c3b5e707f84d2f31d'] || '',
+					finishTime: item['69a7e5a93b5e707f84d2f5c2'] || '',
+					duration: item['69a7e5a93b5e707f84d2f5c3'] || '',
+					salary: item['69a7e4a53b5e707f84d2f54f'] || '',
+					reportRemark: item['69a7e4d93b5e707f84d2f55a'] || '',
+					detail: item['69a7dd4c3b5e707f84d2f31e'] || '',
+					status
+				}
+			})
+			// 过滤掉已完成的单据
+			.filter(item => item.status !== '已完成')
+
+		// 派工时间倒序
+		mapped.sort((a, b) =>
+			String(b.dispatchTime || '').localeCompare(String(a.dispatchTime || ''))
+		)
+
+		timeWorkBills.value = mapped
+	} catch (e) {
+		console.error('加载记时派工记录失败:', e)
+		timeWorkBills.value = []
+	}
+}
+
 const openAddEmployeeModal = async () => {
 	modalWorkshop.value = timeWorkForm.value.workshop || '拉伸车间'
 	await loadEmployeesForAdd()
@@ -247,7 +394,63 @@ const closeTimeWorkModal = () => {
 	showTimeWorkModal.value = false
 }
 
-const confirmTimeWorkDispatch = () => {
+const doTimeWorkDispatch = async () => {
+	// 基本校验
+	if (!timeWorkEmployeeList.value.length) {
+		uni.showToast({ title: '请先选择员工', icon: 'none' })
+		return
+	}
+	if (!timeWorkForm.value.workHours) {
+		uni.showToast({ title: '请输入派工工时', icon: 'none' })
+		return
+	}
+	if (!timeWorkForm.value.hourlyRate) {
+		uni.showToast({ title: '请输入时薪', icon: 'none' })
+		return
+	}
+
+	const employee = timeWorkEmployeeList.value[0]
+	const payload = {
+		workshop: timeWorkForm.value.workshop || '',
+		workHours: parseFloat(timeWorkForm.value.workHours) || 0,
+		hourlyRate: parseFloat(timeWorkForm.value.hourlyRate) || 0,
+		remark: timeWorkForm.value.remark || '',
+		date: getCurrentDate(),
+		employeeId: employee.id || '',
+		employeeName: employee.name || '',
+		loginCode: userStore.loginCode || '',
+		loginName: userStore.loginName || ''
+	}
+
+	try {
+		uni.showLoading({ title: '提交中...', mask: true })
+		const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjlhZTZiOTIwZjBkMGFkODBmZDQ3MWEz', payload)
+		uni.hideLoading()
+
+		// 约定：status === 1 视为失败（与登录、修改密码接口一致）
+		if (res && res.status === 1) {
+			uni.showToast({ title: res.message || '派工失败', icon: 'none' })
+			return
+		}
+
+		uni.showToast({ title: res?.message || '派工成功', icon: 'success' })
+		closeTimeWorkModal()
+	} catch (error) {
+		uni.hideLoading()
+		console.error('记时派工失败:', error)
+		uni.showToast({ title: '派工失败：' + (error.message || '未知错误'), icon: 'none' })
+	}
+}
+
+// 工单状态标签样式
+const getStatusTagClass = (status) => {
+	if (status === '待开工') return 'status-pending-start'
+	if (status === '待报工') return 'status-pending-report'
+	if (status === '待审核') return 'status-pending-approve'
+	return 'status-default'
+}
+
+const confirmTimeWorkDispatch = async () => {
 	// TODO: 记时派工提交逻辑
 	uni.showToast({ title: '派工', icon: 'none' })
 	closeTimeWorkModal()
@@ -261,6 +464,8 @@ onLoad((options) => {
 			modalWorkshop.value = w
 		}
 	}
+	// 初次进入页面加载当前车间的记时派工记录
+	loadTimeWorkBills()
 })
 </script>
 
@@ -294,28 +499,144 @@ onLoad((options) => {
 		}
 	}
 
-	.fab-add {
-		position: fixed;
-		right: px2vw(40px);
-		bottom: px2vw(40px);
-		width: px2vw(100px);
-		height: px2vw(100px);
-		border-radius: 50%;
-		background-color: #2755f1;
-		color: #fff;
-		font-size: px2vw(60px);
-		font-weight: 300;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		box-shadow: 0 px2vw(4px) px2vw(12px) rgba(0, 0, 0, 0.2);
-		z-index: 100;
+	/* 导航栏下方的操作按钮区域 */
+	.top-action-bar {
+		padding: px2vw(20px) px2vw(40px);
+		background-color: #f0f0f0;
+		flex-shrink: 0;
 
-		.fab-add-icon {
-			position: relative;
-			top: px2vw(-4px);
+		.filter-row {
+			display: flex;
+			align-items: center;
+			margin-bottom: px2vw(16px);
+
+			.filter-label {
+				font-size: px2vw(28px);
+				color: #666;
+				margin-right: px2vw(12px);
+				white-space: nowrap;
+			}
+
+			picker {
+				flex: 1;
+			}
+
+			.filter-picker-value {
+				height: px2vw(60px);
+				line-height: px2vw(60px);
+				padding: 0 px2vw(12px);
+				border-radius: px2vw(8px);
+				border: px2vw(1px) solid #eee;
+				background-color: #fff;
+				font-size: px2vw(28px);
+				color: #333;
+			}
+		}
+
+		.btn-new-timework {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 100%;
+			height: px2vw(70px);
+			padding: 0 px2vw(40px);
+			border-radius: px2vw(18px);
+			border: none;
+			background-color: #2755f1;
+			color: #fff;
+			font-size: px2vw(30px);
 		}
 	}
+}
+
+/* 记时派工记录列表样式 */
+.timework-bill-list {
+	flex: 1;
+	padding: 0 px2vw(20px) px2vw(20px);
+	box-sizing: border-box;
+}
+
+.bill-item {
+	background-color: #fff;
+	border-radius: px2vw(18px);
+	padding: px2vw(20px) px2vw(24px) px2vw(40px);
+	margin-bottom: px2vw(20px);
+	box-shadow: 0 px2vw(4px) px2vw(10px) rgba(0, 0, 0, 0.05);
+	position: relative;
+}
+
+.bill-row {
+	display: flex;
+	margin-bottom: px2vw(8px);
+}
+
+.bill-col {
+	flex: 1;
+	display: flex;
+	font-size: px2vw(26px);
+
+	.bill-label {
+		color: #888;
+		margin-right: px2vw(6px);
+		white-space: nowrap;
+	}
+
+	.bill-value {
+		color: #333;
+	}
+}
+
+.bill-detail-row {
+	margin-top: px2vw(8px);
+	font-size: px2vw(26px);
+	display: flex;
+	align-items: flex-start;
+
+	.bill-label {
+		color: #888;
+		margin-right: px2vw(6px);
+		white-space: nowrap;
+	}
+
+	.detail-text {
+		color: #333;
+		flex: 1;
+	}
+}
+
+.bill-empty {
+	text-align: center;
+	color: #999;
+	font-size: px2vw(26px);
+	margin-top: px2vw(40px);
+}
+
+.status-tag {
+	position: absolute;
+	right: px2vw(20px);
+	bottom: px2vw(14px);
+	padding: px2vw(6px) px2vw(16px);
+	border-radius: px2vw(20px);
+	font-size: px2vw(24px);
+	color: #fff;
+	background-color: #ccc;
+}
+
+.status-pending-start {
+	background-color: #9e9e9e; /* 灰色 */
+}
+
+.status-pending-report {
+	background-color: #f44336; /* 红色 */
+}
+
+.status-pending-approve {
+	background-color: #ffb300; /* 黄色 */
+	color: #333;
+}
+
+.status-default {
+	background-color: #ccc;
 }
 
 .time-work-modal {
@@ -384,6 +705,7 @@ onLoad((options) => {
 			display: flex;
 			align-items: center;
 			gap: px2vw(12px);
+			margin: 0 px2vw(10px);
 			flex: 1;
 
 			&.full { width: 100%; }
@@ -399,7 +721,7 @@ onLoad((options) => {
 				flex: 1;
 				height: px2vw(60px);
 				line-height: px2vw(60px);
-				padding: 0 px2vw(12px);
+				padding: 0 px2vw(10px);
 				border: px2vw(1px) solid #eee;
 				border-radius: px2vw(8px);
 				font-size: px2vw(28px);
