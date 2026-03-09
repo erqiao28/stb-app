@@ -434,6 +434,8 @@ const doTimeWorkDispatch = async () => {
 		}
 
 		uni.showToast({ title: res?.message || '派工成功', icon: 'success' })
+		// 派工成功后刷新列表数据
+		await loadTimeWorkBills()
 		closeTimeWorkModal()
 	} catch (error) {
 		uni.hideLoading()
