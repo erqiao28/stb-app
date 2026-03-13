@@ -318,7 +318,7 @@
     <view class="btn-list">
       <view class="btn-item" @click="goDispatchInquiry">派工查询</view>
       <view class="btn-item" @click="goWorkload">员工工作量查询</view>
-      <view class="btn-item" v-if="workshop === '组装车间'" @click="goDispatchInquiryMore">多对多派工查询</view>
+      <view class="btn-item" v-if="workshop === '组装车间' || workshop === '喷涂车间'" @click="goDispatchInquiryMore">多对多派工查询</view>
       <!-- 排产类型按钮：正常排产 / 返工排产 -->
       <view class="btn-item" @click="setBillType('正常排产')">正常排产</view>
       <view class="btn-item" @click="setBillType('返工排产')">返工排产</view>
@@ -367,7 +367,7 @@
               <button class="btn-detail" :disabled="!canClickDispatch(item)" @click="dispatchWork(item)">操作</button>
               <button class="btn-delete" @click="addProcess(item)">添加工序</button>
               <button class="btn-normal-process" v-if="item.billType === '返工排产'" @click="useNormalProcess(item)">使用正常工序</button>
-              <button class="btn-multi-dispatch" v-if="workshop === '组装车间'" :disabled="!canClickMultiDispatch(item)" @click="openMultiDispatchModal(item)">多对多派工</button>
+              <button class="btn-multi-dispatch" v-if="workshop === '组装车间' || workshop === '喷涂车间'" :disabled="!canClickMultiDispatch(item)" @click="openMultiDispatchModal(item)">多对多派工</button>
             </view>
           </view>
           
@@ -409,9 +409,9 @@
                 <view class="process-item" :class="{ 
                   'process-selected': isProcessSelected(item, process), 
                   'process-over': process.isOver == 1,
-                  'process-multi-selected': workshop === '组装车间' && isMultiProcessSelected(item, process)
+                  'process-multi-selected': (workshop === '组装车间' || workshop === '喷涂车间') && isMultiProcessSelected(item, process)
                 }"
-                @click="workshop === '组装车间' ? toggleMultiProcess(item, process) : selectProcess(item, process)">
+                @click="(workshop === '组装车间' || workshop === '喷涂车间') ? toggleMultiProcess(item, process) : selectProcess(item, process)">
                   <view class="process-sequence">{{ process.sequence || '' }}</view>
                   <view class="progress-circle"
                     :style="{
@@ -596,8 +596,8 @@ const isProcessOver = computed(() => {
 
 // 获取指定订单的选中工序数量
 const getSelectedProcessCount = (item) => {
-  if (workshop.value === '组装车间') {
-    // 组装车间：统计多选的工序数量
+  if (workshop.value === '组装车间' || workshop.value === '喷涂车间') {
+    // 组装、喷涂车间：统计多选的工序数量
     return selectedMultiProcesses.value.filter(p => p.item.orderCode === item.orderCode).length
   } else {
     // 其他车间：检查是否有单选工序
@@ -613,7 +613,7 @@ const canClickDispatch = (item) => {
 
 // 判断是否可以点击多对多派工按钮
 const canClickMultiDispatch = (item) => {
-  if (workshop.value !== '组装车间') {
+  if (workshop.value !== '组装车间' && workshop.value !== '喷涂车间') {
     return false
   }
   const count = getSelectedProcessCount(item)
@@ -677,8 +677,8 @@ const confirmTerminate = async () => {
 const handleWorkshopConfirm = (value) => {
   workshop.value = value
   showWorkshopModal.value = false
-  // 切换车间时，如果不是组装车间，清空多选状态
-  if (value !== '组装车间') {
+  // 切换车间时，如果不是组装或喷涂车间，清空多选状态
+  if (value !== '组装车间' && value !== '喷涂车间') {
     selectedMultiProcesses.value = []
   }
   search()
@@ -873,7 +873,7 @@ const setBillType = (type) => {
 const search = async () => {
   // 清除选中状态
   selectedProcess.value = null
-  if (workshop.value !== '组装车间') {
+  if (workshop.value !== '组装车间' && workshop.value !== '喷涂车间') {
     selectedMultiProcesses.value = []
   }
 
@@ -1369,7 +1369,8 @@ const openMultiDispatchModal = (item) => {
   selectedMultiEmployees.value = []
   
   // 初始化模态框车间为页面当前车间
-  modalWorkshop.value = workshop.value
+  // 特殊规则：当页面车间为喷涂车间时，添加员工默认使用组装车间
+  modalWorkshop.value = workshop.value === '喷涂车间' ? '组装车间' : workshop.value
   
   // 不自动加载员工列表，只有点击添加员工按钮后才加载
   showMultiDispatchModal.value = true
@@ -1397,7 +1398,8 @@ const closeMultiDispatchModal = () => {
 const addMultiEmployee = async () => {
   // 如果模态框车间值还没有设置，使用当前页面车间值
   if (!modalWorkshop.value) {
-    modalWorkshop.value = workshop.value
+    // 特殊规则：当页面车间为喷涂车间时，添加员工默认使用组装车间
+    modalWorkshop.value = workshop.value === '喷涂车间' ? '组装车间' : workshop.value
   }
   
   // 加载所有可选的员工列表（用于添加员工模态框）
@@ -1535,6 +1537,7 @@ const confirmMultiDispatch = async () => {
     productionCount: billItem?.productionCount || billItem?.orderCount || 0,
     billRowid: billItem?.billRowid || '',
     orderCode: billItem?.orderCode || '',
+    workshop: workshop.value || '',
     processes: selectedMultiProcesses.value.map(p => ({
       rowid: p.process.rowid,
     })),
@@ -1580,7 +1583,8 @@ const openProcessModal = (item, process) => {
   const todayStr = `${year}-${month}-${day}`
   
   // 初始化模态框车间为页面当前车间
-  modalWorkshop.value = workshop.value
+  // 特殊规则：当页面车间为喷涂车间时，添加员工默认使用组装车间
+  modalWorkshop.value = workshop.value === '喷涂车间' ? '组装车间' : workshop.value
   
   processDispatchData.value = {
     employee: '',
@@ -1809,7 +1813,8 @@ const loadEmployees = async () => {
 const addEmployee = async () => {
   // 如果模态框车间值还没有设置，使用当前页面车间值
   if (!modalWorkshop.value) {
-    modalWorkshop.value = workshop.value
+    // 特殊规则：当页面车间为喷涂车间时，添加员工默认使用组装车间
+    modalWorkshop.value = workshop.value === '喷涂车间' ? '组装车间' : workshop.value
   }
   
   // 重新加载员工列表，确保使用最新的车间值
@@ -1992,29 +1997,36 @@ const goSelectReworkBills = () => {
 }
 
 const addProcess = async (item) => {
+  // 必须先选择工序，才能添加工序
+  let baseProcess = null
+
+  if (workshop.value === '组装车间' || workshop.value === '喷涂车间') {
+    // 组装、喷涂车间：从多选工序中取当前订单的第一个选中工序
+    const selected = selectedMultiProcesses.value.find(p => p.item.orderCode === item.orderCode)
+    if (!selected) {
+      uni.showToast({ title: '请先选择一个工序', icon: 'none' })
+      return
+    }
+    baseProcess = selected.process
+  } else {
+    // 其他车间：使用单选选中的工序
+    if (!selectedProcess.value || selectedProcess.value.item.orderCode !== item.orderCode) {
+      uni.showToast({ title: '请先选择一个工序', icon: 'none' })
+      return
+    }
+    baseProcess = selectedProcess.value.process
+  }
+
   // 获取单据的rowid
   const billRowid = item.billRowid || ''
-  
-  let selectedSequence = 0
-  
-  // 获取选中工序的rowid（如果选择了工序）
-  let processRowid = ''
-  
-  // 计算新工序的顺序
-  if (selectedProcess.value && selectedProcess.value.item.orderCode === item.orderCode) {
-    // 情况1：如果选择了工序，选中工序的顺序 + 0.01
-    const currentSequence = parseFloat(selectedProcess.value.process.sequence || 0)
-    selectedSequence = parseFloat((currentSequence + 0.01).toFixed(2))
-    processRowid = selectedProcess.value.process.rowid || ''  // 获取选中工序的rowid
-  } else if (item.processes && item.processes.length > 0) {
-    // 情况2：如果工序列表有工序，但没有选择工序，取顺序最大的工序的顺序 + 1，并往下取整
-    const maxSequence = Math.max(...item.processes.map(p => parseFloat(p.sequence || 0)))
-    selectedSequence = Math.floor(maxSequence) + 1
-  } else {
-    // 情况3：工序列表没有工序，顺序直接为1
-    selectedSequence = 1
-  }
-  
+
+  // 基于当前选中工序计算新工序顺序：选中工序顺序 + 0.01
+  const currentSequence = parseFloat(baseProcess.sequence || 0)
+  const selectedSequence = parseFloat((currentSequence + 0.01).toFixed(2))
+
+  // 获取选中工序的 rowid
+  const processRowid = baseProcess.rowid || ''
+
   uni.navigateTo({
     url: `/pages/addProcess/addProcess?orderCode=${encodeURIComponent(item.orderCode || '')}&productCode=${encodeURIComponent(item.productCode || '')}&workshop=${workshop.value}&selectedSequence=${selectedSequence}&billRowid=${encodeURIComponent(billRowid)}&processRowid=${encodeURIComponent(processRowid)}&billType=${encodeURIComponent(item.billType || '正常排产')}`
   })
@@ -2022,8 +2034,8 @@ const addProcess = async (item) => {
 
 const dispatchWork = (item) => {
   // 检查是否有选中的工序
-  if (workshop.value === '组装车间') {
-    // 组装车间：检查多选工序
+  if (workshop.value === '组装车间' || workshop.value === '喷涂车间') {
+    // 组装、喷涂车间：检查多选工序
     const selectedCount = selectedMultiProcesses.value.filter(p => p.item.orderCode === item.orderCode).length
     if (selectedCount === 0) {
       uni.showToast({ title: '请先选择一个工序', icon: 'none' })
