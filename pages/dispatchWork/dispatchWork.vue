@@ -879,6 +879,7 @@ const search = async () => {
 
   // 获取单据列表（按车间和单据类型从后端筛选）
   const billsRes = await getBillsListRaw()
+  console.log('[派工页面] 获取的单据:', billsRes)
 
   // 调试：打印单据接口返回概况
   try {
@@ -909,9 +910,15 @@ const search = async () => {
     return
   }
 
-  // 固定过滤：字段 66974cda2503723eec1af600 不为 "[]"；69a8e4563b5e707f84d33c0c 大于 0
+  // 固定过滤：
+  // 1. 字段 66974cda2503723eec1af600 不能为 "[]"
+  // 2. 正常排产时，69a8e4563b5e707f84d33c0c 需大于 0
+  // 3. 返工排产时，不使用 69a8e4563b5e707f84d33c0c > 0 过滤
   const filteredBillsData = billsRes.data.filter(item => {
     if (item['66974cda2503723eec1af600'] === '[]') return false
+    if (billTypeFilter.value === '返工排产') {
+      return true
+    }
     const num = Number(item['69a8e4563b5e707f84d33c0c'])
     return !Number.isNaN(num) && num > 0
   })
