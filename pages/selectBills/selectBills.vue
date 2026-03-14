@@ -111,30 +111,45 @@ onShow(() => {
 })
 
 const getBillsListRaw = async () => {
-	const res = await callWorkflowListAPIPaged({
-		worksheetId: 'paichanjihua',
-		filters: [
-			{
-				controlId: '67de26c9c5377d50a523c735',
-				dataType: 30,
-				spliceType: 1,
-				filterType: 2,
-				values: [workshop.value]
-			},
-			{
-				controlId: '694a3954687045435008a7c3',
-				dataType: 30,
-				spliceType: 1,
-				filterType: 2,
-				values: [billTypeFilter]
-			}
-		]
-	})
+	const res = await callWorkflowListAPIPaged(
+		{
+			worksheetId: 'paichanjihua',
+			filters: [
+				{
+					controlId: '67de26c9c5377d50a523c735',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 2,
+					values: [workshop.value]
+				},
+				{
+					controlId: '694a3954687045435008a7c3',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 2,
+					values: [billTypeFilter]
+				},
+				{
+					controlId: '655b875ffc44a9469a3aa225',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 2,
+					values: ['已排产']
+				}
+			]
+		},
+		1000,
+		1
+	)
 	return res
 }
 
 const search = async () => {
 	const billsRes = await getBillsListRaw()
+	console.log(
+		'[选择订单] 获取的订单编号:',
+		(billsRes?.data || []).map(item => item['655e1cbbbd2094b316347f92'] || '')
+	)
 	if (!billsRes.data || billsRes.data.length === 0) {
 		billsList.value = []
 		return
