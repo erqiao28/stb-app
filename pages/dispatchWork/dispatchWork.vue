@@ -111,6 +111,19 @@
                 </picker>
               </view>
             </view>
+
+            <!-- 计薪方式（与上面行布局一致：左侧字段 + 右侧占位） -->
+            <view class="row-group">
+              <view class="form-group">
+                <text class="label">计薪方式：</text>
+                <picker mode="selector" :range="salaryMethodOptions" :value="multiSalaryMethodIndex" @change="onMultiSalaryMethodChange">
+                  <view class="value">
+                    {{ multiDispatchData.salaryMethod || '计件' }}
+                  </view>
+                </picker>
+              </view>
+              <view class="form-group"></view>
+            </view>
             
             <!-- 所选工序展示 -->
             <view class="row-group">
@@ -570,9 +583,11 @@ const multiDispatchData = ref({
   productionCount: 0,
   quantity: 0,
   date: '', // 派工日期
-  isLast: '否' // 是否包含最终工序：是、否，默认值为否
+  isLast: '否', // 是否包含最终工序：是、否，默认值为否
+  salaryMethod: '计件' // 计薪方式：计件、计时，默认计件
 })
 const multiIsLastIndex = ref(1) // 多对多派工最终工序索引，默认选中第二个选项（否）
+const multiSalaryMethodIndex = ref(0) // 多对多派工计薪方式索引，默认选中计件
 const multiEmployeeList = ref([])
 const selectedMultiEmployees = ref([])
 const currentMultiDispatchItem = ref(null) // 当前多对多派工的单据
@@ -1369,9 +1384,11 @@ const openMultiDispatchModal = (item) => {
     productionCount: item.productionCount || 0,
     quantity: 0,
     date: todayStr, // 默认今天
-    isLast: '否' // 默认值为否
+    isLast: '否', // 默认值为否
+    salaryMethod: '计件'
   }
   multiIsLastIndex.value = 1 // 默认选中第二个选项（否）
+  multiSalaryMethodIndex.value = 0
   multiEmployeeList.value = []
   selectedMultiEmployees.value = []
   
@@ -1391,9 +1408,11 @@ const closeMultiDispatchModal = () => {
     productionCount: 0,
     quantity: 0,
     date: '',
-    isLast: '否'
+    isLast: '否',
+    salaryMethod: '计件'
   }
   multiIsLastIndex.value = 1
+  multiSalaryMethodIndex.value = 0
   multiEmployeeList.value = []
   selectedMultiEmployees.value = []
   currentMultiDispatchItem.value = null
@@ -1551,6 +1570,7 @@ const confirmMultiDispatch = async () => {
     quantity: multiDispatchData.value.quantity,
     date: multiDispatchData.value.date || '',
     isLast: multiDispatchData.value.isLast === '是' ? 1 : 0, // 是为1，否为0
+    salaryMethod: multiDispatchData.value.salaryMethod || '计件',
     employees: selectedEmployees.map(emp => ({
       id: emp.id,
     }))
@@ -1638,6 +1658,12 @@ const onMultiDateChange = (e) => {
 const onMultiIsLastChange = (e) => {
   multiIsLastIndex.value = e.detail.value
   multiDispatchData.value.isLast = isLastOptions.value[e.detail.value]
+}
+
+// 多对多派工计薪方式选择变化处理
+const onMultiSalaryMethodChange = (e) => {
+  multiSalaryMethodIndex.value = e.detail.value
+  multiDispatchData.value.salaryMethod = salaryMethodOptions.value[e.detail.value]
 }
 
 // 模态框车间选择变化处理
@@ -2004,7 +2030,22 @@ const goSelectReworkBills = () => {
 }
 
 const addProcess = async (item) => {
-  // 必须先选择工序，才能添加工序
+  // 获取单据的rowid
+  const billRowid = item.billRowid || ''
+
+  // 情况0：如果该单据当前没有任何工序，允许直接添加，顺序从 1 开始
+  const hasProcesses = Array.isArray(item.processes) && item.processes.length > 0
+  if (!hasProcesses) {
+    const selectedSequence = 1
+    const processRowid = ''
+
+    uni.navigateTo({
+      url: `/pages/addProcess/addProcess?orderCode=${encodeURIComponent(item.orderCode || '')}&productCode=${encodeURIComponent(item.productCode || '')}&workshop=${workshop.value}&selectedSequence=${selectedSequence}&billRowid=${encodeURIComponent(billRowid)}&processRowid=${encodeURIComponent(processRowid)}&billType=${encodeURIComponent(item.billType || '正常排产')}`
+    })
+    return
+  }
+
+  // 有工序时：必须先选择工序，才能在选中工序附近插入新工序
   let baseProcess = null
 
   if (workshop.value === '组装车间' || workshop.value === '喷涂车间') {
@@ -2023,9 +2064,6 @@ const addProcess = async (item) => {
     }
     baseProcess = selectedProcess.value.process
   }
-
-  // 获取单据的rowid
-  const billRowid = item.billRowid || ''
 
   // 基于当前选中工序计算新工序顺序：选中工序顺序 + 0.01
   const currentSequence = parseFloat(baseProcess.sequence || 0)
