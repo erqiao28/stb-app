@@ -87,6 +87,9 @@
 			:visible="showSelectEmployeeModal" 
 			@update:visible="handleSelectEmployeeModalClose" 
 			@confirm="handleSelectEmployeeConfirm" 
+			:workshopOptions="workshopOptions"
+			:workshop="modalWorkshop"
+			@update:workshop="onModalWorkshopChange"
 		/>
 		<!-- 导航栏（与派工页面一致：仅左侧返回 + 中间标题） -->
 		<view class="header">
@@ -189,6 +192,8 @@ onLoad((options) => {
 // 车间相关
 const workshop = ref('拉伸车间')
 const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
+// 选择员工模态框中的车间选择（用于 AddWorkerRadiobox）
+const modalWorkshop = ref('')
 
 // 需检验单选框
 const report = ref('全部')
@@ -304,7 +309,11 @@ const getCurrentDate = () => {
 
 // 获取员工列表
 const loadEmployees = async () => {
-	if (!workshop.value) {
+	// 选择员工用的车间：优先使用模态框中的车间；
+	// 若为空，则使用当前页面车间，但喷涂车间特殊处理，默认切到组装车间
+	const selectedWorkshop = modalWorkshop.value || (workshop.value === '喷涂车间' ? '组装车间' : workshop.value)
+
+	if (!selectedWorkshop) {
 		uni.showToast({
 			title: '缺少车间信息',
 			icon: 'none'
@@ -322,7 +331,7 @@ const loadEmployees = async () => {
 				"dataType": 30,
 				"spliceType": 1,
 				"filterType": 2,
-				"values": [workshop.value]
+				"values": [selectedWorkshop]
 			}],
 			pageSize: 1000,
 			pageNum: 1
@@ -420,6 +429,10 @@ const closeTransferModal = () => {
 
 // 打开选择员工模态框
 const openSelectEmployeeModal = async () => {
+	// 初始化选择员工模态框中的车间：喷涂车间特殊处理，默认组装车间
+	if (!modalWorkshop.value) {
+		modalWorkshop.value = workshop.value === '喷涂车间' ? '组装车间' : workshop.value
+	}
 	if (allEmployeesOptions.value.length === 0) {
 		await loadEmployees()
 	}
