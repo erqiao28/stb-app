@@ -464,6 +464,11 @@
         </view>
       </view>
     </view>
+
+    <!-- 右下角固定刷新按钮 -->
+    <view class="fab-refresh" @click="onManualRefresh">
+      <text class="fab-refresh-text">⟳</text>
+    </view>
   </view>
 </template>
 
@@ -2029,6 +2034,11 @@ const goSelectReworkBills = () => {
   })
 }
 
+// 手动刷新当前页面数据
+const onManualRefresh = () => {
+  search()
+}
+
 const addProcess = async (item) => {
   // 获取单据的rowid
   const billRowid = item.billRowid || ''
@@ -2820,6 +2830,27 @@ onUnload(() => {
       }
     }
   }
+}
+
+/* 右下角刷新按钮 */
+.fab-refresh {
+  position: fixed;
+  right: px2vw(40px);
+  bottom: px2vw(40px);
+  width: px2vw(90px);
+  height: px2vw(90px);
+  border-radius: 50%;
+  background-color: #5884f1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 px2vw(4px) px2vw(10px) rgba(0, 0, 0, 0.15);
+  z-index: 150;
+}
+
+.fab-refresh-text {
+  color: #fff;
+  font-size: px2vw(52px);
 }
 
 /* 终止派工模态框样式 */

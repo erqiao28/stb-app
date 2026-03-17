@@ -137,12 +137,16 @@
 		<!-- 派工单据列表 -->
 		<view class="dispatchInquiry-list">
 			<view class="dispatchInquiry-item" v-for="item in dispatchInquiryList" :key="item.id">
-				<button 
-					class="btn-transfer" 
-					:class="{ 'btn-transfer-disabled': !canTransfer(item) }"
-					@click="handleTransfer(item)"
-					:disabled="!canTransfer(item)"
-				>转派</button>
+				<view class="action-buttons">
+					<button 
+						class="btn-transfer" 
+						@click="handleTransfer(item)"
+					>转派</button>
+					<button
+						class="btn-transfer btn-delete-dispatch"
+						@click="handleDeleteDispatch(item)"
+					>删除</button>
+				</view>
 				<view class="dispatchInquiry-item-info">
 					<view class="dispatchInquiry-item-info-top">
 						<text class="productionOrder">生产订单：{{ item.productionOrder }}</text>
@@ -384,10 +388,19 @@ const canTransfer = (item) => {
 	return statusValid && isRedeployValid && isredeployValid
 }
 
+// 判断是否可以删除派工：状态为待报工时才能删除
+const canDeleteDispatch = (item) => {
+	return item.status === '待报工'
+}
+
 // 打开转派模态框
 const handleTransfer = (item) => {
 	// 再次检查是否可以转派
 	if (!canTransfer(item)) {
+		uni.showToast({
+			title: '仅“部分报工”且未转派的记录可以转派',
+			icon: 'none'
+		})
 		return
 	}
 	
@@ -406,6 +419,38 @@ const handleTransfer = (item) => {
 	}
 	selectedTransferEmployees.value = []
 	showTransferModal.value = true
+}
+
+// 删除派工（占位函数，后续可接真实接口）
+const handleDeleteDispatch = async (item) => {
+	if (!canDeleteDispatch(item)) {
+		uni.showToast({ title: '仅“待报工”状态可以删除', icon: 'none' })
+		return
+	}
+	
+	if (!item.rowid) {
+		uni.showToast({ title: '缺少单据标识，无法删除', icon: 'none' })
+		return
+	}
+
+	try {
+		const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjliOTIzMTIwZjBkMGFkODBmNTQ5Mzhh', {
+			rowid: item.rowid
+		})
+
+		// 按约定：status === 1 为失败，其余视为成功（接口当前返回示例为 {status:2,...}）
+		if (res && res.status === 1) {
+			uni.showToast({ title: res.msg || '删除失败', icon: 'none' })
+			return
+		}
+
+		uni.showToast({ title: res?.msg || '删除成功', icon: 'success' })
+		// 删除成功后刷新列表
+		await getDispatchInquiryList()
+	} catch (error) {
+		console.error('删除派工失败:', error)
+		uni.showToast({ title: '删除失败：' + (error.message || '未知错误'), icon: 'none' })
+	}
 }
 
 // 关闭转派模态框
@@ -699,11 +744,17 @@ const quit = () => {
 			display: flex;
 			flex-direction: column;
 			position: relative;
-
-			.btn-transfer {
+			
+			.action-buttons {
 				position: absolute;
 				top: px2vw(15px);
 				right: px2vw(15px);
+				display: flex;
+				gap: px2vw(10px);
+				z-index: 10;
+			}
+			
+			.btn-transfer {
 				width: px2vw(120px);
 				height: px2vw(50px);
 				font-size: px2vw(25px);
@@ -715,24 +766,15 @@ const quit = () => {
 				border: px2vw(2px) solid #5884f1;
 				border-radius: px2vw(10px);
 				cursor: pointer;
-				z-index: 10;
 				
 				&:active {
 					opacity: 0.8;
 				}
-				
-				&.btn-transfer-disabled,
-				&:disabled {
-					background-color: #f5f5f5;
-					color: #999;
-					border-color: #ddd;
-					cursor: not-allowed;
-					opacity: 0.6;
-					
-					&:active {
-						opacity: 0.6;
-					}
-				}
+			}
+			
+			.btn-delete-dispatch {
+				border-color: #5884f1;
+				color: #5884f1;
 			}
 
 			.dispatchInquiry-item-info {
