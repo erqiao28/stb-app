@@ -434,7 +434,7 @@ const handleDeleteDispatch = async (item) => {
 	}
 
 	try {
-		const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjliOTIzMTIwZjBkMGFkODBmNTQ5Mzhh', {
+		const res = await http.post('/api/workflow/hooks/NjliOTIzMTIwZjBkMGFkODBmNTQ5Mzhh', {
 			rowid: item.rowid
 		})
 
@@ -445,8 +445,10 @@ const handleDeleteDispatch = async (item) => {
 		}
 
 		uni.showToast({ title: res?.msg || '删除成功', icon: 'success' })
-		// 删除成功后刷新列表
-		await getDispatchInquiryList()
+		// 删除成功后刷新列表，增加轻微延迟，确保后端数据已更新
+		setTimeout(() => {
+			getDispatchInquiryList()
+		}, 500)
 	} catch (error) {
 		console.error('删除派工失败:', error)
 		uni.showToast({ title: '删除失败：' + (error.message || '未知错误'), icon: 'none' })
