@@ -421,7 +421,7 @@ const handleTransfer = (item) => {
 	showTransferModal.value = true
 }
 
-// 删除派工（占位函数，后续可接真实接口）
+// 删除派工（增加确认弹窗）
 const handleDeleteDispatch = async (item) => {
 	if (!canDeleteDispatch(item)) {
 		uni.showToast({ title: '仅“待报工”状态可以删除', icon: 'none' })
@@ -433,26 +433,41 @@ const handleDeleteDispatch = async (item) => {
 		return
 	}
 
-	try {
-		const res = await http.post('/api/workflow/hooks/NjliOTIzMTIwZjBkMGFkODBmNTQ5Mzhh', {
-			rowid: item.rowid
-		})
+	// 删除前确认
+	uni.showModal({
+		title: '提示',
+		content: '确定要删除该派工单据吗？',
+		confirmText: '删除',
+		cancelText: '取消',
+		success: async (res) => {
+			if (!res.confirm) return
 
-		// 按约定：status === 1 为失败，其余视为成功（接口当前返回示例为 {status:2,...}）
-		if (res && res.status === 1) {
-			uni.showToast({ title: res.msg || '删除失败', icon: 'none' })
-			return
+			try {
+				const result = await http.post('https://www.dachen.vip/api/workflow/hooks/NjliOTIzMTIwZjBkMGFkODBmNTQ5Mzhh', {
+					rowid: item.rowid
+				})
+
+				// 按约定：status === 1 为失败，其余视为成功（接口当前返回示例为 {status:2,...}）
+				if (result && result.status === 1) {
+					uni.showToast({ title: result.msg || '删除失败', icon: 'none' })
+					return
+				}
+
+				uni.showToast({ title: result?.msg || '删除成功', icon: 'success' })
+
+				// 前端先移除当前项，立刻反馈到列表
+				dispatchInquiryList.value = dispatchInquiryList.value.filter(itemInList => itemInList.rowid !== item.rowid)
+
+				// 再次从后端刷新列表，增加轻微延迟，确保数据一致
+				setTimeout(() => {
+					getDispatchInquiryList()
+				}, 500)
+			} catch (error) {
+				console.error('删除派工失败:', error)
+				uni.showToast({ title: '删除失败：' + (error.message || '未知错误'), icon: 'none' })
+			}
 		}
-
-		uni.showToast({ title: res?.msg || '删除成功', icon: 'success' })
-		// 删除成功后刷新列表，增加轻微延迟，确保后端数据已更新
-		setTimeout(() => {
-			getDispatchInquiryList()
-		}, 500)
-	} catch (error) {
-		console.error('删除派工失败:', error)
-		uni.showToast({ title: '删除失败：' + (error.message || '未知错误'), icon: 'none' })
-	}
+	})
 }
 
 // 关闭转派模态框
