@@ -66,6 +66,24 @@
         </view>
       </view>
     </view>
+
+    <!-- 派工确认模态框 -->
+    <view class="dispatch-confirm-modal" v-if="showDispatchConfirmModal" @click.self="closeDispatchConfirmModal">
+      <view class="dispatch-confirm-content" @click.stop>
+        <view class="dispatch-confirm-title">当前派工信息如下</view>
+        <view class="dispatch-confirm-list">
+          <view class="dispatch-confirm-row" v-for="(row, index) in dispatchConfirmRows" :key="index">
+            <text class="dispatch-confirm-label">{{ row.label }}：</text>
+            <text class="dispatch-confirm-value">{{ row.value || '-' }}</text>
+          </view>
+        </view>
+        <view class="dispatch-confirm-tip">确认派工吗？</view>
+        <view class="dispatch-confirm-footer">
+          <button class="btn-cancel" @click="closeDispatchConfirmModal">取消</button>
+          <button class="btn-confirm" @click="handleDispatchConfirm">确认派工</button>
+        </view>
+      </view>
+    </view>
     
     <!-- 多对多派工模态框 -->
     <view class="process-modal" v-if="showMultiDispatchModal" @click.self="closeMultiDispatchModal">
@@ -331,7 +349,7 @@
     <view class="btn-list">
       <view class="btn-item" @click="goDispatchInquiry">派工查询</view>
       <view class="btn-item" @click="goWorkload">员工工作量查询</view>
-      <view class="btn-item" v-if="workshop === '组装车间' || workshop === '喷涂车间'" @click="goDispatchInquiryMore">多对多派工查询</view>
+      <view class="btn-item" v-if="workshop === '组装车间'" @click="goDispatchInquiryMore">多对多派工查询</view>
       <!-- 排产类型按钮：正常排产 / 返工排产 -->
       <view class="btn-item" @click="setBillType('正常排产')">正常排产</view>
       <view class="btn-item" @click="setBillType('返工排产')">返工排产</view>
@@ -380,7 +398,7 @@
               <button class="btn-detail" :disabled="!canClickDispatch(item)" @click="dispatchWork(item)">操作</button>
               <button class="btn-delete" @click="addProcess(item)">添加工序</button>
               <button class="btn-normal-process" v-if="item.billType === '返工排产'" @click="useNormalProcess(item)">使用正常工序</button>
-              <button class="btn-multi-dispatch" v-if="workshop === '组装车间' || workshop === '喷涂车间'" :disabled="!canClickMultiDispatch(item)" @click="openMultiDispatchModal(item)">多对多派工</button>
+              <button class="btn-multi-dispatch" v-if="workshop === '组装车间'" :disabled="!canClickMultiDispatch(item)" @click="openMultiDispatchModal(item)">多对多派工</button>
             </view>
           </view>
           
@@ -422,9 +440,9 @@
                 <view class="process-item" :class="{ 
                   'process-selected': isProcessSelected(item, process), 
                   'process-over': process.isOver == 1,
-                  'process-multi-selected': (workshop === '组装车间' || workshop === '喷涂车间') && isMultiProcessSelected(item, process)
+                  'process-multi-selected': (workshop === '组装车间') && isMultiProcessSelected(item, process)
                 }"
-                @click="(workshop === '组装车间' || workshop === '喷涂车间') ? toggleMultiProcess(item, process) : selectProcess(item, process)">
+                @click="(workshop === '组装车间') ? toggleMultiProcess(item, process) : selectProcess(item, process)">
                   <view class="process-sequence">{{ process.sequence || '' }}</view>
                   <view class="progress-circle"
                     :style="{
@@ -572,6 +590,11 @@ const isLastIndex = ref(1)  // 默认选中第二个选项（否）
 const showTerminateModal = ref(false)
 const terminateReason = ref('')
 
+// ---------- 派工确认模态相关 ----------
+const showDispatchConfirmModal = ref(false)
+const dispatchConfirmRows = ref([])
+const dispatchConfirmAction = ref(null)
+
 // ---------- 员工相关 ----------
 const employeeList = ref([])
 const selectedEmployee = ref([])
@@ -616,11 +639,11 @@ const isProcessOver = computed(() => {
 
 // 获取指定订单的选中工序数量
 const getSelectedProcessCount = (item) => {
-  if (workshop.value === '组装车间' || workshop.value === '喷涂车间') {
-    // 组装、喷涂车间：统计多选的工序数量
+  if (workshop.value === '组装车间') {
+    // 组装车间：统计多选的工序数量
     return selectedMultiProcesses.value.filter(p => p.item.orderCode === item.orderCode).length
   } else {
-    // 其他车间：检查是否有单选工序
+    // 其他车间（包括喷涂）：检查是否有单选工序
     return selectedProcess.value && selectedProcess.value.item.orderCode === item.orderCode ? 1 : 0
   }
 }
@@ -633,7 +656,7 @@ const canClickDispatch = (item) => {
 
 // 判断是否可以点击多对多派工按钮
 const canClickMultiDispatch = (item) => {
-  if (workshop.value !== '组装车间' && workshop.value !== '喷涂车间') {
+  if (workshop.value !== '组装车间') {
     return false
   }
   const count = getSelectedProcessCount(item)
@@ -697,8 +720,8 @@ const confirmTerminate = async () => {
 const handleWorkshopConfirm = (value) => {
   workshop.value = value
   showWorkshopModal.value = false
-  // 切换车间时，如果不是组装或喷涂车间，清空多选状态
-  if (value !== '组装车间' && value !== '喷涂车间') {
+  // 切换车间时，如果不是组装车间，清空多选状态
+  if (value !== '组装车间') {
     selectedMultiProcesses.value = []
   }
   search()
@@ -893,7 +916,7 @@ const setBillType = (type) => {
 const search = async () => {
   // 清除选中状态
   selectedProcess.value = null
-  if (workshop.value !== '组装车间' && workshop.value !== '喷涂车间') {
+  if (workshop.value !== '组装车间') {
     selectedMultiProcesses.value = []
   }
 
@@ -1546,45 +1569,60 @@ const confirmMultiDispatch = async () => {
   // 从选中的工序中获取所属单据的信息（所有工序应该属于同一个订单）
   const firstProcess = selectedMultiProcesses.value[0]
   const billItem = firstProcess?.item
-  
-  // 构建请求参数
-  const dispatchParams = {  
-    productionCount: billItem?.productionCount || billItem?.orderCount || 0,
-    billRowid: billItem?.billRowid || '',
-    orderCode: billItem?.orderCode || '',
-    workshop: workshop.value || '',
-    processes: selectedMultiProcesses.value.map(p => ({
-      rowid: p.process.rowid,
-    })),
-    quantity: multiDispatchData.value.quantity,
-    date: multiDispatchData.value.date || '',
-    isLast: multiDispatchData.value.isLast === '是' ? 1 : 0, // 是为1，否为0
-    salaryMethod: multiDispatchData.value.salaryMethod || '计件',
-    employees: selectedEmployees.map(emp => ({
-      id: emp.id,
-    }))
-  }
 
-  try {
-    const res = await http.post('https://www.dachen.vip/api/workflow/hooks/Njk4MmRkMTUwZjBkMGFkODBmZTM1YjAy', dispatchParams)
-    
-    if (res.status === 1) {
-      uni.showToast({ title: res.message || '派工失败', icon: 'none' })
-      return
+  const processNames = selectedMultiProcesses.value
+    .map(p => p.process?.processName || '')
+    .filter(Boolean)
+    .join('、')
+  const employeeNames = selectedEmployees.map(emp => emp.name).join('、')
+  const dispatchDate = multiDispatchData.value.date || ''
+  const quantity = multiDispatchData.value.quantity || 0
+
+  openDispatchConfirmModal([
+    { label: '工序', value: processNames },
+    { label: '人员', value: employeeNames },
+    { label: '派工日期', value: dispatchDate },
+    { label: '派工数量', value: String(quantity) }
+  ], async () => {
+    // 构建请求参数
+    const dispatchParams = {  
+      productionCount: billItem?.productionCount || billItem?.orderCount || 0,
+      billRowid: billItem?.billRowid || '',
+      orderCode: billItem?.orderCode || '',
+      workshop: workshop.value || '',
+      processes: selectedMultiProcesses.value.map(p => ({
+        rowid: p.process.rowid,
+      })),
+      quantity: multiDispatchData.value.quantity,
+      date: multiDispatchData.value.date || '',
+      isLast: multiDispatchData.value.isLast === '是' ? 1 : 0, // 是为1，否为0
+      salaryMethod: multiDispatchData.value.salaryMethod || '计件',
+      employees: selectedEmployees.map(emp => ({
+        id: emp.id,
+      }))
     }
-    
-    uni.showToast({ title: '派工成功' })
-    showMultiDispatchModal.value = false
-    selectedMultiProcesses.value = []
-    
-    // 派工成功后刷新数据（不再依赖是否带入订单/生产单号）
-    setTimeout(async () => {
-      await search()
-    }, 1000)
-  } catch (error) {
-    console.error('多对多派工失败:', error)
-    uni.showToast({ title: '派工失败：' + (error.message || '未知错误'), icon: 'none' })
-  }
+
+    try {
+      const resp = await http.post('https://www.dachen.vip/api/workflow/hooks/Njk4MmRkMTUwZjBkMGFkODBmZTM1YjAy', dispatchParams)
+      
+      if (resp.status === 1) {
+        uni.showToast({ title: resp.message || '派工失败', icon: 'none' })
+        return
+      }
+      
+      uni.showToast({ title: '派工成功' })
+      showMultiDispatchModal.value = false
+      selectedMultiProcesses.value = []
+      
+      // 派工成功后刷新数据（不再依赖是否带入订单/生产单号）
+      setTimeout(async () => {
+        await search()
+      }, 1000)
+    } catch (error) {
+      console.error('多对多派工失败:', error)
+      uni.showToast({ title: '派工失败：' + (error.message || '未知错误'), icon: 'none' })
+    }
+  })
 }
 
 // 打开工序派工模态框
@@ -1720,36 +1758,67 @@ const confirmProcessDispatch = async () => {
   const selectedEmployeeNames = selectedEmployees.map(emp => emp.name).join('、')
   processDispatchData.value.employee = selectedEmployeeNames
 
-  const dispatchData = {
-    productCode: selectedProcessData.value?.item?.productCode || '',
-    orderCode: selectedProcessData.value?.item?.orderCode || '',
-    processName: selectedProcessData.value?.process?.processName || '',
-    finishCount: selectedProcessData.value?.process?.finishCount || 0,
-    needCount: selectedProcessData.value?.process?.needCount || 0,
-    quantity: processDispatchData.value.quantity,
-    time: processDispatchData.value.time,
-    employee: processDispatchData.value.employee,
-    employees: selectedEmployees,
-    machine: machine.value?.code || '',
-    mold: selectedProcessData.value?.process?.mold || '',
-    workshop: workshop.value || '',
-    rowid: selectedProcessData.value?.process?.rowid || '',
-    date: processDispatchData.value.date || '',
-    salaryMethod: processDispatchData.value.salaryMethod || '',
-    price: processDispatchData.value.price || 0,
-    isLast: processDispatchData.value.isLast || '否'
-  }
+  const processName = selectedProcessData.value?.process?.processName || ''
+  const dispatchDate = processDispatchData.value.date || ''
+  const quantity = processDispatchData.value.quantity || 0
 
-  const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjkyMTJlNzdhOWE4ZGM2YmMxZjczYzlk', dispatchData)
-  if (res.status === 1) {
-    uni.showToast({ title: '派工成功' })
-    showProcessModal.value = false
-    // 派工成功后刷新数据，确保进度条更新（不再依赖是否带入订单/生产单号）
-    setTimeout(async () => {
-      await search()
-    }, 1000)
-  } else {
-    uni.showToast({ title: res.message })
+  openDispatchConfirmModal([
+    { label: '工序', value: processName },
+    { label: '人员', value: selectedEmployeeNames },
+    { label: '派工日期', value: dispatchDate },
+    { label: '派工数量', value: String(quantity) }
+  ], async () => {
+    const dispatchData = {
+      productCode: selectedProcessData.value?.item?.productCode || '',
+      orderCode: selectedProcessData.value?.item?.orderCode || '',
+      processName: selectedProcessData.value?.process?.processName || '',
+      finishCount: selectedProcessData.value?.process?.finishCount || 0,
+      needCount: selectedProcessData.value?.process?.needCount || 0,
+      quantity: processDispatchData.value.quantity,
+      time: processDispatchData.value.time,
+      employee: processDispatchData.value.employee,
+      employees: selectedEmployees,
+      machine: machine.value?.code || '',
+      mold: selectedProcessData.value?.process?.mold || '',
+      workshop: workshop.value || '',
+      rowid: selectedProcessData.value?.process?.rowid || '',
+      date: processDispatchData.value.date || '',
+      salaryMethod: processDispatchData.value.salaryMethod || '',
+      price: processDispatchData.value.price || 0,
+      isLast: processDispatchData.value.isLast || '否'
+    }
+
+    const resp = await http.post('https://www.dachen.vip/api/workflow/hooks/NjkyMTJlNzdhOWE4ZGM2YmMxZjczYzlk', dispatchData)
+    if (resp.status === 1) {
+      uni.showToast({ title: '派工成功' })
+      showProcessModal.value = false
+      // 派工成功后刷新数据，确保进度条更新（不再依赖是否带入订单/生产单号）
+      setTimeout(async () => {
+        await search()
+      }, 1000)
+    } else {
+      uni.showToast({ title: resp.message })
+    }
+  })
+}
+
+const openDispatchConfirmModal = (rows, onConfirm) => {
+  dispatchConfirmRows.value = rows || []
+  dispatchConfirmAction.value = onConfirm || null
+  showDispatchConfirmModal.value = true
+}
+
+const closeDispatchConfirmModal = () => {
+  showDispatchConfirmModal.value = false
+  dispatchConfirmRows.value = []
+  dispatchConfirmAction.value = null
+}
+
+const handleDispatchConfirm = async () => {
+  const action = dispatchConfirmAction.value
+  closeDispatchConfirmModal()
+  if (typeof action === 'function') {
+    await action()
   }
 }
 
@@ -2073,8 +2142,8 @@ const addProcess = async (item) => {
 
 const dispatchWork = (item) => {
   // 检查是否有选中的工序
-  if (workshop.value === '组装车间' || workshop.value === '喷涂车间') {
-    // 组装、喷涂车间：检查多选工序
+  if (workshop.value === '组装车间') {
+    // 组装车间：检查多选工序
     const selectedCount = selectedMultiProcesses.value.filter(p => p.item.orderCode === item.orderCode).length
     if (selectedCount === 0) {
       uni.showToast({ title: '请先选择一个工序', icon: 'none' })
@@ -2090,7 +2159,7 @@ const dispatchWork = (item) => {
       openProcessModal(selected.item, selected.process)
     }
   } else {
-    // 其他车间：检查单选工序
+    // 其他车间（包括喷涂）：检查单选工序
     if (!selectedProcess.value) {
       uni.showToast({ title: '请先选择一个工序', icon: 'none' })
       return
@@ -2835,6 +2904,95 @@ onUnload(() => {
 .fab-refresh-text {
   color: #fff;
   font-size: px2vw(52px);
+}
+
+/* 派工确认模态框样式 */
+.dispatch-confirm-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 220;
+
+  .dispatch-confirm-content {
+    width: 88%;
+    max-width: px2vw(900px);
+    background: #fff;
+    border-radius: px2vw(18px);
+    padding: px2vw(28px) px2vw(32px);
+    box-sizing: border-box;
+  }
+
+  .dispatch-confirm-title {
+    text-align: center;
+    font-size: px2vw(40px);
+    font-weight: bold;
+    color: #333;
+    margin-bottom: px2vw(20px);
+  }
+
+  .dispatch-confirm-list {
+    display: flex;
+    flex-direction: column;
+    gap: px2vw(12px);
+  }
+
+  .dispatch-confirm-row {
+    display: flex;
+    align-items: flex-start;
+    font-size: px2vw(34px);
+    line-height: 1.4;
+  }
+
+  .dispatch-confirm-label {
+    color: #333;
+    white-space: nowrap;
+  }
+
+  .dispatch-confirm-value {
+    color: #f44336;
+    font-weight: bold;
+    word-break: break-all;
+  }
+
+  .dispatch-confirm-tip {
+    margin-top: px2vw(20px);
+    text-align: center;
+    font-size: px2vw(36px);
+    font-weight: bold;
+    color: #333;
+  }
+
+  .dispatch-confirm-footer {
+    margin-top: px2vw(26px);
+    display: flex;
+    justify-content: center;
+    gap: px2vw(18px);
+
+    .btn-cancel,
+    .btn-confirm {
+      width: px2vw(220px);
+      height: px2vw(74px);
+      border-radius: px2vw(18px);
+      font-size: px2vw(32px);
+      border: none;
+    }
+
+    .btn-cancel {
+      background: #f5f5f5;
+      color: #666;
+    }
+
+    .btn-confirm {
+      background: #5884f1;
+      color: #fff;
+    }
+  }
 }
 
 /* 终止派工模态框样式 */
