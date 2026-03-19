@@ -990,22 +990,6 @@ const search = async () => {
     }
   })
 
-  // 前端模糊过滤：销售订单 -> orderCode，订单物品 -> name
-  const salesOrderKeyword = (searchForm.value.salesOrder || '').trim().toLowerCase()
-  const orderItemKeyword = (searchForm.value.orderItem || '').trim().toLowerCase()
-
-  if (salesOrderKeyword || orderItemKeyword) {
-    baseBills = baseBills.filter(item => {
-      const orderCodeStr = (item.orderCode || '').toString().toLowerCase()
-      const nameStr = (item.name || '').toString().toLowerCase()
-
-      const matchSalesOrder = !salesOrderKeyword || orderCodeStr.includes(salesOrderKeyword)
-      const matchOrderItem = !orderItemKeyword || nameStr.includes(orderItemKeyword)
-
-      return matchSalesOrder && matchOrderItem
-    })
-  }
-
   // 调试：打印基础单据映射结果
   console.log('[派工页面][search] 基础单据列表', {
     count: baseBills.length,
