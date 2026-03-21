@@ -2111,8 +2111,8 @@ const addProcess = async (item) => {
   // 有工序时：必须先选择工序，才能在选中工序附近插入新工序
   let baseProcess = null
 
-  if (workshop.value === '组装车间' || workshop.value === '喷涂车间') {
-    // 组装、喷涂车间：从多选工序中取当前订单的第一个选中工序
+  if (workshop.value === '组装车间') {
+    // 仅组装车间使用多选工序列表
     const selected = selectedMultiProcesses.value.find(p => p.item.orderCode === item.orderCode)
     if (!selected) {
       uni.showToast({ title: '请先选择一个工序', icon: 'none' })
@@ -2120,7 +2120,7 @@ const addProcess = async (item) => {
     }
     baseProcess = selected.process
   } else {
-    // 其他车间：使用单选选中的工序
+    // 喷涂及其他车间：使用单选选中的工序（与工序点击逻辑一致）
     if (!selectedProcess.value || selectedProcess.value.item.orderCode !== item.orderCode) {
       uni.showToast({ title: '请先选择一个工序', icon: 'none' })
       return
