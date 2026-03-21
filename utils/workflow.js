@@ -153,11 +153,7 @@ export const callWorkflowListAPIPaged = async (
   delaySeconds = 0
 ) => {
   try {
-    // 显示加载动画
-    uni.showLoading({
-      title: '加载中...',
-      mask: true,
-    })
+    const silent = queryParams.silent === true
 
     // 如果指定了延迟时间，先等待
     if (delaySeconds > 0) {
@@ -168,6 +164,15 @@ export const callWorkflowListAPIPaged = async (
       pageSize,
       pageNum: pageNum,
       ...queryParams,
+    }
+    delete params.silent
+
+    // 上拉加载等场景可传 silent: true，不弹全屏 loading
+    if (!silent) {
+      uni.showLoading({
+        title: '加载中...',
+        mask: true,
+      })
     }
 
     const res = await http.post(config.WORKFLOW_API.LIST_URL, params)
@@ -187,18 +192,20 @@ export const callWorkflowListAPIPaged = async (
 
       // 控制台调试信息已去掉，仅保留返回结构化数据
 
-      // 隐藏加载动画
-      uni.hideLoading()
+      if (!silent) {
+        uni.hideLoading()
+      }
 
       return {
         data: responseData.rows || [],
         total: responseData.total || 0,
-        pageIndex: pageNum,
-        pageSize: pageSize,
+        pageIndex: params.pageNum ?? pageNum,
+        pageSize: params.pageSize ?? pageSize,
       }
     } else {
-      // 隐藏加载动画
-      uni.hideLoading()
+      if (!silent) {
+        uni.hideLoading()
+      }
       return {
         data: [],
         total: 0,
@@ -207,8 +214,9 @@ export const callWorkflowListAPIPaged = async (
       }
     }
   } catch (error) {
-    // 隐藏加载动画
-    uni.hideLoading()
+    if (!queryParams.silent) {
+      uni.hideLoading()
+    }
     console.error('分页工作流列表API调用失败:', error)
     throw error
   }

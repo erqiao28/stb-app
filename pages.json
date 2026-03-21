@@ -61,7 +61,8 @@
 			"path": "pages/dispatchInquiry/dispatchInquiry",
 			"style": {
 				"navigationBarTitleText": "",
-				"navigationStyle": "custom"
+				"navigationStyle": "custom",
+				"onReachBottomDistance": 80
 			}
 		},
 		{

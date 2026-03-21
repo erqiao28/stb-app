@@ -9,7 +9,7 @@
 				<view class="user-number" @click="selectWorker(item)">
 					{{ item.code }}
 				</view>
-				<image src="/static/rubish.svg" @click="del(item.rowid)"></image>
+				<!-- <image src="/static/rubish.svg" @click="del(item.rowid)"></image> -->
 			</view>
 		</view>
 		<view class="login-box">

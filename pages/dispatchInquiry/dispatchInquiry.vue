@@ -136,7 +136,7 @@
 
 		<!-- 派工单据列表 -->
 		<view class="dispatchInquiry-list">
-			<view class="dispatchInquiry-item" v-for="item in dispatchInquiryList" :key="item.id">
+			<view class="dispatchInquiry-item" v-for="(item, idx) in dispatchInquiryList" :key="item.rowid || ('row-' + idx)">
 				<view class="action-buttons">
 					<button 
 						class="btn-transfer" 
@@ -170,6 +170,11 @@
 					{{ item.status }}
 				</view>
 			</view>
+			<view class="load-more-wrap" v-if="dispatchInquiryList.length">
+				<text v-if="loadingMore" class="load-more-text">加载中...</text>
+				<text v-else-if="!hasMore" class="load-more-text">没有更多了</text>
+				<text v-else class="load-more-text">上拉加载更多</text>
+			</view>
 		</view>
 	</view>
 </template>
@@ -177,7 +182,7 @@
 <script setup>
 import { useUserStore } from '../../store/user.store'
 import { ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onReachBottom } from '@dcloudio/uni-app'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import Radiobox from '../../component/radiobox/radiobox.vue'
 import AddWorkerRadiobox from '../../component/addWorkerRadiobox/addWorkerRadiobox.vue'
@@ -188,9 +193,14 @@ const { statusBarHeight } = useStatusBar()
 onLoad((options) => {
 	// 从URL参数获取workshop值，如果存在则使用，否则使用默认值
 	if (options.workshop) {
-		workshop.value = decodeURIComponent(options.workshop)
+		workshop.value = decodeURIComponent(options.workshop).trim()
 	}
 	getDispatchInquiryList()
+})
+
+// 上拉触底加载更多
+onReachBottom(() => {
+	loadMore()
 })
 
 // 车间相关
@@ -198,6 +208,12 @@ const workshop = ref('拉伸车间')
 const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
 // 选择员工模态框中的车间选择（用于 AddWorkerRadiobox）
 const modalWorkshop = ref('')
+
+// 与 AddWorkerRadiobox 的 @update:workshop 对应，切换车间时刷新员工列表
+const onModalWorkshopChange = (value) => {
+	modalWorkshop.value = value || ''
+	loadEmployees()
+}
 
 // 需检验单选框
 const report = ref('全部')
@@ -217,67 +233,131 @@ const handleIsStopConfirm = (value) => {
 	showIsStopModal.value = false
 }
 
-// 派工单据列表
-const dispatchInquiryList = ref([
-	{
-		goodsName: '',
-		goodsCode: '',
-		processName: '',
-		date: '',
-		orderCode: '',
-		productionOrder: '',
-		worker: '',
-		dispatchCount: '',
-		worktime: '',
-		finishCount: '',
-		reworkCount: '',
-		wasteCount: '',
-	}
-])
+// 派工单据列表（分页）
+const PAGE_SIZE = 30
+const pageNum = ref(1)
+const hasMore = ref(true)
+const loadingMore = ref(false)
+const loadingList = ref(false)
 
-// 获取派工单据列表
-const getDispatchInquiryList = async () => {
-	
-  const res = await callWorkflowListAPIPaged({
-    worksheetId: 'paigongrenyuan',
-    filters: [{
-    "controlId": "690c30aacf407aa3d9389791",
-    "dataType": 30,
-    "spliceType": 1,
-    "filterType": 2,
-    "values": [workshop.value]
-  }],
-  pageSize: 1000,
-  pageNum: 1
-  })
-  const statusExclude = ['全部报工', '已转派']
-  dispatchInquiryList.value = res.data
-    .filter(item => {
-      const status = item['66c7f8866440b9d16c7bf908'] || ''
-      return !statusExclude.includes(status)
-    })
-    .map(item => ({
-    goodsName: item['6944facfdc7b13304885b3ad'],
-    goodsCode: item['6921596021066a9f124f6e63'],
-    processName: item['6945061adc7b13304885b92a'],
-    date: item['690d9ae28d797ee211e7e6a4'],
-    orderCode: item['6593b04a666735003d33ba61'],
-    productionOrder: item['6921596021066a9f124f6e61'],
-    worker: item['6938dcf1da0981f67b352b55'],
-    dispatchCount: item['655d9cd8cc4f25a27fb3e858'],
-    finishCount: item['693fe07b284b84255a6ebda5'],
-    worktime: item['693a7d580f64427fac25d070'],
-	reworkCount: item['694e69638c7b5544ee6c3493'],
-	wasteCount: item['694e69638c7b5544ee6c3494'],
-	rowid: item['rowid'],
-	machineNumber: item['695c9af59223cfe3a0c02d5f'],
-	mouldNumber: item['695c9b009223cfe3a0c02d66'],
-	remainCount: item['6901c87f7a33416aedfd6bc4'],
-	workshop: item['66f130864a66ee0d85e400a9'],
-	status: item['66c7f8866440b9d16c7bf908'],
-	isRedeploy: item['695b7efca820885c2979af50'],
-	isredeploy: item['695b7efca820885c2979af4f'],
-  }))
+const dispatchInquiryList = ref([])
+
+const statusExclude = ['全部报工', '已转派']
+
+/** 将接口行映射为列表项（并做状态过滤） */
+const mapRawRows = (raw) => {
+	return raw
+		.filter((item) => {
+			const status = item['66c7f8866440b9d16c7bf908'] || ''
+			return !statusExclude.includes(status)
+		})
+		.map((item) => ({
+			goodsName: item['6944facfdc7b13304885b3ad'],
+			goodsCode: item['6921596021066a9f124f6e63'],
+			processName: item['6945061adc7b13304885b92a'],
+			date: item['690d9ae28d797ee211e7e6a4'],
+			orderCode: item['6593b04a666735003d33ba61'],
+			productionOrder: item['6921596021066a9f124f6e61'],
+			worker: item['6938dcf1da0981f67b352b55'],
+			dispatchCount: item['655d9cd8cc4f25a27fb3e858'],
+			finishCount: item['693fe07b284b84255a6ebda5'],
+			worktime: item['693a7d580f64427fac25d070'],
+			reworkCount: item['694e69638c7b5544ee6c3493'],
+			wasteCount: item['694e69638c7b5544ee6c3494'],
+			rowid: item['rowid'],
+			machineNumber: item['695c9af59223cfe3a0c02d5f'],
+			mouldNumber: item['695c9b009223cfe3a0c02d66'],
+			remainCount: item['6901c87f7a33416aedfd6bc4'],
+			workshop: item['66f130864a66ee0d85e400a9'],
+			status: item['66c7f8866440b9d16c7bf908'],
+			isRedeploy: item['695b7efca820885c2979af50'],
+			isredeploy: item['695b7efca820885c2979af4f'],
+		}))
+}
+
+/**
+ * @param reset true 从第一页重新拉取；false 下一页追加
+ */
+const fetchDispatchInquiryPage = async (reset = false) => {
+	if (reset) {
+		if (loadingList.value) return
+		loadingList.value = true
+	} else {
+		// 首屏仍在加载时禁止触底加载更多，避免与第 1 页并发请求第 2 页
+		if (loadingList.value || loadingMore.value || !hasMore.value) return
+		loadingMore.value = true
+	}
+
+	const nextPage = reset ? 1 : pageNum.value + 1
+
+	try {
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: 'paigongrenyuan',
+			filters: [{
+				controlId: '690c30aacf407aa3d9389791',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: [workshop.value]
+			}],
+			pageSize: PAGE_SIZE,
+			pageNum: nextPage,
+			silent: !reset
+		})
+
+		const raw = Array.isArray(res?.data) ? res.data : []
+		const mapped = mapRawRows(raw)
+
+		// 调试：打印本页接口返回的单据（原始行 + 映射后）
+		console.log('[派工查询] 获取单据', {
+			workshop: workshop.value,
+			pageNum: nextPage,
+			pageSize: PAGE_SIZE,
+			apiTotal: res?.total,
+			rawCount: raw.length,
+			mappedCount: mapped.length,
+			isLoadMore: !reset,
+			rawRows: raw,
+			mappedRows: mapped
+		})
+
+		if (reset) {
+			dispatchInquiryList.value = mapped
+		} else {
+			dispatchInquiryList.value = [...dispatchInquiryList.value, ...mapped]
+		}
+		pageNum.value = nextPage
+
+		// 是否还有下一页：优先用接口 total（与明道分页一致），避免只靠本页条数误判
+		const total = typeof res?.total === 'number' ? res.total : 0
+		if (total > 0) {
+			// 已累计从服务端拉取条数 = 前面整页数 * pageSize + 本页条数
+			const fetched = (nextPage - 1) * PAGE_SIZE + raw.length
+			hasMore.value = fetched < total
+		} else {
+			hasMore.value = raw.length >= PAGE_SIZE
+		}
+	} catch (e) {
+		console.error('派工查询列表请求失败:', e)
+		if (reset) {
+			dispatchInquiryList.value = []
+			uni.showToast({ title: '加载失败', icon: 'none' })
+		} else {
+			uni.showToast({ title: '加载更多失败', icon: 'none' })
+		}
+	} finally {
+		loadingList.value = false
+		loadingMore.value = false
+	}
+}
+
+/** 重新加载第一页（进入页面、删除/转派成功后调用） */
+const getDispatchInquiryList = () => fetchDispatchInquiryPage(true)
+
+/** 触底加载下一页 */
+const loadMore = () => {
+	if (loadingList.value) return
+	fetchDispatchInquiryPage(false)
 }
 
 // 转派相关数据
@@ -857,6 +937,16 @@ const quit = () => {
 				box-shadow: 0 px2vw(2px) px2vw(8px) rgba(0, 0, 0, 0.2);
 				background-color: #5884f1;
 				pointer-events: none;
+			}
+		}
+
+		.load-more-wrap {
+			padding: px2vw(24px) px2vw(10px) px2vw(40px);
+			text-align: center;
+
+			.load-more-text {
+				font-size: px2vw(26px);
+				color: #888;
 			}
 		}
 	}
