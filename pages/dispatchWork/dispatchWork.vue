@@ -13,7 +13,8 @@
     <!-- 添加员工模态框 -->
     <AddWorkerRadiobox v-model="selectedEmployeesForAdd" :options="allEmployeesOptions" title="添加员工" 
       :visible="showAddEmployeeModal" @update:visible="handleAddEmployeeModalClose" @confirm="handleAddEmployeeConfirm"
-      :workshopOptions="workshopOptions" :workshop="modalWorkshop" @update:workshop="onModalWorkshopChange" />
+      :workshopOptions="workshopOptions" :workshop="modalWorkshop" @update:workshop="onModalWorkshopChange"
+      :maxSelection="addEmployeeMaxSelection" />
     
     <!-- 图片预览模态框（多图轮播） -->
     <view class="image-preview-modal" v-if="showImagePreview" @click="closeImagePreview" :style="{ paddingTop: statusBarHeight + 'px' }">
@@ -85,6 +86,82 @@
       </view>
     </view>
     
+    <!-- 一对多派工模态框（多工序，每工序独立派工数量） -->
+    <view class="process-modal" v-if="showOneToManyModal" @click.self="closeOneToManyModal">
+      <view class="process-content one-to-many-content" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">一对多派工</text>
+          <view class="modal-close" @click="closeOneToManyModal">×</view>
+        </view>
+        <scroll-view scroll-y class="modal-scroll-content">
+          <view class="modal-body">
+            <view
+              class="one-to-many-process-row"
+              v-for="(row, idx) in oneToManyProcessRows"
+              :key="row.processRowid || idx"
+            >
+              <view class="form-group one-to-many-col-process">
+                <text class="label">工序：</text>
+                <text class="value-readonly one-to-many-value">{{ row.processName || '-' }}</text>
+              </view>
+              <view class="form-group one-to-many-col-num">
+                <text class="label">排产数量：</text>
+                <text class="value-readonly one-to-many-value one-to-many-value-short">{{ row.productionCountDisplay }}</text>
+              </view>
+              <view class="form-group one-to-many-col-num one-to-many-col-need">
+                <text class="label">可派工数量：</text>
+                <text class="value-readonly one-to-many-value one-to-many-value-short">{{ row.needCountDisplay }}</text>
+              </view>
+              <view class="form-group one-to-many-col-num">
+                <text class="label">派工数量：</text>
+                <input
+                  v-model.number="row.quantity"
+                  type="number"
+                  placeholder="请输入"
+                  min="0"
+                  :max="row.maxQuantity"
+                  class="input-field one-to-many-qty-input"
+                />
+              </view>
+            </view>
+            <view class="row-group">
+              <view class="form-group">
+                <text class="label">派工日期：</text>
+                <picker mode="date" :value="oneToManyDispatchDate" @change="onOneToManyDateChange">
+                  <view class="value">
+                    {{ oneToManyDispatchDate || '请选择日期' }}
+                  </view>
+                </picker>
+              </view>
+              <view class="form-group"></view>
+            </view>
+          </view>
+          <view class="employee-section">
+            <view class="table-header">
+              <view class="col selected">选择</view>
+              <view class="col name">姓名</view>
+              <view class="col totalHours">总工时数</view>
+              <view class="col unrecordedHours">未派工时</view>
+            </view>
+            <radio-group @change="onOneToManyEmployeeRadioChange" class="employee-table">
+              <label v-for="emp in oneToManyEmployeeList" :key="emp.id" class="table-row">
+                <view class="col selected">
+                  <radio :value="String(emp.id)" :checked="String(selectedOneToManyEmployeeId) === String(emp.id)" />
+                </view>
+                <view class="col name">{{ emp.name }}</view>
+                <view class="col totalHours">{{ emp.totalHours }} 时</view>
+                <view class="col unrecordedHours">{{ emp.unrecordedHours }} 时</view>
+              </label>
+            </radio-group>
+          </view>
+        </scroll-view>
+        <view class="modal-footer">
+          <button class="btn-confirm" @click="addOneToManyEmployee">添加员工</button>
+          <button class="btn-confirm" @click="confirmOneToManyDispatch" :disabled="!canOneToManyDispatch">确认派工</button>
+        </view>
+      </view>
+    </view>
+
     <!-- 多对多派工模态框 -->
     <view class="process-modal" v-if="showMultiDispatchModal" @click.self="closeMultiDispatchModal">
       <view class="process-content" @click.stop>
@@ -399,6 +476,7 @@
               <button class="btn-delete" @click="addProcess(item)">添加工序</button>
               <button class="btn-normal-process" v-if="item.billType === '返工排产'" @click="useNormalProcess(item)">使用正常工序</button>
               <button class="btn-multi-dispatch" v-if="workshop === '组装车间'" :disabled="!canClickMultiDispatch(item)" @click="openMultiDispatchModal(item)">多对多派工</button>
+              <button class="btn-one-to-many" v-if="workshop === '抛光车间'" :disabled="!canClickOneToManyDispatch(item)" @click="openOneToManyModal(item)">一对多派工</button>
             </view>
           </view>
           
@@ -440,9 +518,9 @@
                 <view class="process-item" :class="{ 
                   'process-selected': isProcessSelected(item, process), 
                   'process-over': process.isOver == 1,
-                  'process-multi-selected': (workshop === '组装车间') && isMultiProcessSelected(item, process)
+                  'process-multi-selected': (workshop === '组装车间' || workshop === '抛光车间') && isMultiProcessSelected(item, process)
                 }"
-                @click="(workshop === '组装车间') ? toggleMultiProcess(item, process) : selectProcess(item, process)">
+                @click="(workshop === '组装车间' || workshop === '抛光车间') ? toggleMultiProcess(item, process) : selectProcess(item, process)">
                   <view class="process-sequence">{{ process.sequence || '' }}</view>
                   <view class="progress-circle"
                     :style="{
@@ -620,6 +698,21 @@ const multiEmployeeList = ref([])
 const selectedMultiEmployees = ref([])
 const currentMultiDispatchItem = ref(null) // 当前多对多派工的单据
 
+// ---------- 一对多派工相关（多工序，每工序独立派工数量，同一批员工） ----------
+const showOneToManyModal = ref(false)
+const oneToManyProcessRows = ref([]) // { processName, productionCountDisplay, needCountDisplay, maxQuantity, quantity, processRowid }
+const oneToManyDispatchDate = ref('')
+const oneToManyEmployeeList = ref([])
+/** 一对多派工仅允许一名员工，存员工 id（字符串，与 radio value 一致） */
+const selectedOneToManyEmployeeId = ref('')
+const currentOneToManyItem = ref(null)
+
+// 一对多派工打开「添加员工」时限制为单选
+const addEmployeeMaxSelection = computed(() => (showOneToManyModal.value ? 1 : 0))
+
+// 一对多派工 webhook：processDispatchList[{ rowid1, dispatchCount1 }, { rowid2, dispatchCount2 }…] + date + 员工信息
+const ONE_TO_MANY_DISPATCH_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjljMGRhMjAwZjBkMGFkODBmYTQyZGNj'
+
 // ==================== 计算属性 ====================
 // 最大派工数量：需派工数量
 const maxQuantity = computed(() => {
@@ -639,8 +732,8 @@ const isProcessOver = computed(() => {
 
 // 获取指定订单的选中工序数量
 const getSelectedProcessCount = (item) => {
-  if (workshop.value === '组装车间') {
-    // 组装车间：统计多选的工序数量
+  if (workshop.value === '组装车间' || workshop.value === '抛光车间') {
+    // 组装车间、抛光车间：统计多选的工序数量
     return selectedMultiProcesses.value.filter(p => p.item.orderCode === item.orderCode).length
   } else {
     // 其他车间（包括喷涂）：检查是否有单选工序
@@ -657,6 +750,15 @@ const canClickDispatch = (item) => {
 // 判断是否可以点击多对多派工按钮
 const canClickMultiDispatch = (item) => {
   if (workshop.value !== '组装车间') {
+    return false
+  }
+  const count = getSelectedProcessCount(item)
+  return count >= 2
+}
+
+// 判断是否可以点击一对多派工（仅抛光车间；至少两个工序）
+const canClickOneToManyDispatch = (item) => {
+  if (workshop.value !== '抛光车间') {
     return false
   }
   const count = getSelectedProcessCount(item)
@@ -720,8 +822,8 @@ const confirmTerminate = async () => {
 const handleWorkshopConfirm = (value) => {
   workshop.value = value
   showWorkshopModal.value = false
-  // 切换车间时，如果不是组装车间，清空多选状态
-  if (value !== '组装车间') {
+  // 切换车间时，仅组装/抛光使用多选；离开这两类车间时清空多选状态
+  if (value !== '组装车间' && value !== '抛光车间') {
     selectedMultiProcesses.value = []
   }
   search()
@@ -916,7 +1018,7 @@ const setBillType = (type) => {
 const search = async () => {
   // 清除选中状态
   selectedProcess.value = null
-  if (workshop.value !== '组装车间') {
+  if (workshop.value !== '组装车间' && workshop.value !== '抛光车间') {
     selectedMultiProcesses.value = []
   }
 
@@ -1318,8 +1420,8 @@ const handleImageError = (e) => {
 // ---------- 工序模态相关方法 ----------
 // 选择工序
 const selectProcess = (item, process) => {
-  if (workshop.value === '组装车间') {
-    // 组装车间：使用多选逻辑
+  if (workshop.value === '组装车间' || workshop.value === '抛光车间') {
+    // 组装车间、抛光车间：使用多选逻辑（工序点击处已直接 toggleMultiProcess，此处保留兼容）
     toggleMultiProcess(item, process)
     // 同时更新单选状态，用于兼容
     if (isMultiProcessSelected(item, process)) {
@@ -1431,6 +1533,175 @@ const closeMultiDispatchModal = () => {
   modalWorkshop.value = ''
 }
 
+// ---------- 一对多派工（仅抛光车间） ----------
+const openOneToManyModal = (item) => {
+  if (workshop.value !== '抛光车间') {
+    uni.showToast({ title: '一对多派工仅适用于抛光车间', icon: 'none' })
+    return
+  }
+  const list = selectedMultiProcesses.value.filter(p => p.item.orderCode === item.orderCode)
+  if (list.length < 2) {
+    uni.showToast({ title: '请至少选择两个工序', icon: 'none' })
+    return
+  }
+  const allFromSameOrder = list.every(p => p.item.orderCode === item.orderCode)
+  if (!allFromSameOrder) {
+    uni.showToast({ title: '请选择同一订单的工序', icon: 'none' })
+    return
+  }
+
+  oneToManyProcessRows.value = list.map((p) => {
+    const process = p.process || {}
+    const son = parseFloat(process.sonoutput)
+    const productionCount = Number.isFinite(son) && son > 0
+      ? son
+      : (p.item.productionCount ?? p.item.orderCount ?? 0)
+    const needMax = parseFloat(process.needCount)
+    const maxNeed = Number.isFinite(needMax) ? needMax : 0
+    return {
+      processName: process.processName || '',
+      productionCountDisplay: String(productionCount),
+      needCountDisplay: String(maxNeed),
+      maxQuantity: maxNeed,
+      quantity: 0,
+      processRowid: process.rowid,
+    }
+  })
+
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+  oneToManyDispatchDate.value = `${year}-${month}-${day}`
+
+  oneToManyEmployeeList.value = []
+  selectedOneToManyEmployeeId.value = ''
+  modalWorkshop.value = workshop.value === '喷涂车间' ? '组装车间' : workshop.value
+  currentOneToManyItem.value = item
+  showOneToManyModal.value = true
+}
+
+const closeOneToManyModal = () => {
+  showOneToManyModal.value = false
+  oneToManyProcessRows.value = []
+  oneToManyDispatchDate.value = ''
+  oneToManyEmployeeList.value = []
+  selectedOneToManyEmployeeId.value = ''
+  currentOneToManyItem.value = null
+  modalWorkshop.value = ''
+}
+
+const onOneToManyDateChange = (e) => {
+  oneToManyDispatchDate.value = e.detail.value
+}
+
+const onOneToManyEmployeeRadioChange = (e) => {
+  selectedOneToManyEmployeeId.value = e.detail.value != null ? String(e.detail.value) : ''
+}
+
+const addOneToManyEmployee = async () => {
+  if (!modalWorkshop.value) {
+    modalWorkshop.value = workshop.value === '喷涂车间' ? '组装车间' : workshop.value
+  }
+  await loadMultiEmployeesForAdd()
+  selectedEmployeesForAdd.value = []
+  showAddEmployeeModal.value = true
+}
+
+const canOneToManyDispatch = computed(() => {
+  if (!oneToManyDispatchDate.value) return false
+  if (!selectedOneToManyEmployeeId.value) return false
+  if (oneToManyProcessRows.value.length === 0) return false
+  for (const row of oneToManyProcessRows.value) {
+    const q = Number(row.quantity)
+    if (!q || q <= 0) return false
+    const max = Number(row.maxQuantity) || 0
+    if (max > 0 && q > max) return false
+  }
+  return true
+})
+
+const confirmOneToManyDispatch = async () => {
+  if (!oneToManyDispatchDate.value) {
+    uni.showToast({ title: '请选择派工日期', icon: 'none' })
+    return
+  }
+  if (!selectedOneToManyEmployeeId.value) {
+    uni.showToast({ title: '请选择一个员工', icon: 'none' })
+    return
+  }
+  for (const row of oneToManyProcessRows.value) {
+    const q = Number(row.quantity)
+    if (!q || q <= 0) {
+      uni.showToast({ title: `请为「${row.processName || '工序'}」填写有效派工数量`, icon: 'none' })
+      return
+    }
+    const max = Number(row.maxQuantity) || 0
+    if (max > 0 && q > max) {
+      uni.showToast({ title: `「${row.processName}」派工数量不能超过可派工数量 ${max}`, icon: 'none' })
+      return
+    }
+  }
+
+  const billItem = currentOneToManyItem.value
+  const selectedEmployees = oneToManyEmployeeList.value.filter(emp =>
+    String(emp.id) === String(selectedOneToManyEmployeeId.value)
+  )
+  if (selectedEmployees.length === 0) {
+    uni.showToast({ title: '请选择一个员工', icon: 'none' })
+    return
+  }
+  const processQtyText = oneToManyProcessRows.value
+    .map(r => `${r.processName || '-'}：${Number(r.quantity)}`)
+    .join('；')
+  const employeeNames = selectedEmployees.map(emp => emp.name).join('、')
+
+  openDispatchConfirmModal([
+    { label: '工序与数量', value: processQtyText },
+    { label: '人员', value: employeeNames },
+    { label: '派工日期', value: oneToManyDispatchDate.value || '' },
+  ], async () => {
+    const emp = selectedEmployees[0]
+    const processDispatchList = oneToManyProcessRows.value.map((r, i) => {
+      const n = i + 1
+      return {
+        [`rowid${n}`]: r.processRowid,
+        [`dispatchCount${n}`]: Number(r.quantity),
+      }
+    })
+    const dispatchParams = {
+      date: oneToManyDispatchDate.value || '',
+      workshop: workshop.value || '',
+      orderCode: billItem?.orderCode || '',
+      billRowid: billItem?.billRowid || '',
+      loginCode: userStore.loginCode || '',
+      employeeId: emp.id,
+      employeeName: emp.name || '',
+      processDispatchList,
+    }
+
+    try {
+      const resp = await http.post(ONE_TO_MANY_DISPATCH_HOOK, dispatchParams)
+      if (resp.status === 1) {
+        uni.showToast({ title: resp.message || '派工失败', icon: 'none' })
+        return
+      }
+      uni.showToast({ title: '派工成功' })
+      showOneToManyModal.value = false
+      selectedMultiProcesses.value = []
+      oneToManyProcessRows.value = []
+      oneToManyEmployeeList.value = []
+      selectedOneToManyEmployeeId.value = ''
+      currentOneToManyItem.value = null
+      setTimeout(async () => {
+        await search()
+      }, 1000)
+    } catch (error) {
+      console.error('一对多派工失败:', error)
+      uni.showToast({ title: '派工失败：' + (error.message || '未知错误'), icon: 'none' })
+    }
+  })
+}
 
 // 多对多派工添加员工
 const addMultiEmployee = async () => {
@@ -1925,10 +2196,48 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
     return
   }
   
-  // 判断是在哪个模态框中添加员工
+  // 判断是在哪个模态框中添加员工（一对多 / 多对多 / 普通派工）
+  const isOneToMany = showOneToManyModal.value
   const isMultiDispatch = showMultiDispatchModal.value
   
-  if (isMultiDispatch) {
+  if (isOneToMany) {
+    if (Object.keys(allEmployeesMap.value).length === 0) {
+      await loadMultiEmployeesForAdd()
+    }
+    // 一对多：仅保留一名员工（添加员工弹窗已 maxSelection=1）
+    const rawId = selectedIds[0]
+    const id = rawId != null ? String(rawId) : ''
+    let empRow = null
+    if (id) {
+      const fullEmployee = allEmployeesMap.value[id] || allEmployeesMap.value[rawId]
+      if (fullEmployee) {
+        empRow = {
+          id: fullEmployee.id,
+          name: fullEmployee.name,
+          totalHours: fullEmployee.totalHours || 0,
+          unrecordedHours: fullEmployee.unrecordedHours || 0
+        }
+      } else {
+        const option = allEmployeesOptions.value.find(opt => String(opt.value) === id)
+        if (option) {
+          empRow = {
+            id: option.value,
+            name: option.label,
+            totalHours: option.totalHours || 0,
+            unrecordedHours: option.unrecordedHours || 0
+          }
+        }
+      }
+    }
+    showAddEmployeeModal.value = false
+    if (empRow) {
+      oneToManyEmployeeList.value = [empRow]
+      selectedOneToManyEmployeeId.value = String(empRow.id)
+      uni.showToast({ title: '已选择员工', icon: 'success' })
+    } else {
+      uni.showToast({ title: '未找到所选员工', icon: 'none' })
+    }
+  } else if (isMultiDispatch) {
     // 多对多派工模态框
     if (Object.keys(allEmployeesMap.value).length === 0) {
       await loadMultiEmployeesForAdd()
@@ -2111,8 +2420,8 @@ const addProcess = async (item) => {
   // 有工序时：必须先选择工序，才能在选中工序附近插入新工序
   let baseProcess = null
 
-  if (workshop.value === '组装车间') {
-    // 仅组装车间使用多选工序列表
+  if (workshop.value === '组装车间' || workshop.value === '抛光车间') {
+    // 组装车间、抛光车间：使用多选工序列表
     const selected = selectedMultiProcesses.value.find(p => p.item.orderCode === item.orderCode)
     if (!selected) {
       uni.showToast({ title: '请先选择一个工序', icon: 'none' })
@@ -2142,15 +2451,18 @@ const addProcess = async (item) => {
 
 const dispatchWork = (item) => {
   // 检查是否有选中的工序
-  if (workshop.value === '组装车间') {
-    // 组装车间：检查多选工序
+  if (workshop.value === '组装车间' || workshop.value === '抛光车间') {
+    // 组装车间、抛光车间：检查多选工序
     const selectedCount = selectedMultiProcesses.value.filter(p => p.item.orderCode === item.orderCode).length
     if (selectedCount === 0) {
       uni.showToast({ title: '请先选择一个工序', icon: 'none' })
       return
     }
     if (selectedCount > 1) {
-      uni.showToast({ title: '选择了多个工序，请使用多对多派工', icon: 'none' })
+      uni.showToast({
+        title: workshop.value === '抛光车间' ? '选择了多个工序，请使用一对多派工' : '选择了多个工序，请使用多对多派工',
+        icon: 'none'
+      })
       return
     }
     // 只有一个选中工序，使用第一个
@@ -2611,6 +2923,20 @@ onUnload(() => {
                 background: white;
                 color: #5884f1;
                 
+                &:disabled {
+                  background: #f5f5f5;
+                  color: #ccc;
+                  border-color: #ddd;
+                  cursor: not-allowed;
+                  opacity: 0.6;
+                }
+              }
+
+              &.btn-one-to-many {
+                width: px2vw(180px);
+                background: white;
+                color: #5884f1;
+
                 &:disabled {
                   background: #f5f5f5;
                   color: #ccc;
@@ -3134,6 +3460,11 @@ onUnload(() => {
     display: flex;
     flex-direction: column;
 
+    &.one-to-many-content {
+      height: px2vw(880px);
+      max-height: 90vh;
+    }
+
     .modal-header {
       display: flex;
       justify-content: space-between;
@@ -3196,6 +3527,80 @@ onUnload(() => {
   display: flex;
   flex-direction: column;
   gap: px2vw(10px);
+}
+
+/* 一对多派工：每行四列（工序宽、后三列数值框短） */
+.one-to-many-process-row {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  gap: px2vw(8px);
+  margin-bottom: px2vw(8px);
+  padding-bottom: px2vw(12px);
+  border-bottom: px2vw(1px) solid #eee;
+  align-items: flex-end;
+
+  /* 工序名称：占宽一些 */
+  .one-to-many-col-process {
+    flex: 2.2 1 0;
+    min-width: px2vw(320px);
+
+    .label {
+      width: px2vw(88px);
+    }
+
+    .one-to-many-value {
+      flex: 1;
+      min-width: 0;
+      width: auto !important;
+      max-width: none !important;
+    }
+  }
+
+  /* 排产 / 可派工 / 派工数量：框缩短；边距略紧 */
+  .form-group.one-to-many-col-num {
+    flex: 0 1 auto;
+    min-width: px2vw(200px);
+    max-width: px2vw(275px);
+    justify-content: flex-start !important;
+    align-items: center;
+    gap: px2vw(6px);
+
+    .label {
+      flex-shrink: 0;
+      width: auto;
+      min-width: px2vw(136px);
+      max-width: px2vw(156px);
+      font-size: px2vw(26px);
+      white-space: nowrap;
+    }
+
+    .one-to-many-value-short {
+      flex: 0 0 auto;
+      width: px2vw(120px) !important;
+      max-width: px2vw(120px) !important;
+      min-width: px2vw(72px);
+      margin-right: px2vw(4px);
+      padding-left: px2vw(6px);
+      padding-right: px2vw(6px);
+      text-align: center;
+      box-sizing: border-box;
+    } 
+
+    .one-to-many-qty-input {
+      flex: 0 0 auto;
+      width: px2vw(120px) !important;
+      max-width: px2vw(120px);
+      min-width: px2vw(72px);
+      margin-left: px2vw(6px);
+      box-sizing: border-box;
+    }
+  }
+
+  /* 「可派工数量」列略宽于前两列，数值框多留一点缝即可 */
+  .form-group.one-to-many-col-num.one-to-many-col-need {
+    min-width: px2vw(228px);
+  }
 }
 
 .row-group {
