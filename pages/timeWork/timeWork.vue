@@ -133,14 +133,16 @@
 						<!-- 员工列表（与派工模态框一致） -->
 						<view class="employee-section">
 							<view class="table-header">
-								<view class="col selected">选中</view>
+								<view class="col selected">操作</view>
 								<view class="col name">姓名</view>
 								<view class="col totalHours">总工时数</view>
 								<view class="col unrecordedHours">未派工时</view>
 							</view>
 							<view class="employee-table">
 								<view v-for="emp in timeWorkEmployeeList" :key="emp.id" class="table-row">
-									<view class="col selected">{{ '' }}</view>
+									<view class="col selected">
+										<text class="remove-employee" @click.stop="removeTimeWorkEmployee(emp.id)">移除</text>
+									</view>
 									<view class="col name">{{ emp.name }}</view>
 									<view class="col totalHours">{{ emp.totalHours }} 时</view>
 									<view class="col unrecordedHours">{{ emp.unrecordedHours }} 时</view>
@@ -157,7 +159,7 @@
 			</view>
 		</view>
 
-		<!-- 添加员工模态框（与派工页面一致；仅记时派工限制单选，其他页面不传 maxSelection 即不限制） -->
+		<!-- 添加员工模态框（与派工页面一致；可多选） -->
 		<AddWorkerRadiobox
 			v-model="selectedEmployeesForAdd"
 			:options="allEmployeesOptions"
@@ -168,7 +170,6 @@
 			:workshopOptions="workshopOptions"
 			:workshop="modalWorkshop"
 			@update:workshop="onModalWorkshopChange"
-			:maxSelection="1"
 		/>
 	</view>
 </template>
@@ -194,16 +195,31 @@ const timeWorkBills = ref([])
 // 车间选项（与派工页面一致）
 const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
 
+/** 喷涂车间时，筛选/员工与派工页一致，按组装车间处理 */
+const workshopForFilter = (w) => {
+	if (!w) return '拉伸车间'
+	return w === '喷涂车间' ? '组装车间' : w
+}
+
+/** 默认车间：与登录权限 loginLimits 一致；喷涂车间时默认为组装车间 */
+const getDefaultTimeWorkshop = () => {
+	const raw = (userStore.loginLimits && userStore.loginLimits.trim()) || ''
+	if (raw && workshopOptions.value.includes(raw)) {
+		return workshopForFilter(raw)
+	}
+	return '拉伸车间'
+}
+
 // 记时派工表单
 const timeWorkForm = ref({
-	workshop: '拉伸车间',
+	workshop: getDefaultTimeWorkshop(),
 	workHours: '',
 	hourlyRate: '',
 	remark: ''
 })
 
-// 记时派工模态框内的车间（用于添加员工时传给 AddWorkerRadiobox）
-const modalWorkshop = ref('拉伸车间')
+// 记时派工模态框内的车间（用于添加员工时传给 AddWorkerRadiobox；喷涂→组装）
+const modalWorkshop = ref(workshopForFilter(timeWorkForm.value.workshop))
 const timeWorkWorkshopIndex = computed(() => {
 	const i = workshopOptions.value.indexOf(timeWorkForm.value.workshop)
 	return i >= 0 ? i : 0
@@ -212,7 +228,7 @@ const timeWorkWorkshopIndex = computed(() => {
 async function onTimeWorkWorkshopChange(e) {
 	const index = e.detail.value
 	timeWorkForm.value.workshop = workshopOptions.value[index] || '拉伸车间'
-	modalWorkshop.value = timeWorkForm.value.workshop
+	modalWorkshop.value = workshopForFilter(timeWorkForm.value.workshop)
 	await loadTimeWorkBills()
 }
 
@@ -234,7 +250,7 @@ const getCurrentDate = () => {
 const loadEmployeesForAdd = async () => {
 	try {
 		const currentDate = getCurrentDate()
-		const workshop = modalWorkshop.value || timeWorkForm.value.workshop || '拉伸车间'
+		const workshop = modalWorkshop.value || workshopForFilter(timeWorkForm.value.workshop)
 		const res = await callWorkflowListAPIPaged({
 			worksheetId: 'yggs',
 			filters: [{
@@ -282,7 +298,7 @@ const loadEmployeesForAdd = async () => {
 // 加载记时派工记录（数据表 jspg），按车间筛选，过滤掉已完成
 const loadTimeWorkBills = async () => {
 	try {
-		const currentWorkshop = timeWorkForm.value.workshop || '拉伸车间'
+		const currentWorkshop = workshopForFilter(timeWorkForm.value.workshop)
 		const res = await callWorkflowListAPIPaged({
 			worksheetId: 'jspg',
 			filters: [
@@ -336,10 +352,14 @@ const loadTimeWorkBills = async () => {
 }
 
 const openAddEmployeeModal = async () => {
-	modalWorkshop.value = timeWorkForm.value.workshop || '拉伸车间'
+	modalWorkshop.value = workshopForFilter(timeWorkForm.value.workshop)
 	await loadEmployeesForAdd()
-	selectedEmployeesForAdd.value = []
+	selectedEmployeesForAdd.value = timeWorkEmployeeList.value.map((e) => e.id)
 	showAddEmployeeModal.value = true
+}
+
+const removeTimeWorkEmployee = (id) => {
+	timeWorkEmployeeList.value = timeWorkEmployeeList.value.filter((e) => String(e.id) !== String(id))
 }
 
 const handleAddEmployeeModalClose = (value) => {
@@ -347,28 +367,30 @@ const handleAddEmployeeModalClose = (value) => {
 }
 
 const onModalWorkshopChange = (value) => {
-	modalWorkshop.value = value
+	modalWorkshop.value = workshopForFilter(value)
 	loadEmployeesForAdd()
 }
 
 const handleAddEmployeeConfirm = async (selectedIds) => {
 	if (!selectedIds || selectedIds.length === 0) {
-		uni.showToast({ title: '请选择一个员工', icon: 'none' })
+		uni.showToast({ title: '请至少选择一个员工', icon: 'none' })
 		return
 	}
-	// 记时派工只能一名员工：取当前选中的唯一 id，覆盖列表
-	const id = selectedIds[0]
-	const emp = allEmployeesMap.value[id] || allEmployeesOptions.value.find(o => o.value === id)
-	if (emp) {
-		timeWorkEmployeeList.value = [{
-			id: emp.id || id,
-			name: emp.name || emp.label,
-			totalHours: emp.totalHours ?? 0,
-			unrecordedHours: emp.unrecordedHours ?? 0
-		}]
-		uni.showToast({ title: '已选择员工', icon: 'success' })
-	}
+	const next = []
+	selectedIds.forEach((id) => {
+		const emp = allEmployeesMap.value[id] || allEmployeesOptions.value.find((o) => String(o.value) === String(id))
+		if (emp) {
+			next.push({
+				id: emp.id || id,
+				name: emp.name || emp.label,
+				totalHours: emp.totalHours ?? 0,
+				unrecordedHours: emp.unrecordedHours ?? 0
+			})
+		}
+	})
+	timeWorkEmployeeList.value = next
 	showAddEmployeeModal.value = false
+	uni.showToast({ title: `已选 ${next.length} 名员工`, icon: 'success' })
 }
 
 // 返回选择订单页面
@@ -379,14 +401,15 @@ const quit = () => {
 }
 
 const onFabAdd = () => {
+	const w = timeWorkForm.value.workshop || getDefaultTimeWorkshop()
 	timeWorkForm.value = {
-		workshop: '拉伸车间',
+		workshop: w,
 		workHours: '',
 		hourlyRate: '',
 		remark: ''
 	}
 	timeWorkEmployeeList.value = []
-	modalWorkshop.value = '拉伸车间'
+	modalWorkshop.value = workshopForFilter(w)
 	showTimeWorkModal.value = true
 }
 
@@ -409,15 +432,21 @@ const doTimeWorkDispatch = async () => {
 		return
 	}
 
-	const employee = timeWorkEmployeeList.value[0]
+	const employeesPayload = timeWorkEmployeeList.value.map((emp) => ({
+		id: String(emp.id != null ? emp.id : ''),
+		name: emp.name || ''
+	}))
 	const payload = {
-		workshop: timeWorkForm.value.workshop || '',
+		workshop: workshopForFilter(timeWorkForm.value.workshop),
 		workHours: parseFloat(timeWorkForm.value.workHours) || 0,
 		hourlyRate: parseFloat(timeWorkForm.value.hourlyRate) || 0,
 		remark: timeWorkForm.value.remark || '',
 		date: getCurrentDate(),
-		employeeId: employee.id || '',
-		employeeName: employee.name || '',
+		employees: employeesPayload,
+		// 供工作流脚本节点 JSON.parse：部分平台对嵌套数组解析不稳定，增加纯字符串字段更可靠
+		employeesJson: JSON.stringify(employeesPayload),
+		employeeIds: timeWorkEmployeeList.value.map((e) => e.id).join(','),
+		employeeNames: timeWorkEmployeeList.value.map((e) => e.name).join('、'),
 		loginCode: userStore.loginCode || '',
 		loginName: userStore.loginName || ''
 	}
@@ -434,9 +463,11 @@ const doTimeWorkDispatch = async () => {
 		}
 
 		uni.showToast({ title: res?.message || '派工成功', icon: 'success' })
-		// 派工成功后刷新列表数据
-		await loadTimeWorkBills()
 		closeTimeWorkModal()
+		// 派工成功后延迟刷新列表，避免后端写入延迟导致列表未更新
+		setTimeout(() => {
+			loadTimeWorkBills()
+		}, 1000)
 	} catch (error) {
 		uni.hideLoading()
 		console.error('记时派工失败:', error)
@@ -463,10 +494,12 @@ onLoad((options) => {
 		const w = decodeURIComponent(options.workshop)
 		if (workshopOptions.value.includes(w)) {
 			timeWorkForm.value.workshop = w
-			modalWorkshop.value = w
+			modalWorkshop.value = workshopForFilter(w)
 		}
+	} else {
+		timeWorkForm.value.workshop = getDefaultTimeWorkshop()
+		modalWorkshop.value = workshopForFilter(timeWorkForm.value.workshop)
 	}
-	// 初次进入页面加载当前车间的记时派工记录
 	loadTimeWorkBills()
 })
 </script>
@@ -787,6 +820,11 @@ onLoad((options) => {
 						&.name { flex: 2; padding-left: px2vw(15px); }
 						&.totalHours { flex: 1; text-align: right; }
 						&.unrecordedHours { flex: 1; text-align: right; }
+					}
+
+					.remove-employee {
+						font-size: px2vw(24px);
+						color: #f44336;
 					}
 				}
 
