@@ -260,7 +260,7 @@ const loadEmployeesForAdd = async () => {
 				filterType: 2,
 				values: [workshop]
 			}],
-			pageSize: 1000,
+			pageSize: 100,
 			pageNum: 1
 		})
 		if (res.data && res.data.length > 0) {

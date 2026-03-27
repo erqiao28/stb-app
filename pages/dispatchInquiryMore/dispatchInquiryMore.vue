@@ -408,7 +408,7 @@ const handleDeleteDispatch = async (item) => {
 			if (!res.confirm) return
 
 			try {
-				const result = await http.post('/api/workflow/hooks/NjliZDAwNWIwZjBkMGFkODBmODJkZTQx', {
+				const result = await http.post('https://www.dachen.vip/api/workflow/hooks/NjliZDAwNWIwZjBkMGFkODBmODJkZTQx', {
 					rowid: item.rowid
 				})
 

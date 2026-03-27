@@ -417,7 +417,7 @@ const loadEmployees = async () => {
 				"filterType": 2,
 				"values": [selectedWorkshop]
 			}],
-			pageSize: 1000,
+			pageSize: 100,
 			pageNum: 1
 		})
 		

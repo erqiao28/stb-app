@@ -915,41 +915,10 @@ const getProcessRaw = async (billTypeValue = '') => {
     })
   }
 
-  // 调试：打印工序查询参数
-  console.log('[派工页面][getProcessRaw] 即将获取工序列表', {
-    billTypeValue: billTypeValue || '默认: 正常排产',
-    processTypeParam,
-    workshop: workshop.value,
-    filters
-  })
-
   const res = await callWorkflowListAPIPaged({
     worksheetId: 'paigongdan',
     filters
   })
-
-  // 调试：打印工序接口返回概况
-  try {
-    const total = res && res.data && Array.isArray(res.data) ? res.data.length : 0
-    const first = total > 0 ? res.data[0] : null
-    console.log('[派工页面][getProcessRaw] 工序接口返回', {
-      billTypeValue: billTypeValue || '默认: 正常排产',
-      processTypeParam,
-      workshop: workshop.value,
-      total,
-      firstSample: first
-        ? {
-            processName: first['656ffd1bba5ef3863bf3ec1e'],
-            processOrder: first['6593b07ae97eb866a50eeba1'],
-            productcode: first['691d6160535b29cbd5c6c0a9'],
-            rowid: first['rowid'],
-            sonoutput: first['66974d062503723eec1af614']
-          }
-        : null
-    })
-  } catch (e) {
-    console.error('[派工页面][getProcessRaw] 打印返回数据失败', e)
-  }
 
   return res
 }
@@ -1024,30 +993,6 @@ const search = async () => {
 
   // 获取单据列表（按车间和单据类型从后端筛选）
   const billsRes = await getBillsListRaw()
-  console.log('[派工页面] 获取的单据:', billsRes)
-
-  // 调试：打印单据接口返回概况
-  try {
-    const total = billsRes && billsRes.data && Array.isArray(billsRes.data) ? billsRes.data.length : 0
-    console.log('[派工页面][search] 单据接口返回', {
-      workshop: workshop.value,
-      billType: billTypeFilter.value,
-      total
-    })
-
-    // 调试：重点打印单据原始生产编号字段
-    if (total > 0) {
-      console.log('[派工页面][search] 单据原始生产编号示例', {
-        sample: billsRes.data.slice(0, 5).map(item => ({
-          orderCodeRaw: item['655e1cbbbd2094b316347f92'],
-          productionCodeRaw: item['698438933b5e707f84cf51fd'],
-          rowid: item['rowid']
-        }))
-      })
-    }
-  } catch (e) {
-    console.error('[派工页面][search] 打印单据返回失败', e)
-  }
 
   if (!billsRes.data || billsRes.data.length === 0) {
     billsList.value = []
@@ -1066,12 +1011,6 @@ const search = async () => {
     }
     const num = Number(item['69a8e4563b5e707f84d33c0c'])
     return !Number.isNaN(num) && num > 0
-  })
-
-  // 调试：打印过滤后的单据数量
-  console.log('[派工页面][search] 过滤后的单据数量', {
-    before: billsRes.data.length,
-    after: filteredBillsData.length
   })
 
   if (!filteredBillsData.length) {
@@ -1115,16 +1054,6 @@ const search = async () => {
     }
   })
 
-  // 调试：打印基础单据映射结果
-  console.log('[派工页面][search] 基础单据列表', {
-    count: baseBills.length,
-    sample: baseBills.slice(0, 3).map(b => ({
-      orderCode: b.orderCode,
-      productionCode: b.productionCode,
-      billType: b.billType
-    }))
-  })
-
   if (!baseBills.length) {
     billsList.value = []
     processList.value = []
@@ -1134,29 +1063,8 @@ const search = async () => {
   // 获取当前单据类型对应的工序列表（按车间 + 工序类型）
   const processRes = await getProcessRaw(billTypeFilter.value)
 
-  // 调试：重点打印工序原始生产编号字段
-  try {
-    const totalProcess = processRes && processRes.data && Array.isArray(processRes.data) ? processRes.data.length : 0
-    if (totalProcess > 0) {
-      console.log('[派工页面][search] 工序原始生产编号示例', {
-        sample: processRes.data.slice(0, 5).map(item => ({
-          processNameRaw: item['656ffd1bba5ef3863bf3ec1e'],
-          processOrderRaw: item['6593b07ae97eb866a50eeba1'],
-          productcodeRaw: item['691d6160535b29cbd5c6c0a9'],
-          rowid: item['rowid']
-        }))
-      })
-    }
-  } catch (e) {
-    console.error('[派工页面][search] 打印工序原始生产编号失败', e)
-  }
-
   if (!processRes.data || processRes.data.length === 0) {
     processList.value = []
-    console.log('[派工页面][search] 工序接口返回为空', {
-      workshop: workshop.value,
-      billType: billTypeFilter.value
-    })
   } else {
     const allProcesses = processRes.data.map(item => ({
       processName: item['656ffd1bba5ef3863bf3ec1e'],
@@ -1180,18 +1088,6 @@ const search = async () => {
     }))
 
     processList.value = allProcesses.map(p => ({ ...p }))
-
-    // 调试：打印工序映射结果
-    console.log('[派工页面][search] 映射后的工序列表', {
-      count: allProcesses.length,
-      sample: allProcesses.slice(0, 5).map(p => ({
-        processName: p.processName,
-        processOrder: p.processOrder,
-        productcode: p.productcode,
-        rowid: p.rowid,
-        sonoutput: p.sonoutput
-      }))
-    })
   }
 
   const allProcesses = processList.value || []
@@ -1208,20 +1104,6 @@ const search = async () => {
         const seqB = b.sequence || 0
         return seqA - seqB
       })
-
-    // 调试：打印每个订单匹配到的工序
-    console.log('[派工页面][search] 订单关联工序', {
-      orderCode: bill.orderCode,
-      productionCode: bill.productionCode,
-      processCount: processes.length,
-      processesPreview: processes.slice(0, 10).map(p => ({
-        processName: p.processName,
-        processOrder: p.processOrder,
-        productcode: p.productcode,
-        rowid: p.rowid,
-        sonoutput: p.sonoutput
-      }))
-    })
 
     const completedProcessText =
       processes.length > 0
@@ -1742,18 +1624,7 @@ const loadMultiEmployeesForAdd = async () => {
         const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
         const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
         const dispatchWorkDate = item['69524e7b7a59e0522d855df6'] || ''
-        
-        // 打印 dispatchWorkDate 字段的值
-        console.log('多对多派工 - 员工 dispatchWorkDate 字段值:', {
-          name: item['6938db8bda0981f67b352af3'] || '',
-          id: item['6943bd902161a0fc58bad5ab'] || '',
-          dispatchWorkDate: dispatchWorkDate,
-          dispatchWorkDateType: typeof dispatchWorkDate,
-          dispatchWorkDateRaw: item['69524e7b7a59e0522d855df6'],
-          currentDate: currentDate,
-          isMatch: dispatchWorkDate === currentDate
-        })
-        
+
         return {
           id: item['6943bd902161a0fc58bad5ab'] || '',
           name: item['6938db8bda0981f67b352af3'] || '',
@@ -1764,13 +1635,6 @@ const loadMultiEmployeesForAdd = async () => {
       })
       .filter(emp => emp.id)
       .filter(emp => emp.dispatchWorkDate === currentDate)
-
-      console.log('多对多派工 - 加载员工数据:', {
-        totalFromAPI: res.data.length,
-        afterDateFilter: mappedEmployees.length,
-        currentDate: currentDate,
-        selectedWorkshop: selectedWorkshop
-      })
 
       // 更新allEmployeesOptions和allEmployeesMap，供添加员工模态框使用
       allEmployeesOptions.value = mappedEmployees.map(emp => ({
@@ -2111,7 +1975,7 @@ const loadEmployees = async () => {
         "filterType": 2,
         "values": [selectedWorkshop]
       }],
-      pageSize: 1000,
+      pageSize: 100,
       pageNum: 1
     })
 
@@ -2120,18 +1984,7 @@ const loadEmployees = async () => {
         const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
         const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
         const dispatchWorkDate = item['69524e7b7a59e0522d855df6'] || ''
-        
-        // 打印 dispatchWorkDate 字段的值
-        console.log('普通派工 - 员工 dispatchWorkDate 字段值:', {
-          name: item['6938db8bda0981f67b352af3'] || '',
-          id: item['6943bd902161a0fc58bad5ab'] || '',
-          dispatchWorkDate: dispatchWorkDate,
-          dispatchWorkDateType: typeof dispatchWorkDate,
-          dispatchWorkDateRaw: item['69524e7b7a59e0522d855df6'],
-          currentDate: currentDate,
-          isMatch: dispatchWorkDate === currentDate
-        })
-        
+
         return {
           id: item['6943bd902161a0fc58bad5ab'] || '',
           name: item['6938db8bda0981f67b352af3'] || '',
@@ -2142,13 +1995,6 @@ const loadEmployees = async () => {
       })
       .filter(emp => emp.id)
       .filter(emp => emp.dispatchWorkDate === currentDate)
-
-      console.log('普通派工 - 加载员工数据:', {
-        totalFromAPI: res.data.length,
-        afterDateFilter: mappedEmployees.length,
-        currentDate: currentDate,
-        selectedWorkshop: selectedWorkshop
-      })
 
       allEmployeesOptions.value = mappedEmployees.map(emp => ({
         label: emp.name,
@@ -2247,12 +2093,6 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
     
     selectedIds.forEach(id => {
       const exists = multiEmployeeList.value.find(emp => emp.id === id)
-      console.log('多对多派工 - 检查员工是否存在:', {
-        employeeId: id,
-        exists: exists,
-        multiEmployeeListLength: multiEmployeeList.value.length,
-        allEmployeesOptionsLength: allEmployeesOptions.value.length
-      })
       if (!exists) {
         const fullEmployee = allEmployeesMap.value[id]
         if (fullEmployee) {
@@ -2277,16 +2117,16 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
         }
       }
     })
-    
+
     showAddEmployeeModal.value = false
-    
+
     // 自动选中新添加的员工
     selectedIds.forEach(id => {
       if (!selectedMultiEmployees.value.includes(id)) {
         selectedMultiEmployees.value.push(id)
       }
     })
-    
+
     if (addedCount > 0) {
       uni.showToast({ title: `已添加 ${addedCount} 名员工`, icon: 'success' })
     } else {
@@ -2302,12 +2142,6 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
     
     selectedIds.forEach(id => {
       const exists = employeeList.value.find(emp => emp.id === id)
-      console.log('普通派工 - 检查员工是否存在:', {
-        employeeId: id,
-        exists: exists,
-        employeeListLength: employeeList.value.length,
-        allEmployeesOptionsLength: allEmployeesOptions.value.length
-      })
       if (!exists) {
         const fullEmployee = allEmployeesMap.value[id]
         if (fullEmployee) {
@@ -2332,15 +2166,15 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
         }
       }
     })
-    
+
     showAddEmployeeModal.value = false
-    
+
     selectedIds.forEach(id => {
       if (!selectedEmployee.value.includes(id)) {
         selectedEmployee.value.push(id)
       }
     })
-    
+
     if (addedCount > 0) {
       uni.showToast({ title: `已添加 ${addedCount} 名员工`, icon: 'success' })
     } else {
