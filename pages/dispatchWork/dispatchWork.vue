@@ -504,6 +504,14 @@
               <view>规格型号：</view>
               <view>{{ item.models }}</view>
             </view>
+          <view class="bill-qty-row rework-qty" v-if="item.reworkQty > 0">
+            <view>返工数量：</view>
+            <view>{{ item.reworkQty }}</view>
+          </view>
+          <view class="bill-qty-row scrap-qty" v-if="item.scrapQty > 0">
+            <view>废品数量：</view>
+            <view>{{ item.scrapQty }}</view>
+          </view>
           
           <!-- 问题描述 -->
           <view class="problemDescription" v-if="item.problemDescription && item.problemDescription.trim()">
@@ -1037,12 +1045,17 @@ const search = async () => {
 
     const sop = item['697b206a3b5e707f84cd9c48']
 
+    const reworkNum = Number(item['6971989c3b5e707f84cb78e1'])
+    const scrapNum = Number(item['6971989c3b5e707f84cb78e2'])
+
     return {
       orderGoods,
       orderCount: item['681b0b53b139204fd264c5fd'],
       productionCount: item['67de8eb5c5377d50a523ef9b'],
       name: item['6937d255ff2b019b3cb34be3'],
       models: item['6937d255ff2b019b3cb34be4'],
+      reworkQty: Number.isFinite(reworkNum) ? reworkNum : 0,
+      scrapQty: Number.isFinite(scrapNum) ? scrapNum : 0,
       productionCode,
       image: imageData,
       sop,
@@ -2815,6 +2828,21 @@ onUnload(() => {
           margin: px2vw(20px) px2vw(20px);
           font-size: px2vw(25px);
           width: px2vw(1800px);
+        }
+
+        .bill-qty-row {
+          display: flex;
+          margin: px2vw(8px) px2vw(20px) px2vw(12px);
+          font-size: px2vw(25px);
+          width: px2vw(1800px);
+
+          &.rework-qty {
+            color: #e6a800;
+          }
+
+          &.scrap-qty {
+            color: #9e9e9e;
+          }
         }
 
         .problemDescription{

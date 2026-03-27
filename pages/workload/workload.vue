@@ -30,6 +30,7 @@
 						<uni-th align="center" class="table-header-cell">已记工时</uni-th>
 						<uni-th align="center" class="table-header-cell">未记工时</uni-th>
 						<uni-th align="center" class="table-header-cell">剩余工时</uni-th>
+						<uni-th align="center" class="table-header-cell">预计工资</uni-th>
 					</uni-tr>
 					<uni-tr v-for="item in tableData" :key="item.staff" class="table-body-row">
 						<uni-td align="center" class="table-data-cell">{{ item.staff }}</uni-td>
@@ -37,6 +38,7 @@
 						<uni-td align="center" class="table-data-cell">{{ item.recordedWorktime }}</uni-td>
 						<uni-td align="center" class="table-data-cell">{{ item.unrecordedWorktime }}</uni-td>
 						<uni-td align="center" class="table-data-cell">{{ item.remainWorktime }}</uni-td>
+						<uni-td align="center" class="table-data-cell">{{ item.estimatedSalary }}</uni-td>
 					</uni-tr>
 					<!-- 加载更多提示 -->
 					<uni-tr v-if="loading && tableData.length > 0" class="loading-row">
@@ -152,6 +154,7 @@ const getWorkloadList = async (pageNum, isRefresh = false) => {
 		recordedWorktime: item['693bcaa5f15635c61ac3507b'],
 		unrecordedWorktime: item['693bc9b7f15635c61ac35050'],
 		remainWorktime: item['693bcaa5f15635c61ac3507c'],
+		estimatedSalary: item['69a652043b5e707f84d2a269'] ?? '',
 		dispatchWorkDate: item['69524e7b7a59e0522d855df6'] || ''
 	}))
 	.filter(item => item.dispatchWorkDate === currentDate)
@@ -263,7 +266,7 @@ const quit = () => {
 ::v-deep .table-header-row,
 ::v-deep .table-body-row {
 	display: grid;
-	grid-template-columns: repeat(5, 1fr);
+	grid-template-columns: repeat(6, 1fr);
 	width: 100%;
 }
 
@@ -327,7 +330,7 @@ const quit = () => {
 	background-color: #f5f5f5 !important;
 	min-height: px2vw(80px);
 	display: grid;
-	grid-template-columns: repeat(5, 1fr);
+	grid-template-columns: repeat(6, 1fr);
 	width: 100%;
 }
 
