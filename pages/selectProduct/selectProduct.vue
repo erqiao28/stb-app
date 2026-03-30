@@ -60,7 +60,7 @@
               <text class="value">{{ item.productionCode || '-' }}</text>
             </view>
           </view>
-          <!-- 第二行：产品名称 + 订单数量（与第一行三列对齐，第三列为空壳占位） -->
+          <!-- 第二行：产品名称 + 订单数量 + 返工数量（与第一行三列对齐） -->
           <view class="row-middle">
             <view class="col col-left">
               <text class="label">产品名称：</text>
@@ -70,8 +70,9 @@
               <text class="label">订单数量：</text>
               <text class="value order-count-value">{{ item.orderCount || '-' }}</text>
             </view>
-            <view class="col col-right col-empty">
-              <!-- 占位空壳，用于保持与第一行一致的布局结构 -->
+            <view class="col col-right">
+              <text class="label">返工数量：</text>
+              <text class="value rework-qty-value">{{ item.reworkQtyDisplay }}</text>
             </view>
           </view>
           <!-- 第三行：规格型号，占整行，允许换行 -->
@@ -99,6 +100,8 @@ const userStore = useUserStore()
 const workshop = ref('拉伸车间')
 // 排产类型固定为正常排产（与选择订单页面一致）
 const billTypeFilter = '正常排产'
+/** 工作表字段：返工数量 */
+const FIELD_REWORK_QTY = '6971989c3b5e707f84cb78e1'
 
 // 由选择订单页面带入的订单编号，用于接口筛选
 const selectedOrderCode = ref('')
@@ -199,13 +202,18 @@ const search = async () => {
     return
   }
 
-  // 单条维度展示：订单编号 + 客户名称 + 产品名称 + 订单数量 + 规格型号
+  // 单条维度展示：订单编号 + 客户名称 + 产品名称 + 订单数量 + 返工数量 + 规格型号
   let list = filteredData.map(item => {
     const orderCode = item['655e1cbbbd2094b316347f92'] || ''
     const customerName = item['69a8ed3c3b5e707f84d33f8b'] || ''
     const name = item['6937d255ff2b019b3cb34be3'] || ''
     const models = item['6937d255ff2b019b3cb34be4'] || ''
     const orderCount = item['681b0b53b139204fd264c5fd'] || ''
+    const reworkRaw = item[FIELD_REWORK_QTY]
+    const reworkQtyDisplay =
+      reworkRaw == null || reworkRaw === '' || String(reworkRaw).trim() === ''
+        ? '-'
+        : reworkRaw
 
     return {
       orderCode,
@@ -213,6 +221,7 @@ const search = async () => {
       name,
       models,
       orderCount,
+      reworkQtyDisplay,
       productionCode: item['698438933b5e707f84cf51fd'] || '',
       productCode: item['691d6336535b29cbd5c6c0ca'] || ''
     }
@@ -398,16 +407,16 @@ const selectProductItem = (item) => {
             .value.order-count-value {
               color: #2755f1;
             }
+
+            .value.rework-qty-value {
+              color: #d46b08;
+            }
           }
 
           .col-left,
           .col-center,
           .col-right {
             justify-content: flex-start;
-          }
-
-          .col-empty {
-            // 空壳占位列，不显示内容，但保持宽度参与对齐
           }
         }
 

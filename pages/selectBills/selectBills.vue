@@ -27,7 +27,7 @@
 			<view class="btn-item search-btn" @click="search">查询</view>
 		</view>
 
-		<!-- 订单列表：订单编号、出货时间、客户名称、产品数量 -->
+		<!-- 订单列表：订单编号、出货时间、客户名称、产品数量、返工产品数量 -->
 		<view class="orderList">
 			<view class="orderItem" v-for="item in billsList" :key="item.orderCode" @click="selectOrder(item)">
 				<view class="goodsInfo row-single">
@@ -47,6 +47,10 @@
 						<text class="label">产品数量：</text>
 						<text class="value product-count-value">{{ item.productCount }}</text>
 					</view>
+					<view class="col col-rework">
+						<text class="label">返工产品数量：</text>
+						<text class="value rework-count-value">{{ item.reworkProductCount }}</text>
+					</view>
 				</view>
 			</view>
 		</view>
@@ -64,6 +68,8 @@ const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
 
 const STORAGE_KEY = 'selectBillsSearch'
+/** 工作表字段：返工数量（用于汇总「返工产品数量」：同订单下该值大于 0 的条数） */
+const FIELD_REWORK_QTY = '6971989c3b5e707f84cb78e1'
 
 // 车间：与派工页面一致，根据登录账号固定（loginLimits）
 const workshop = ref('拉伸车间')
@@ -176,18 +182,24 @@ const search = async () => {
 		if (!orderMap[orderCode]) {
 			orderMap[orderCode] = {
 				count: 0,
+				reworkProductCount: 0,
 				customerName: item['69a8ed3c3b5e707f84d33f8b'] || '',
 				deliveryTime: item['69ad33ee3b5e707f84d43b09'] || ''
 			}
 		}
 		orderMap[orderCode].count += 1
+		const reworkNum = Number(item[FIELD_REWORK_QTY])
+		if (!Number.isNaN(reworkNum) && reworkNum > 0) {
+			orderMap[orderCode].reworkProductCount += 1
+		}
 	})
 
 	let list = Object.keys(orderMap).map(orderCode => ({
 		orderCode,
 		customerName: orderMap[orderCode].customerName,
 		deliveryTime: orderMap[orderCode].deliveryTime,
-		productCount: orderMap[orderCode].count
+		productCount: orderMap[orderCode].count,
+		reworkProductCount: orderMap[orderCode].reworkProductCount
 	}))
 
 	// 按销售订单关键字模糊过滤
@@ -412,6 +424,10 @@ const goTimeWork = () => {
 						.value.product-count-value {
 							color: #2755f1;
 						}
+
+						.value.rework-count-value {
+							color: #d46b08;
+						}
 					}
 
 					.col-left,
@@ -426,7 +442,8 @@ const goTimeWork = () => {
 						padding: 0 px2vw(10px);
 					}
 
-					.col-right {
+					.col-right,
+					.col-rework {
 						flex: 0 0 auto;
 						justify-content: flex-end;
 					}
