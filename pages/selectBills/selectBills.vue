@@ -16,7 +16,7 @@
 			<view class="btn-item" v-if="workshop === '组装车间'" @click="goDispatchInquiryMore">多对多派工查询</view>
 		</view>
 
-		<!-- 搜索区域：仅销售订单 + 查询按钮 -->
+		<!-- 搜索区域：销售订单 + 查询 + 排产类型（右侧） -->
 		<view class="search-box">
 			<view class="salesOrder">
 				<text class="salesOrder-text">销售订单</text>
@@ -25,6 +25,18 @@
 				</view>
 			</view>
 			<view class="btn-item search-btn" @click="search">查询</view>
+			<picker
+				mode="selector"
+				:range="billTypeOptions"
+				:value="billTypeIndex"
+				@change="onBillTypeChange"
+				class="bill-type-picker"
+			>
+				<view class="picker-inner">
+					<text class="picker-value">{{ billTypeOptions[billTypeIndex] }}</text>
+					<text class="picker-arrow">▼</text>
+				</view>
+			</picker>
 		</view>
 
 		<!-- 订单列表：订单编号、出货时间、客户名称、产品数量、返工产品数量 -->
@@ -73,11 +85,20 @@ const FIELD_REWORK_QTY = '6971989c3b5e707f84cb78e1'
 
 // 车间：与派工页面一致，根据登录账号固定（loginLimits）
 const workshop = ref('拉伸车间')
-// 排产类型固定为正常排产
-const billTypeFilter = '正常排产'
+// 排产类型：与接口字段 694a3954687045435008a7c3 一致（正常排产 / 返工排产）
+const billTypeOptions = ['正常排产', '返工排产']
+const billTypeIndex = ref(0)
 
 const billsList = ref([])
 const searchForm = ref({ salesOrder: '' })
+
+const onBillTypeChange = async (e) => {
+	const idx = Number(e.detail.value)
+	if (!Number.isNaN(idx) && idx >= 0 && idx < billTypeOptions.length) {
+		billTypeIndex.value = idx
+		await search()
+	}
+}
 
 onLoad((options) => {
 	// 优先从登录权限取车间
@@ -86,11 +107,21 @@ onLoad((options) => {
 	} else if (options && options.workshop) {
 		workshop.value = options.workshop
 	}
-	// 恢复持久化的销售订单搜索条件
+	// 恢复持久化的销售订单、排产类型
 	try {
 		const saved = uni.getStorageSync(STORAGE_KEY)
-		if (saved && typeof saved === 'object' && saved.salesOrder !== undefined) {
-			searchForm.value.salesOrder = saved.salesOrder || ''
+		if (saved && typeof saved === 'object') {
+			if (saved.salesOrder !== undefined) {
+				searchForm.value.salesOrder = saved.salesOrder || ''
+			}
+			const idx = saved.billTypeIndex
+			if (
+				typeof idx === 'number' &&
+				idx >= 0 &&
+				idx < billTypeOptions.length
+			) {
+				billTypeIndex.value = idx
+			}
 		}
 	} catch (e) {
 		// ignore
@@ -98,12 +129,15 @@ onLoad((options) => {
 	search()
 })
 
-// 销售订单搜索条件变化时持久化
+// 销售订单、排产类型变化时持久化
 watch(
-	() => searchForm.value.salesOrder,
-	(val) => {
+	() => [searchForm.value.salesOrder, billTypeIndex.value],
+	([salesOrder, idx]) => {
 		try {
-			uni.setStorageSync(STORAGE_KEY, { salesOrder: val || '' })
+			uni.setStorageSync(STORAGE_KEY, {
+				salesOrder: salesOrder || '',
+				billTypeIndex: idx
+			})
 		} catch (e) {
 			// ignore
 		}
@@ -133,7 +167,7 @@ const getBillsListRaw = async () => {
 					dataType: 30,
 					spliceType: 1,
 					filterType: 2,
-					values: [billTypeFilter]
+					values: [billTypeOptions[billTypeIndex.value]]
 				},
 				{
 					controlId: '655b875ffc44a9469a3aa225',
@@ -231,11 +265,12 @@ const quit = () => {
 }
 
 const selectOrder = (item) => {
-	// 先进入选择产品页面，带上车间和订单编号
+	// 进入选择产品页面：车间、订单编号、排产类型（与列表筛选一致）
+	const billType = billTypeOptions[billTypeIndex.value] || '正常排产'
 	uni.navigateTo({
 		url: `/pages/selectProduct/selectProduct?workshop=${encodeURIComponent(
 			workshop.value
-		)}&orderCode=${encodeURIComponent(item.orderCode || '')}`
+		)}&orderCode=${encodeURIComponent(item.orderCode || '')}&billType=${encodeURIComponent(billType)}`
 	})
 }
 
@@ -298,7 +333,7 @@ const goTimeWork = () => {
 		}
 	}
 
-	/* 顶部功能按钮栏样式（复用派工页面样式） */
+	/* 顶部功能按钮栏；与搜索区排产下拉、查询按钮共用同一套外观 */
 	.btn-list {
 		height: px2vw(120px);
 		width: 100%;
@@ -306,31 +341,77 @@ const goTimeWork = () => {
 		align-items: center;
 
 		.btn-item {
-			height: px2vw(80px);
-			flex: 1; /* 二等分父容器宽度 */
+			flex: 1;
 			margin: px2vw(10px);
-			padding: px2vw(16px) px2vw(25px);
-			display: flex;
-			justify-content: center;
-			align-items: center;
-			border-radius: px2vw(18px);
-			color: #fff;
-			background-color: #2755f1;
-			font-size: px2vw(25px);
 		}
 	}
 
+	.btn-list .btn-item,
+	.search-box .bill-type-picker .picker-inner,
+	.search-box .search-btn {
+		height: px2vw(80px);
+		padding: px2vw(16px) px2vw(25px);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: px2vw(18px);
+		color: #fff;
+		background-color: #2755f1;
+		font-size: px2vw(25px);
+		box-sizing: border-box;
+	}
+
+	.search-box .bill-type-picker .picker-inner {
+		position: relative;
+		justify-content: center;
+		align-items: center;
+		width: 100%;
+		padding-left: px2vw(40px);
+		padding-right: px2vw(40px);
+		box-sizing: border-box;
+	}
+
+	.search-box .bill-type-picker .picker-value {
+		width: 100%;
+		text-align: center;
+		color: #fff;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		box-sizing: border-box;
+	}
+
+	.search-box .bill-type-picker .picker-arrow {
+		position: absolute;
+		right: px2vw(22px);
+		top: 50%;
+		transform: translateY(-50%);
+		font-size: px2vw(20px);
+		color: #fff;
+		opacity: 0.95;
+		pointer-events: none;
+	}
+
 	.search-box {
+		/* 排产下拉与查询按钮同宽 */
+		$search-row-btn-w: px2vw(340px);
+
 		display: flex;
 		align-items: center;
 		width: 100%;
 		background-color: #fff;
-		height: px2vw(100px);
-		padding: px2vw(15px) px2vw(20px);
-		margin: px2vw(10px);
+		min-height: px2vw(120px);
+		padding: px2vw(10px) px2vw(10px);
+		margin: px2vw(10px) px2vw(5px);
 		border-radius: px2vw(18px);
 		box-sizing: border-box;
 		gap: px2vw(10px);
+
+		.bill-type-picker {
+			flex: 0 0 $search-row-btn-w;
+			width: $search-row-btn-w;
+			box-sizing: border-box;
+		}
 
 		.salesOrder {
 			display: flex;
@@ -352,7 +433,7 @@ const goTimeWork = () => {
 				border-radius: px2vw(18px);
 				display: flex;
 				align-items: center;
-				padding: 0 px2vw(30px);
+				padding: 0 px2vw(24px);
 
 				input {
 					font-size: px2vw(25px);
@@ -362,20 +443,9 @@ const goTimeWork = () => {
 		}
 
 		.search-btn {
-			flex-shrink: 0;
-			margin-left: px2vw(10px);
-			margin-right: 0;
-			width: auto;
-			min-width: px2vw(260px);
-			height: px2vw(80px);
-			padding: px2vw(16px) px2vw(25px);
-			display: flex;
-			justify-content: center;
-			align-items: center;
-			border-radius: px2vw(18px);
-			color: #fff;
-			background-color: #2755f1;
-			font-size: px2vw(25px);
+			flex: 0 0 $search-row-btn-w;
+			width: $search-row-btn-w;
+			box-sizing: border-box;
 		}
 	}
 

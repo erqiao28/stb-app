@@ -422,14 +422,11 @@
       <view></view>
     </view>
     
-    <!-- 功能按钮栏（派工查询、员工工作量查询、多对多派工查询、排产类型按钮） -->
+    <!-- 功能按钮栏（排产类型由选择订单/选择产品传入，不再提供顶部切换） -->
     <view class="btn-list">
       <view class="btn-item" @click="goDispatchInquiry">派工查询</view>
       <view class="btn-item" @click="goWorkload">员工工作量查询</view>
       <view class="btn-item" v-if="workshop === '组装车间'" @click="goDispatchInquiryMore">多对多派工查询</view>
-      <!-- 排产类型按钮：正常排产 / 返工排产 -->
-      <view class="btn-item" @click="setBillType('正常排产')">正常排产</view>
-      <view class="btn-item" @click="setBillType('返工排产')">返工排产</view>
     </view>
 
     <!-- 顶部信息区域：仅展示订单编号 + 生产单号 + 产品名称 -->
@@ -973,23 +970,6 @@ const getBillsListRaw = async () => {
     filters
   })
   return res
-}
-
-// 排产类型下拉变化
-const onBillTypeChange = (e) => {
-  const index = e.detail.value
-  billTypeIndex.value = index
-  const type = billTypeOptions.value[index] || '正常排产'
-  billTypeFilter.value = type
-  search()
-}
-
-// 顶部按钮快速切换排产类型
-const setBillType = (type) => {
-  billTypeFilter.value = type
-  const index = billTypeOptions.value.indexOf(type)
-  billTypeIndex.value = index >= 0 ? index : 0
-  search()
 }
 
 const search = async () => {
@@ -2414,10 +2394,11 @@ const deleteProcess = async () => {
 
 // 左箭头固定返回到选择产品页面
 const quit = () => {
+  const bt = billTypeFilter.value || '正常排产'
   uni.redirectTo({
     url: `/pages/selectProduct/selectProduct?workshop=${encodeURIComponent(
       workshop.value || ''
-    )}&orderCode=${encodeURIComponent(selectedOrderCode.value || '')}`
+    )}&orderCode=${encodeURIComponent(selectedOrderCode.value || '')}&billType=${encodeURIComponent(bt)}`
   })
 }
 
@@ -2454,14 +2435,20 @@ const calculateWorkTime = () => {
 
 // ==================== 生命周期钩子 ====================
 onLoad((options) => {
-  // 如果从其它页面带回了单据类型参数（正常排产 / 返工排产），优先使用该参数
-  if (options && options.type) {
-    const type = decodeURIComponent(options.type)
+  // 排产类型：优先选择产品页传入的 billType；兼容历史参数 type（如选择订单链）
+  const applyBillTypeParam = (raw) => {
+    if (raw == null || raw === '') return
+    const type = decodeURIComponent(String(raw))
     if (type === '正常排产' || type === '返工排产') {
       billTypeFilter.value = type
       const index = billTypeOptions.value.indexOf(type)
       billTypeIndex.value = index >= 0 ? index : 0
     }
+  }
+  if (options && options.billType) {
+    applyBillTypeParam(options.billType)
+  } else if (options && options.type) {
+    applyBillTypeParam(options.type)
   }
 
   // 从选择订单页进入时：将订单号填入销售订单搜索框，onShow 中会执行 search() 按该订单号过滤列表
@@ -2552,16 +2539,18 @@ onUnload(() => {
     }
   }
 
-  /* 按钮栏样式 */
+  /* 按钮栏：按可见按钮数量均分整行（组装车间 3 个、其它车间 2 个） */
   .btn-list {
     height: px2vw(120px);
     width: 100%;
     display: flex;
     align-items: center;
+    box-sizing: border-box;
 
     .btn-item {
+      flex: 1;
+      min-width: 0;
       height: px2vw(80px);
-      width: px2vw(620px);
       margin: px2vw(10px);
       padding: px2vw(16px) px2vw(25px);
       display: flex;
@@ -2569,10 +2558,9 @@ onUnload(() => {
       align-items: center;
       border-radius: px2vw(18px);
       color: #fff;
-      display: flex;
-      align-items: center;
       background-color: #2755f1;
       font-size: px2vw(25px);
+      box-sizing: border-box;
       
       &.btn-item-disabled {
         opacity: 0.6;

@@ -98,8 +98,9 @@ const userStore = useUserStore()
 
 // 车间：与派工、选择订单页面保持一致
 const workshop = ref('拉伸车间')
-// 排产类型固定为正常排产（与选择订单页面一致）
-const billTypeFilter = '正常排产'
+// 排产类型：默认正常排产；由选择订单 / 派工返回 URL 参数 billType 带入，与接口 694a3954687045435008a7c3 一致
+const BILL_TYPE_ALLOWED = ['正常排产', '返工排产']
+const billTypeFilter = ref('正常排产')
 /** 工作表字段：返工数量 */
 const FIELD_REWORK_QTY = '6971989c3b5e707f84cb78e1'
 
@@ -127,6 +128,14 @@ onLoad((options) => {
     searchForm.value.salesOrder = orderCode
   }
 
+  // 排产类型：与选择订单当前筛选一致（或派工页返回时带入）
+  if (options && options.billType) {
+    const bt = decodeURIComponent(options.billType)
+    if (BILL_TYPE_ALLOWED.includes(bt)) {
+      billTypeFilter.value = bt
+    }
+  }
+
   // 进入页面后立即根据当前条件获取数据
   search()
 })
@@ -152,7 +161,7 @@ const getBillsListRaw = async () => {
       dataType: 30,
       spliceType: 1,
       filterType: 2,
-      values: [billTypeFilter]
+      values: [billTypeFilter.value]
     }
   ]
 
@@ -253,14 +262,16 @@ const quit = () => {
   })
 }
 
-// 选择产品后，跳转到派工页面，并将订单号、生产单号、物品名称传过去
+// 选择产品后，跳转到派工页面：车间、订单、生产单号、物品名称、排产类型（与当前列表筛选一致）
 const selectProductItem = (item) => {
   uni.navigateTo({
     url: `/pages/dispatchWork/dispatchWork?workshop=${encodeURIComponent(
       workshop.value
     )}&orderCode=${encodeURIComponent(item.orderCode || '')}&productionCode=${encodeURIComponent(
       item.productionCode || ''
-    )}&orderItem=${encodeURIComponent(item.name || '')}`
+    )}&orderItem=${encodeURIComponent(item.name || '')}&billType=${encodeURIComponent(
+      billTypeFilter.value || '正常排产'
+    )}`
   })
 }
 </script>
