@@ -60,20 +60,21 @@
               <text class="value">{{ item.productionCode || '-' }}</text>
             </view>
           </view>
-          <!-- 第二行：产品名称 + 订单数量 + 返工数量（与第一行三列对齐） -->
+          <!-- 第二行：与第一行同三列网格 — 产品名称 | 订单数量或返工数量 | 占位（与生产单号列对齐） -->
           <view class="row-middle">
             <view class="col col-left">
               <text class="label">产品名称：</text>
               <text class="value product-name-value">{{ item.name || '-' }}</text>
             </view>
-            <view class="col col-center">
+            <view class="col col-center" v-if="billTypeFilter !== '返工排产'">
               <text class="label">订单数量：</text>
               <text class="value order-count-value">{{ item.orderCount || '-' }}</text>
             </view>
-            <view class="col col-right">
+            <view class="col col-center" v-else>
               <text class="label">返工数量：</text>
               <text class="value rework-qty-value">{{ item.reworkQtyDisplay }}</text>
             </view>
+            <view class="col col-right row-middle-placeholder"></view>
           </view>
           <!-- 第三行：规格型号，占整行，允许换行 -->
           <view class="row-bottom">
@@ -101,8 +102,6 @@ const workshop = ref('拉伸车间')
 // 排产类型：默认正常排产；由选择订单 / 派工返回 URL 参数 billType 带入，与接口 694a3954687045435008a7c3 一致
 const BILL_TYPE_ALLOWED = ['正常排产', '返工排产']
 const billTypeFilter = ref('正常排产')
-/** 工作表字段：返工数量 */
-const FIELD_REWORK_QTY = '6971989c3b5e707f84cb78e1'
 
 // 由选择订单页面带入的订单编号，用于接口筛选
 const selectedOrderCode = ref('')
@@ -190,8 +189,20 @@ const search = async () => {
     return
   }
 
-  // 与其他页面保持一致的固定过滤：
-  // 66974cda2503723eec1af600 不为空 / 不为 []，且 69a8e4563b5e707f84d33c0c > 0
+  // 与选择订单页一致：66974cda2503723eec1af600 不为空；
+  // 正常排产：688 非空时才要求 69a8e4563b5e707f84d33c0c > 0
+  // 返工排产：按 69ccb3e7665ab27f39105da2 返工进度排除「已完成」
+  const FIELD_REWORK_PROGRESS = '69ccb3e7665ab27f39105da2'
+  const is688NonEmpty = (row) => {
+    const raw = row['688c366082289045da815f97']
+    if (raw == null || raw === '' || String(raw).trim() === '' || raw === '[]') return false
+    return true
+  }
+  const isReworkProgressCompleted = (row) => {
+    const raw = row[FIELD_REWORK_PROGRESS]
+    const p = raw == null ? '' : String(raw).trim()
+    return p === '已完成'
+  }
   const filteredData = billsRes.data.filter(item => {
     const val = item['66974cda2503723eec1af600']
     if (
@@ -202,6 +213,10 @@ const search = async () => {
     ) {
       return false
     }
+    if (billTypeFilter.value === '返工排产') {
+      return !isReworkProgressCompleted(item)
+    }
+    if (!is688NonEmpty(item)) return true
     const num = Number(item['69a8e4563b5e707f84d33c0c'])
     return !Number.isNaN(num) && num > 0
   })
@@ -211,14 +226,14 @@ const search = async () => {
     return
   }
 
-  // 单条维度展示：订单编号 + 客户名称 + 产品名称 + 订单数量 + 返工数量 + 规格型号
+  // 单条维度展示：正常排产显示订单数量；返工排产显示返工数量（653f1c62df3ac906c8a8f4f6）
   let list = filteredData.map(item => {
     const orderCode = item['655e1cbbbd2094b316347f92'] || ''
     const customerName = item['69a8ed3c3b5e707f84d33f8b'] || ''
     const name = item['6937d255ff2b019b3cb34be3'] || ''
     const models = item['6937d255ff2b019b3cb34be4'] || ''
     const orderCount = item['681b0b53b139204fd264c5fd'] || ''
-    const reworkRaw = item[FIELD_REWORK_QTY]
+    const reworkRaw = item['653f1c62df3ac906c8a8f4f6']
     const reworkQtyDisplay =
       reworkRaw == null || reworkRaw === '' || String(reworkRaw).trim() === ''
         ? '-'
@@ -428,6 +443,11 @@ const selectProductItem = (item) => {
           .col-center,
           .col-right {
             justify-content: flex-start;
+          }
+
+          .row-middle-placeholder {
+            min-height: 1px;
+            pointer-events: none;
           }
         }
 

@@ -85,7 +85,66 @@
         </view>
       </view>
     </view>
-    
+
+    <!-- 返工完成 -->
+    <view class="rework-complete-modal" v-if="showReworkCompleteModal" @click.self="closeReworkCompleteModal">
+      <view class="rework-complete-content" @click.stop>
+        <view class="rework-complete-title">返工完成</view>
+        <view class="rework-complete-body">
+          <view class="rework-complete-row">
+            <text class="rework-complete-label">是否流转到下一个车间返工：</text>
+            <radio-group class="rework-complete-radio-group" @change="onReworkTransferRadioChange">
+              <label class="rework-complete-radio-label">
+                <radio value="yes" :checked="reworkTransferToNext" color="#5884f1" />是
+              </label>
+              <label class="rework-complete-radio-label">
+                <radio value="no" :checked="!reworkTransferToNext" color="#5884f1" />否
+              </label>
+            </radio-group>
+          </view>
+          <view class="rework-complete-row">
+            <text class="rework-complete-label">返工车间：</text>
+            <picker
+              mode="selector"
+              :range="workshopOptions"
+              :value="reworkCompleteWorkshopIndex"
+              :disabled="!reworkTransferToNext"
+              @change="onReworkCompleteWorkshopChange"
+            >
+              <view class="rework-complete-picker" :class="{ 'is-disabled': !reworkTransferToNext }">
+                {{ workshopOptions[reworkCompleteWorkshopIndex] || '请选择' }}
+              </view>
+            </picker>
+          </view>
+        </view>
+        <view class="rework-complete-footer">
+          <button class="btn-cancel" @click="closeReworkCompleteModal">取消</button>
+          <button class="btn-confirm" @click="confirmReworkComplete">确认</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- 返工开始 -->
+    <view class="rework-start-modal" v-if="showReworkStartModal" @click.self="closeReworkStartModal">
+      <view class="rework-start-content" @click.stop>
+        <view class="rework-start-title">返工开始</view>
+        <view class="rework-start-body">
+          <radio-group class="rework-start-radio-group" @change="onReworkStartModeChange">
+            <label class="rework-start-radio-label">
+              <radio value="merge" :checked="reworkStartMode === 'merge'" color="#5884f1" />合并返工数量
+            </label>
+            <label class="rework-start-radio-label">
+              <radio value="extra" :checked="reworkStartMode === 'extra'" color="#5884f1" />额外返工流程
+            </label>
+          </radio-group>
+        </view>
+        <view class="rework-start-footer">
+          <button class="btn-cancel" @click="closeReworkStartModal">取消</button>
+          <button class="btn-confirm" @click="confirmReworkStart">确认</button>
+        </view>
+      </view>
+    </view>
+
     <!-- 一对多派工模态框（多工序，每工序独立派工数量） -->
     <view class="process-modal" v-if="showOneToManyModal" @click.self="closeOneToManyModal">
       <view class="process-content one-to-many-content" @click.stop>
@@ -105,7 +164,7 @@
                 <text class="value-readonly one-to-many-value">{{ row.processName || '-' }}</text>
               </view>
               <view class="form-group one-to-many-col-num">
-                <text class="label">排产数量：</text>
+                <text class="label">{{ currentOneToManyItem?.billType === '返工排产' ? '返工数量' : '排产数量' }}：</text>
                 <text class="value-readonly one-to-many-value one-to-many-value-short">{{ row.productionCountDisplay }}</text>
               </view>
               <view class="form-group one-to-many-col-num one-to-many-col-need">
@@ -174,10 +233,10 @@
         <scroll-view scroll-y class="modal-scroll-content">
           <!-- 表单信息区域 -->
           <view class="modal-body">
-            <!-- 排产数量和派工数量 -->
+            <!-- 排产数量（返工排产时显示为返工数量）和派工数量 -->
             <view class="row-group">
               <view class="form-group">
-                <text class="label">排产数量：</text>
+                <text class="label">{{ currentMultiDispatchItem?.billType === '返工排产' ? '返工数量' : '排产数量' }}：</text>
                 <text class="value-readonly">{{ multiDispatchData.productionCount }}</text>
               </view>
               <view class="form-group">
@@ -466,9 +525,26 @@
               </view>
             </view>
             <view class="buttons">
-              <button class="btn-sop" @click="lookSop(item)">指导书</button>
-              <button class="btn-dispatch" @click="lookImage(item)">技术图纸</button>
-              <button class="btn-pack" @click="lookPackImage(item)">包装图纸</button>
+              <block v-if="item.billType !== '返工排产'">
+                <button class="btn-sop" @click="lookSop(item)">指导书</button>
+                <button class="btn-dispatch" @click="lookImage(item)">技术图纸</button>
+                <button class="btn-pack" @click="lookPackImage(item)">包装图纸</button>
+              </block>
+              <view
+                class="rework-btns-wrap"
+                v-if="isReworkProgressPendingForCompleteBtn(item) || isReworkArrivedAtWorkshopBtn(item)"
+              >
+                <button
+                  class="btn-rework-start"
+                  v-if="isReworkArrivedAtWorkshopBtn(item)"
+                  @click="openReworkStartModal(item)"
+                >返工开始</button>
+                <button
+                  class="btn-rework-complete"
+                  v-if="isReworkProgressPendingForCompleteBtn(item)"
+                  @click="openReworkCompleteModal(item)"
+                >返工完成</button>
+              </view>
               <button class="btn-detail" :disabled="!canClickDispatch(item)" @click="dispatchWork(item)">操作</button>
               <button class="btn-delete" @click="addProcess(item)">添加工序</button>
               <button class="btn-normal-process" v-if="item.billType === '返工排产'" @click="useNormalProcess(item)">使用正常工序</button>
@@ -493,8 +569,8 @@
               <view>{{ item.orderCount }}</view>
             </view>
             <view class="productionCount">
-              <view>排产数量：</view>
-              <view>{{ item.productionCount }}</view>
+              <view>{{ item.billType === '返工排产' ? '返工数量' : '排产数量' }}：</view>
+              <view>{{ item.billType === '返工排产' ? formatReworkFieldQtyDisplay(item.reworkFieldQty) : item.productionCount }}</view>
             </view>
           </view>
           <view class="models">
@@ -640,6 +716,24 @@ const billsList = ref([])
 const processList = ref([])
 const listKey = ref(0)
 
+/** 返工排产时列表/模态中替代排产数量展示的字段（与选择产品页一致） */
+const formatReworkFieldQtyDisplay = (raw) => {
+  if (raw == null || raw === '' || String(raw).trim() === '') return '-'
+  return raw
+}
+
+/** 多对多等派工接口用的单据排产/返工数量（正常排产与原 productionCount ?? orderCount 一致） */
+const getBillProductionQtyForDispatch = (item) => {
+  if (!item) return 0
+  if (item.billType === '返工排产') {
+    const r = Number(item.reworkFieldQty)
+    if (Number.isFinite(r) && r > 0) return r
+    return Number(item.orderCount) || 0
+  }
+  const n = Number(item.productionCount ?? item.orderCount)
+  return Number.isFinite(n) ? n : 0
+}
+
 // ---------- 图片预览相关 ----------
 const showImagePreview = ref(false)
 const previewImageUrls = ref([])   // 多图预览的 URL 列表
@@ -672,6 +766,166 @@ const isLastIndex = ref(1)  // 默认选中第二个选项（否）
 // ---------- 终止派工模态相关 ----------
 const showTerminateModal = ref(false)
 const terminateReason = ref('')
+
+// ---------- 返工完成模态 ----------
+const showReworkCompleteModal = ref(false)
+const reworkCompleteItem = ref(null)
+const reworkTransferToNext = ref(true)
+const reworkCompleteWorkshopIndex = ref(0)
+
+/** 返工进度 69ccb3e7665ab27f39105da2 为「未完成」时显示返工完成按钮（正常/返工排产均适用） */
+const isReworkProgressPendingForCompleteBtn = (item) => {
+  const raw = item?.reworkProgress
+  const p = raw == null ? '' : String(raw).trim()
+  return p === '未完成'
+}
+
+/** 69ccaf64665ab27f39105bed 返工是否到此车间 为 1 时显示「返工开始」 */
+const isReworkArrivedAtWorkshopBtn = (item) => {
+  const v = item?.reworkArrivedAtWorkshop
+  if (v === 1 || v === '1') return true
+  const n = Number(v)
+  return Number.isFinite(n) && n === 1
+}
+
+// ---------- 返工开始模态 ----------
+const showReworkStartModal = ref(false)
+const reworkStartItem = ref(null)
+/** merge: 合并返工数量；extra: 额外返工流程 */
+const reworkStartMode = ref('merge')
+
+const openReworkStartModal = (item) => {
+  reworkStartItem.value = item
+  reworkStartMode.value = 'merge'
+  showReworkStartModal.value = true
+}
+
+const closeReworkStartModal = () => {
+  showReworkStartModal.value = false
+  reworkStartItem.value = null
+}
+
+const onReworkStartModeChange = (e) => {
+  const v = e.detail.value
+  if (v === 'merge' || v === 'extra') {
+    reworkStartMode.value = v
+  }
+}
+
+/** 返工完成 / 返工开始 成功后：带当前筛选条件整页重进派工页 */
+const reloadDispatchWorkPage = () => {
+  const parts = []
+  if (billTypeFilter.value) {
+    parts.push(`billType=${encodeURIComponent(billTypeFilter.value)}`)
+  }
+  if (selectedOrderCode.value) {
+    parts.push(`orderCode=${encodeURIComponent(selectedOrderCode.value)}`)
+  }
+  if (selectedProductionCode.value) {
+    parts.push(`productionCode=${encodeURIComponent(selectedProductionCode.value)}`)
+  }
+  if (searchForm.value.orderItem) {
+    parts.push(`orderItem=${encodeURIComponent(searchForm.value.orderItem)}`)
+  }
+  const qs = parts.length ? `?${parts.join('&')}` : ''
+  setTimeout(() => {
+    uni.reLaunch({ url: `/pages/dispatchWork/dispatchWork${qs}` })
+  }, 400)
+}
+
+const confirmReworkStart = async () => {
+  const item = reworkStartItem.value
+  if (!item) return
+  const modeLabel = reworkStartMode.value === 'merge' ? '合并返工数量' : '额外返工流程'
+  const payload = {
+    billRowid: item.billRowid || '',
+    orderCode: item.orderCode || '',
+    productionCode: item.productionCode || '',
+    workshop: workshop.value || '',
+    billType: item.billType || '',
+    reworkStartMode: reworkStartMode.value,
+    reworkStartModeLabel: modeLabel,
+    loginCode: userStore.loginCode || ''
+  }
+
+  try {
+    const resp = await http.post(REWORK_START_HOOK, payload)
+    if (resp.status === 1) {
+      uni.showToast({ title: resp.message || resp.msg || '提交失败', icon: 'none' })
+      return
+    }
+    uni.showToast({ title: '提交成功' })
+    closeReworkStartModal()
+    await search()
+    reloadDispatchWorkPage()
+  } catch (error) {
+    console.error('返工开始提交失败:', error)
+    uni.showToast({ title: '提交失败：' + (error.message || '未知错误'), icon: 'none' })
+  }
+}
+
+const openReworkCompleteModal = (item) => {
+  reworkCompleteItem.value = item
+  reworkTransferToNext.value = true
+  reworkCompleteWorkshopIndex.value = 0
+  showReworkCompleteModal.value = true
+}
+
+const closeReworkCompleteModal = () => {
+  showReworkCompleteModal.value = false
+  reworkCompleteItem.value = null
+}
+
+const onReworkTransferRadioChange = (e) => {
+  reworkTransferToNext.value = e.detail.value === 'yes'
+}
+
+const onReworkCompleteWorkshopChange = (e) => {
+  const idx = Number(e.detail.value)
+  reworkCompleteWorkshopIndex.value = Number.isFinite(idx) ? idx : 0
+}
+
+const confirmReworkComplete = async () => {
+  const item = reworkCompleteItem.value
+  if (!item) return
+  if (reworkTransferToNext.value) {
+    const name = workshopOptions.value[reworkCompleteWorkshopIndex.value]
+    if (!name) {
+      uni.showToast({ title: '请选择返工车间', icon: 'none' })
+      return
+    }
+  }
+
+  const targetWorkshop = reworkTransferToNext.value
+    ? (workshopOptions.value[reworkCompleteWorkshopIndex.value] || '')
+    : ''
+
+  const payload = {
+    billRowid: item.billRowid || '',
+    orderCode: item.orderCode || '',
+    productionCode: item.productionCode || '',
+    workshop: workshop.value || '',
+    billType: item.billType || '',
+    transferToNextWorkshop: reworkTransferToNext.value,
+    targetWorkshop,
+    loginCode: userStore.loginCode || ''
+  }
+
+  try {
+    const resp = await http.post(REWORK_COMPLETE_HOOK, payload)
+    if (resp.status === 1) {
+      uni.showToast({ title: resp.message || resp.msg || '提交失败', icon: 'none' })
+      return
+    }
+    uni.showToast({ title: '提交成功' })
+    closeReworkCompleteModal()
+    await search()
+    reloadDispatchWorkPage()
+  } catch (error) {
+    console.error('返工完成提交失败:', error)
+    uni.showToast({ title: '提交失败：' + (error.message || '未知错误'), icon: 'none' })
+  }
+}
 
 // ---------- 派工确认模态相关 ----------
 const showDispatchConfirmModal = ref(false)
@@ -717,6 +971,10 @@ const addEmployeeMaxSelection = computed(() => (showOneToManyModal.value ? 1 : 0
 
 // 一对多派工 webhook：processDispatchList[{ rowid1, dispatchCount1 }, { rowid2, dispatchCount2 }…] + date + 员工信息
 const ONE_TO_MANY_DISPATCH_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjljMGRhMjAwZjBkMGFkODBmYTQyZGNj'
+// 返工完成
+const REWORK_COMPLETE_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjljY2I3ZTEzMzBiMjAyNjg5ODQ1YTYx'
+// 返工开始
+const REWORK_START_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjljY2MzYjEzMzBiMjAyNjg5ODY0NDg4'
 
 // ==================== 计算属性 ====================
 // 最大派工数量：需派工数量
@@ -972,6 +1230,22 @@ const getBillsListRaw = async () => {
   return res
 }
 
+// 排产编号非空时参与工序-单据匹配；任一侧为空则仍仅按订单号+生产单号匹配
+const isScheduleCodeNonEmpty = (v) => {
+  if (v === null || v === undefined) return false
+  const s = typeof v === 'string' ? v.trim() : String(v).trim()
+  return s.length > 0 && s !== '[]'
+}
+
+const scheduleCodesMatchWhenBothSet = (billSchedule, processSchedule) => {
+  const b = isScheduleCodeNonEmpty(billSchedule)
+  const p = isScheduleCodeNonEmpty(processSchedule)
+  if (b && p) {
+    return String(billSchedule).trim() === String(processSchedule).trim()
+  }
+  return true
+}
+
 const search = async () => {
   // 清除选中状态
   selectedProcess.value = null
@@ -990,12 +1264,18 @@ const search = async () => {
 
   // 固定过滤：
   // 1. 字段 66974cda2503723eec1af600 不能为 "[]"
-  // 2. 正常排产时，69a8e4563b5e707f84d33c0c 需大于 0
-  // 3. 返工排产时，不使用 69a8e4563b5e707f84d33c0c > 0 过滤
+  // 2. 正常排产：69a8e4563b5e707f84d33c0c 需大于 0
+  // 3. 返工排产：不用数量>0；按 69ccb3e7665ab27f39105da2 返工进度排除「已完成」
+  const FIELD_REWORK_PROGRESS = '69ccb3e7665ab27f39105da2'
+  const isReworkProgressCompleted = (row) => {
+    const raw = row[FIELD_REWORK_PROGRESS]
+    const p = raw == null ? '' : String(raw).trim()
+    return p === '已完成'
+  }
   const filteredBillsData = billsRes.data.filter(item => {
     if (item['66974cda2503723eec1af600'] === '[]') return false
     if (billTypeFilter.value === '返工排产') {
-      return true
+      return !isReworkProgressCompleted(item)
     }
     const num = Number(item['69a8e4563b5e707f84d33c0c'])
     return !Number.isNaN(num) && num > 0
@@ -1012,6 +1292,7 @@ const search = async () => {
     const orderGoods = item['691c47ee1c02c451c72a81c5']
     const orderCode = item['655e1cbbbd2094b316347f92']
     const productionCode = item['698438933b5e707f84cf51fd']
+    const scheduleCode = item['69cb5ea03b5e707f84ddefa0'] // 排产编号
     const billType = item['694a3954687045435008a7c3'] || '正常排产'
 
     let imageData = item['6683a0448d2110bec155ac64']
@@ -1032,6 +1313,7 @@ const search = async () => {
       orderGoods,
       orderCount: item['681b0b53b139204fd264c5fd'],
       productionCount: item['67de8eb5c5377d50a523ef9b'],
+      reworkFieldQty: item['653f1c62df3ac906c8a8f4f6'],
       name: item['6937d255ff2b019b3cb34be3'],
       models: item['6937d255ff2b019b3cb34be4'],
       reworkQty: Number.isFinite(reworkNum) ? reworkNum : 0,
@@ -1041,9 +1323,12 @@ const search = async () => {
       sop,
       productCode: item['691d6336535b29cbd5c6c0ca'],
       orderCode,
+      scheduleCode,
       problemDescription: item['694ba108dc025d98887fd782'] || '',
       billRowid: item['rowid'],
-      billType
+      billType,
+      reworkProgress: item['69ccb3e7665ab27f39105da2'],
+      reworkArrivedAtWorkshop: item['69ccaf64665ab27f39105bed']
     }
   })
 
@@ -1067,6 +1352,7 @@ const search = async () => {
       dispatchedCount: item['69840b633b5e707f84cf341e'], // 已派工数量
       processOrder: item['6593b07ae97eb866a50eeba1'],
       productcode: item['691d6160535b29cbd5c6c0a9'],
+      scheduleCode: item['69cb73ee3b5e707f84de06f6'], // 排产编号
       worktime: item['69211dac21066a9f124f62df'],
       sequence: item['693a62040f64427fac25ae80'],
       hourlyoutput: item['693a879a0f64427fac25da92'],
@@ -1090,7 +1376,8 @@ const search = async () => {
       .filter(p =>
         p.processOrder === bill.orderCode &&
         p.productcode === bill.productionCode &&
-        p.sonoutput !== '[]'
+        p.sonoutput !== '[]' &&
+        scheduleCodesMatchWhenBothSet(bill.scheduleCode, p.scheduleCode)
       )
       .sort((a, b) => {
         const seqA = a.sequence || 0
@@ -1370,7 +1657,7 @@ const openMultiDispatchModal = (item) => {
   
   multiDispatchData.value = {
     orderCount: item.orderCount || 0,
-    productionCount: item.productionCount || 0,
+    productionCount: getBillProductionQtyForDispatch(item),
     quantity: 0,
     date: todayStr, // 默认今天
     isLast: '否', // 默认值为否
@@ -1430,7 +1717,9 @@ const openOneToManyModal = (item) => {
     const son = parseFloat(process.sonoutput)
     const productionCount = Number.isFinite(son) && son > 0
       ? son
-      : (p.item.productionCount ?? p.item.orderCount ?? 0)
+      : (p.item.billType === '返工排产'
+        ? getBillProductionQtyForDispatch(p.item)
+        : (p.item.productionCount ?? p.item.orderCount ?? 0))
     const needMax = parseFloat(process.needCount)
     const maxNeed = Number.isFinite(needMax) ? needMax : 0
     return {
@@ -1714,7 +2003,7 @@ const confirmMultiDispatch = async () => {
   ], async () => {
     // 构建请求参数
     const dispatchParams = {  
-      productionCount: billItem?.productionCount || billItem?.orderCount || 0,
+      productionCount: getBillProductionQtyForDispatch(billItem),
       billRowid: billItem?.billRowid || '',
       orderCode: billItem?.orderCode || '',
       workshop: workshop.value || '',
@@ -2729,6 +3018,14 @@ onUnload(() => {
           .buttons {
             display: flex;
             gap: px2vw(10px);
+            align-items: center;
+
+            .rework-btns-wrap {
+              display: flex;
+              flex-direction: row;
+              gap: px2vw(10px);
+              align-items: center;
+            }
 
             button {
               width: px2vw(150px);
@@ -2751,6 +3048,20 @@ onUnload(() => {
                 width: px2vw(200px);
                 background: white;
                 color: #5884f1;
+              }
+
+              &.btn-rework-complete {
+                width: px2vw(180px);
+                background: #fff7e6;
+                color: #d46b08;
+                border-color: #d46b08;
+              }
+
+              &.btn-rework-start {
+                width: px2vw(180px);
+                background: #f6ffed;
+                color: #389e0d;
+                border-color: #52c41a;
               }
               
               &.btn-multi-dispatch {
@@ -3283,6 +3594,197 @@ onUnload(() => {
           opacity: 0.6;
         }
       }
+    }
+  }
+}
+
+/* 返工完成模态框 */
+.rework-complete-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 200;
+  padding: px2vw(20px);
+  box-sizing: border-box;
+
+  .rework-complete-content {
+    background: white;
+    border-radius: px2vw(18px);
+    width: 90%;
+    max-width: px2vw(900px);
+    box-shadow: 0 px2vw(5px) px2vw(15px) rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+  }
+
+  .rework-complete-title {
+    padding: px2vw(28px) px2vw(30px) px2vw(12px);
+    font-size: px2vw(34px);
+    font-weight: bold;
+    color: #333;
+    text-align: center;
+  }
+
+  .rework-complete-body {
+    padding: px2vw(10px) px2vw(30px) px2vw(24px);
+    display: flex;
+    flex-direction: column;
+    gap: px2vw(28px);
+  }
+
+  .rework-complete-row {
+    display: flex;
+    flex-direction: column;
+    gap: px2vw(16px);
+  }
+
+  .rework-complete-label {
+    font-size: px2vw(28px);
+    color: #333;
+    font-weight: bold;
+  }
+
+  .rework-complete-radio-group {
+    display: flex;
+    flex-direction: row;
+    gap: px2vw(40px);
+    align-items: center;
+  }
+
+  .rework-complete-radio-label {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: px2vw(10px);
+    font-size: px2vw(28px);
+    color: #333;
+  }
+
+  .rework-complete-picker {
+    min-height: px2vw(72px);
+    padding: px2vw(16px) px2vw(20px);
+    border: px2vw(2px) solid #ddd;
+    border-radius: px2vw(12px);
+    font-size: px2vw(28px);
+    color: #333;
+    background: #fafafa;
+
+    &.is-disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+  }
+
+  .rework-complete-footer {
+    display: flex;
+    justify-content: center;
+    gap: px2vw(20px);
+    padding: px2vw(20px) px2vw(30px) px2vw(28px);
+    border-top: px2vw(1px) solid #eee;
+
+    .btn-cancel,
+    .btn-confirm {
+      flex: 1;
+      max-width: px2vw(280px);
+      height: px2vw(72px);
+      border-radius: px2vw(18px);
+      font-size: px2vw(30px);
+      border: none;
+    }
+
+    .btn-cancel {
+      background: #f5f5f5;
+      color: #666;
+    }
+
+    .btn-confirm {
+      background: #5884f1;
+      color: #fff;
+    }
+  }
+}
+
+/* 返工开始模态框 */
+.rework-start-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 200;
+  padding: px2vw(20px);
+  box-sizing: border-box;
+
+  .rework-start-content {
+    background: white;
+    border-radius: px2vw(18px);
+    width: 90%;
+    max-width: px2vw(900px);
+    box-shadow: 0 px2vw(5px) px2vw(15px) rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+  }
+
+  .rework-start-title {
+    padding: px2vw(28px) px2vw(30px) px2vw(12px);
+    font-size: px2vw(34px);
+    font-weight: bold;
+    color: #333;
+    text-align: center;
+  }
+
+  .rework-start-body {
+    padding: px2vw(16px) px2vw(30px) px2vw(28px);
+  }
+
+  .rework-start-radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: px2vw(24px);
+  }
+
+  .rework-start-radio-label {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: px2vw(12px);
+    font-size: px2vw(28px);
+    color: #333;
+  }
+
+  .rework-start-footer {
+    display: flex;
+    justify-content: center;
+    gap: px2vw(20px);
+    padding: px2vw(20px) px2vw(30px) px2vw(28px);
+    border-top: px2vw(1px) solid #eee;
+
+    .btn-cancel,
+    .btn-confirm {
+      flex: 1;
+      max-width: px2vw(280px);
+      height: px2vw(72px);
+      border-radius: px2vw(18px);
+      font-size: px2vw(30px);
+      border: none;
+    }
+
+    .btn-cancel {
+      background: #f5f5f5;
+      color: #666;
+    }
+
+    .btn-confirm {
+      background: #5884f1;
+      color: #fff;
     }
   }
 }
