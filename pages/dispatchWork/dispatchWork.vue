@@ -124,23 +124,48 @@
       </view>
     </view>
 
-    <!-- 返工开始 -->
+    <!-- 合并工序：按车间拉取工序字典（同添加工序页），多选后合并 -->
     <view class="rework-start-modal" v-if="showReworkStartModal" @click.self="closeReworkStartModal">
       <view class="rework-start-content" @click.stop>
-        <view class="rework-start-title">返工开始</view>
-        <view class="rework-start-body">
-          <radio-group class="rework-start-radio-group" @change="onReworkStartModeChange">
-            <label class="rework-start-radio-label">
-              <radio value="merge" :checked="reworkStartMode === 'merge'" color="#5884f1" />合并返工数量
-            </label>
-            <label class="rework-start-radio-label">
-              <radio value="extra" :checked="reworkStartMode === 'extra'" color="#5884f1" />额外返工流程
-            </label>
-          </radio-group>
+        <view class="rework-start-title">合并工序</view>
+        <view class="merge-process-search">
+          <input
+            class="merge-process-search-input"
+            type="text"
+            v-model="mergeProcessSearchValue"
+            placeholder="请输入工序名称"
+            @input="onMergeProcessSearchInput"
+          />
         </view>
-        <view class="rework-start-footer">
-          <button class="btn-cancel" @click="closeReworkStartModal">取消</button>
-          <button class="btn-confirm" @click="confirmReworkStart">确认</button>
+        <!-- 列表区单独 flex 收缩，避免 scroll-view 盖住底部按钮 -->
+        <view class="merge-process-list-wrap">
+          <scroll-view
+            scroll-y
+            class="merge-process-scroll"
+            :lower-threshold="50"
+            @scrolltolower="loadMoreMergeProcess"
+          >
+            <view
+              v-for="p in mergeProcessTableData"
+              :key="p.rowid || p.processName"
+              class="merge-process-row"
+              :class="{ selected: isMergeProcessSelected(p.rowid) }"
+              @click="toggleMergeProcessSelect(p)"
+            >
+              <view class="merge-process-check">{{ isMergeProcessSelected(p.rowid) ? '✓' : '' }}</view>
+              <text class="merge-process-name">{{ p.processName || '-' }}</text>
+            </view>
+            <view v-if="mergeProcessLoading && mergeProcessTableData.length === 0" class="merge-process-tip">加载中...</view>
+            <view v-else-if="!mergeProcessLoading && mergeProcessTableData.length === 0" class="merge-process-tip">暂无工序</view>
+            <view v-if="mergeProcessLoading && mergeProcessTableData.length > 0" class="merge-process-tip">加载中...</view>
+            <view v-if="!mergeProcessHasMore && mergeProcessTableData.length > 0" class="merge-process-tip">没有更多了</view>
+          </scroll-view>
+        </view>
+        <view class="merge-process-footer-bar">
+          <view class="rework-start-footer">
+            <button class="btn-cancel" @click="closeReworkStartModal">取消</button>
+            <button class="btn-merge" @click="confirmReworkStart">合并</button>
+          </view>
         </view>
       </view>
     </view>
@@ -532,13 +557,13 @@
               </block>
               <view
                 class="rework-btns-wrap"
-                v-if="isReworkProgressPendingForCompleteBtn(item) || isReworkArrivedAtWorkshopBtn(item)"
+                v-if="isReworkProgressPendingForCompleteBtn(item) || isReworkMergeProcessBtn(item)"
               >
                 <button
                   class="btn-rework-start"
-                  v-if="isReworkArrivedAtWorkshopBtn(item)"
+                  v-if="isReworkMergeProcessBtn(item)"
                   @click="openReworkStartModal(item)"
-                >返工开始</button>
+                >合并工序</button>
                 <button
                   class="btn-rework-complete"
                   v-if="isReworkProgressPendingForCompleteBtn(item)"
@@ -780,39 +805,124 @@ const isReworkProgressPendingForCompleteBtn = (item) => {
   return p === '未完成'
 }
 
-/** 69ccaf64665ab27f39105bed 返工是否到此车间 为 1 时显示「返工开始」 */
-const isReworkArrivedAtWorkshopBtn = (item) => {
-  const v = item?.reworkArrivedAtWorkshop
-  if (v === 1 || v === '1') return true
+/** 69ccaf64665ab27f39105bed 是否合并：为 0 且排产类型为返工排产时显示「合并工序」 */
+const isReworkMergeProcessBtn = (item) => {
+  if (item?.billType !== '返工排产') return false
+  const v = item?.reworkMergeFlag
+  if (v === null || v === undefined || v === '') return false
+  if (v === 0 || v === '0') return true
   const n = Number(v)
-  return Number.isFinite(n) && n === 1
+  return Number.isFinite(n) && n === 0
 }
 
-// ---------- 返工开始模态 ----------
+// ---------- 合并工序模态（按车间拉工序字典，同添加工序页 getProcessList） ----------
 const showReworkStartModal = ref(false)
 const reworkStartItem = ref(null)
-/** merge: 合并返工数量；extra: 额外返工流程 */
-const reworkStartMode = ref('merge')
+const mergeProcessTableData = ref([])
+const mergeProcessLoading = ref(false)
+const mergeProcessPage = ref(1)
+const mergeProcessPageSize = ref(10)
+const mergeProcessHasMore = ref(true)
+const mergeProcessSearchValue = ref('')
+const selectedMergeRowids = ref([])
+
+const fetchMergeProcessList = async (pageNum, isRefresh = false) => {
+  if (mergeProcessLoading.value) return
+  const ws = workshop.value || ''
+  if (!ws) {
+    uni.showToast({ title: '未选择车间', icon: 'none' })
+    return
+  }
+  mergeProcessLoading.value = true
+  const baseFilters = [
+    { controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
+    { controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
+    { controlId: '691e8522d50c894e2e798d03', dataType: 30, spliceType: 1, filterType: 2, values: [ws] }
+  ]
+  let filters = [...baseFilters]
+  if (mergeProcessSearchValue.value.trim()) {
+    filters.push({
+      controlId: '6614b6721103c1d5d3a08122',
+      dataType: 30,
+      spliceType: 1,
+      filterType: 1,
+      values: [mergeProcessSearchValue.value.trim()]
+    })
+  }
+  const params = {
+    worksheetId: 'shujuzidian',
+    filters,
+    silent: true
+  }
+  try {
+    const res = await callWorkflowListAPIPaged(params, mergeProcessPageSize.value, pageNum)
+    const mapped = (res.data || []).map((item) => ({
+      processName: item['Name'],
+      rowid: item['rowid'] || ''
+    }))
+    if (isRefresh) {
+      mergeProcessTableData.value = mapped
+    } else {
+      mergeProcessTableData.value = [...mergeProcessTableData.value, ...mapped]
+    }
+    mergeProcessPage.value = pageNum
+    mergeProcessHasMore.value =
+      mapped.length === mergeProcessPageSize.value && res.total > mergeProcessTableData.value.length
+  } catch (e) {
+    console.error('合并工序-加载工序列表失败:', e)
+    if (isRefresh) mergeProcessTableData.value = []
+    mergeProcessHasMore.value = false
+    uni.showToast({ title: '加载工序失败', icon: 'none' })
+  } finally {
+    mergeProcessLoading.value = false
+  }
+}
+
+const loadMoreMergeProcess = () => {
+  if (!mergeProcessHasMore.value || mergeProcessLoading.value) return
+  fetchMergeProcessList(mergeProcessPage.value + 1, false)
+}
+
+const onMergeProcessSearchInput = () => {
+  mergeProcessPage.value = 1
+  mergeProcessHasMore.value = true
+  fetchMergeProcessList(1, true)
+}
+
+const toggleMergeProcessSelect = (p) => {
+  const id = p.rowid
+  if (!id) return
+  const arr = [...selectedMergeRowids.value]
+  const i = arr.indexOf(id)
+  if (i >= 0) arr.splice(i, 1)
+  else arr.push(id)
+  selectedMergeRowids.value = arr
+}
+
+const isMergeProcessSelected = (rowid) => !!rowid && selectedMergeRowids.value.includes(rowid)
 
 const openReworkStartModal = (item) => {
   reworkStartItem.value = item
-  reworkStartMode.value = 'merge'
+  mergeProcessSearchValue.value = ''
+  selectedMergeRowids.value = []
+  mergeProcessPage.value = 1
+  mergeProcessHasMore.value = true
+  mergeProcessTableData.value = []
   showReworkStartModal.value = true
+  fetchMergeProcessList(1, true)
 }
 
 const closeReworkStartModal = () => {
   showReworkStartModal.value = false
   reworkStartItem.value = null
+  mergeProcessTableData.value = []
+  mergeProcessSearchValue.value = ''
+  selectedMergeRowids.value = []
+  mergeProcessPage.value = 1
+  mergeProcessHasMore.value = true
 }
 
-const onReworkStartModeChange = (e) => {
-  const v = e.detail.value
-  if (v === 'merge' || v === 'extra') {
-    reworkStartMode.value = v
-  }
-}
-
-/** 返工完成 / 返工开始 成功后：带当前筛选条件整页重进派工页 */
+/** 返工完成 / 合并工序 成功后：带当前筛选条件整页重进派工页 */
 const reloadDispatchWorkPage = () => {
   const parts = []
   if (billTypeFilter.value) {
@@ -836,16 +946,22 @@ const reloadDispatchWorkPage = () => {
 const confirmReworkStart = async () => {
   const item = reworkStartItem.value
   if (!item) return
-  const modeLabel = reworkStartMode.value === 'merge' ? '合并返工数量' : '额外返工流程'
+  if (selectedMergeRowids.value.length === 0) {
+    uni.showToast({ title: '请选择要合并的工序', icon: 'none' })
+    return
+  }
+  const mergeProcessNames = mergeProcessTableData.value
+    .filter((p) => selectedMergeRowids.value.includes(p.rowid))
+    .map((p) => p.processName)
   const payload = {
     billRowid: item.billRowid || '',
     orderCode: item.orderCode || '',
     productionCode: item.productionCode || '',
     workshop: workshop.value || '',
     billType: item.billType || '',
-    reworkStartMode: reworkStartMode.value,
-    reworkStartModeLabel: modeLabel,
-    loginCode: userStore.loginCode || ''
+    loginCode: userStore.loginCode || '',
+    mergeProcessRowids: [...selectedMergeRowids.value],
+    mergeProcessNames
   }
 
   try {
@@ -859,7 +975,7 @@ const confirmReworkStart = async () => {
     await search()
     reloadDispatchWorkPage()
   } catch (error) {
-    console.error('返工开始提交失败:', error)
+    console.error('合并工序提交失败:', error)
     uni.showToast({ title: '提交失败：' + (error.message || '未知错误'), icon: 'none' })
   }
 }
@@ -973,7 +1089,7 @@ const addEmployeeMaxSelection = computed(() => (showOneToManyModal.value ? 1 : 0
 const ONE_TO_MANY_DISPATCH_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjljMGRhMjAwZjBkMGFkODBmYTQyZGNj'
 // 返工完成
 const REWORK_COMPLETE_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjljY2I3ZTEzMzBiMjAyNjg5ODQ1YTYx'
-// 返工开始
+// 合并工序（原返工开始 webhook）
 const REWORK_START_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjljY2MzYjEzMzBiMjAyNjg5ODY0NDg4'
 
 // ==================== 计算属性 ====================
@@ -1328,7 +1444,7 @@ const search = async () => {
       billRowid: item['rowid'],
       billType,
       reworkProgress: item['69ccb3e7665ab27f39105da2'],
-      reworkArrivedAtWorkshop: item['69ccaf64665ab27f39105bed']
+      reworkMergeFlag: item['69ccaf64665ab27f39105bed']
     }
   })
 
@@ -3709,7 +3825,7 @@ onUnload(() => {
   }
 }
 
-/* 返工开始模态框 */
+/* 合并工序模态框 */
 .rework-start-modal {
   position: fixed;
   top: 0;
@@ -3729,8 +3845,13 @@ onUnload(() => {
     border-radius: px2vw(18px);
     width: 90%;
     max-width: px2vw(900px);
+    /* 固定高度，flex 子项才能分到中间区域；仅 max-height 时容器随内容增高，列表区高度为 0，scroll-view 无法滚动 */
+    height: 75vh;
+    max-height: 82vh;
     box-shadow: 0 px2vw(5px) px2vw(15px) rgba(0, 0, 0, 0.3);
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   .rework-start-title {
@@ -3739,36 +3860,111 @@ onUnload(() => {
     font-weight: bold;
     color: #333;
     text-align: center;
+    flex-shrink: 0;
   }
 
-  .rework-start-body {
-    padding: px2vw(16px) px2vw(30px) px2vw(28px);
+  .merge-process-search {
+    padding: 0 px2vw(24px) px2vw(16px);
+    flex-shrink: 0;
   }
 
-  .rework-start-radio-group {
-    display: flex;
-    flex-direction: column;
-    gap: px2vw(24px);
+  .merge-process-search-input {
+    width: 100%;
+    height: px2vw(72px);
+    padding: 0 px2vw(20px);
+    font-size: px2vw(28px);
+    border: px2vw(1px) solid #e0e0e0;
+    border-radius: px2vw(12px);
+    box-sizing: border-box;
   }
 
-  .rework-start-radio-label {
+  /* 占满标题与底部条之间的剩余高度；内部 scroll-view 绝对铺满，满足 uni-app 对 scroll-view 固定高度的要求 */
+  .merge-process-list-wrap {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+  }
+
+  .merge-process-scroll {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    padding: px2vw(8px) px2vw(24px) px2vw(12px);
+    box-sizing: border-box;
+    background: #f5f6f8;
+    border-radius: px2vw(12px);
+  }
+
+  /* 叠在列表之上，避免工序列表盖住按钮 */
+  .merge-process-footer-bar {
+    flex-shrink: 0;
+    position: relative;
+    z-index: 20;
+    width: 100%;
+    background: #ffffff;
+    box-sizing: border-box;
+    padding: px2vw(16px) px2vw(24px) px2vw(24px);
+    border-top: px2vw(1px) solid #e8e8e8;
+    box-shadow: 0 px2vw(-6px) px2vw(20px) rgba(0, 0, 0, 0.08);
+  }
+
+  .merge-process-row {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: px2vw(12px);
+    gap: px2vw(16px);
+    padding: px2vw(20px) px2vw(16px);
+    margin-bottom: px2vw(12px);
+    border-radius: px2vw(12px);
+    border: px2vw(1px) solid #eee;
+    background: #fafafa;
+  }
+
+  .merge-process-row.selected {
+    border-color: #5884f1;
+    background: #eef3ff;
+  }
+
+  .merge-process-check {
+    width: px2vw(40px);
+    height: px2vw(40px);
+    line-height: px2vw(40px);
+    text-align: center;
+    font-size: px2vw(28px);
+    color: #5884f1;
+    font-weight: bold;
+  }
+
+  .merge-process-name {
+    flex: 1;
     font-size: px2vw(28px);
     color: #333;
+  }
+
+  .merge-process-tip {
+    text-align: center;
+    font-size: px2vw(24px);
+    color: #999;
+    padding: px2vw(16px) 0;
   }
 
   .rework-start-footer {
     display: flex;
     justify-content: center;
+    align-items: center;
     gap: px2vw(20px);
-    padding: px2vw(20px) px2vw(30px) px2vw(28px);
-    border-top: px2vw(1px) solid #eee;
+    padding: 0;
+    border-top: none;
 
     .btn-cancel,
-    .btn-confirm {
+    .btn-confirm,
+    .btn-merge {
       flex: 1;
       max-width: px2vw(280px);
       height: px2vw(72px);
@@ -3784,6 +3980,11 @@ onUnload(() => {
 
     .btn-confirm {
       background: #5884f1;
+      color: #fff;
+    }
+
+    .btn-merge {
+      background: #2e7d32;
       color: #fff;
     }
   }

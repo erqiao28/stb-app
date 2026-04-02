@@ -39,7 +39,7 @@
 			</view>
 		</view>
 
-		<!-- 订单列表：订单编号、出货时间、客户名称、产品数量 -->
+		<!-- 订单列表：订单编号、出货时间、客户名称、产品数量（返工排产时显示为返工产品数量） -->
 		<view class="orderList">
 			<view class="orderItem" v-for="item in billsList" :key="item.orderCode" @click="selectOrder(item)">
 				<view class="goodsInfo row-single">
@@ -56,7 +56,7 @@
 						<text class="value">{{ item.customerName || '-' }}</text>
 					</view>
 					<view class="col col-right">
-						<text class="label">产品数量：</text>
+						<text class="label">{{ billTypeIndex === 1 ? '返工产品数量' : '产品数量' }}：</text>
 						<text class="value product-count-value">{{ item.productCount }}</text>
 					</view>
 				</view>
