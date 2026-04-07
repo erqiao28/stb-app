@@ -68,6 +68,21 @@
       </view>
     </view>
 
+    <!-- 删除工序确认模态框 -->
+    <view class="delete-confirm-modal" v-if="showDeleteConfirmModal" @click.self="closeDeleteConfirmModal">
+      <view class="delete-confirm-content" @click.stop>
+        <view class="delete-confirm-body">
+          <view class="delete-confirm-tip">
+            确定要删除工序「{{ selectedProcessData?.process?.processName || '' }}」吗？删除后无法恢复。
+          </view>
+        </view>
+        <view class="delete-confirm-footer">
+          <button class="btn-cancel" @click="closeDeleteConfirmModal">取消</button>
+          <button class="btn-delete-confirm" @click="confirmDeleteProcess">删除</button>
+        </view>
+      </view>
+    </view>
+
     <!-- 派工确认模态框 -->
     <view class="dispatch-confirm-modal" v-if="showDispatchConfirmModal" @click.self="closeDispatchConfirmModal">
       <view class="dispatch-confirm-content" @click.stop>
@@ -487,7 +502,7 @@
           <button class="btn-confirm" @click="addEmployee">添加员工</button>
           <button class="btn-confirm" @click="confirmProcessDispatch" :disabled="!canDispatch">确认派工</button>
           <button class="btn-confirm" :disabled="isProcessOver" @click="overProcess">终止</button>
-          <button class="btn-delete-process" v-if="selectedProcessData?.item?.billType === '返工排产'" @click="deleteProcess">删除</button>
+          <button class="btn-delete-process" @click="deleteProcess">删除</button>
           <!-- <button class="btn-confirm">转派</button>
           <button class="btn-confirm">修改</button> -->
         </view>
@@ -791,6 +806,9 @@ const isLastIndex = ref(1)  // 默认选中第二个选项（否）
 // ---------- 终止派工模态相关 ----------
 const showTerminateModal = ref(false)
 const terminateReason = ref('')
+
+// ---------- 删除工序确认模态 ----------
+const showDeleteConfirmModal = ref(false)
 
 // ---------- 返工完成模态 ----------
 const showReworkCompleteModal = ref(false)
@@ -2753,48 +2771,50 @@ const useNormalProcess = async (item) => {
   }
 }
 
-// 删除工序
-const deleteProcess = async () => {
+// 打开删除工序确认模态框
+const deleteProcess = () => {
   const processRowid = selectedProcessData.value?.process?.rowid || ''
-  
   if (!processRowid) {
     uni.showToast({ title: '工序ID不存在', icon: 'none' })
     return
   }
-  
-  // 确认删除
-  uni.showModal({
-    title: '确认删除',
-    content: `确定要删除工序"${selectedProcessData.value?.process?.processName || ''}"吗？`,
-    success: async (res) => {
-      if (res.confirm) {
-        try {
-          uni.showLoading({ title: '删除中...' })
-          const result = await http.post('https://www.dachen.vip/api/workflow/hooks/Njk3MWNkY2UwZjBkMGFkODBmMmE3NGM3', {
-            rowid: processRowid
-          })
-          uni.hideLoading()
-          
-          if (result.status === 1) {
-            uni.showToast({ title: result.msg || '删除失败', icon: 'none' })
-            return
-          }
-          
-          uni.showToast({ title: '删除成功' })
-          // 关闭模态框
-          showProcessModal.value = false
-          // 刷新数据，确保数据更新
-          setTimeout(async () => {
-            await search()
-          }, 1000)
-        } catch (error) {
-          uni.hideLoading()
-          console.error('删除工序失败:', error)
-          uni.showToast({ title: '删除失败：' + (error.message || '未知错误'), icon: 'none' })
-        }
-      }
+  showDeleteConfirmModal.value = true
+}
+
+const closeDeleteConfirmModal = () => {
+  showDeleteConfirmModal.value = false
+}
+
+// 确认删除工序
+const confirmDeleteProcess = async () => {
+  const processRowid = selectedProcessData.value?.process?.rowid || ''
+  if (!processRowid) {
+    uni.showToast({ title: '工序ID不存在', icon: 'none' })
+    return
+  }
+  try {
+    uni.showLoading({ title: '删除中...' })
+    const result = await http.post('https://www.dachen.vip/api/workflow/hooks/Njk3MWNkY2UwZjBkMGFkODBmMmE3NGM3', {
+      rowid: processRowid
+    })
+    uni.hideLoading()
+
+    if (result.status === 1) {
+      uni.showToast({ title: result.msg || '删除失败', icon: 'none' })
+      return
     }
-  })
+
+    uni.showToast({ title: '删除成功' })
+    showDeleteConfirmModal.value = false
+    showProcessModal.value = false
+    setTimeout(async () => {
+      await search()
+    }, 1000)
+  } catch (error) {
+    uni.hideLoading()
+    console.error('删除工序失败:', error)
+    uni.showToast({ title: '删除失败：' + (error.message || '未知错误'), icon: 'none' })
+  }
 }
 
 // 左箭头固定返回到选择产品页面
@@ -3594,6 +3614,81 @@ onUnload(() => {
     .btn-confirm {
       background: #5884f1;
       color: #fff;
+    }
+  }
+}
+
+/* 删除工序确认模态框（需盖在工序派工弹窗之上） */
+.delete-confirm-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 250;
+  padding: px2vw(20px);
+  box-sizing: border-box;
+
+  .delete-confirm-content {
+    background: white;
+    border-radius: px2vw(18px);
+    width: 90%;
+    max-width: px2vw(900px);
+    height: auto;
+    max-height: 90vh;
+    box-shadow: 0 px2vw(5px) px2vw(15px) rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+
+    .delete-confirm-body {
+      padding: px2vw(40px) px2vw(30px) px2vw(20px);
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+
+      .delete-confirm-tip {
+        font-size: px2vw(32px);
+        color: #333;
+        text-align: center;
+        font-weight: bold;
+        line-height: 1.5;
+        word-break: break-word;
+      }
+    }
+
+    .delete-confirm-footer {
+      display: flex;
+      justify-content: center;
+      gap: px2vw(20px);
+      padding: px2vw(20px) px2vw(30px);
+      border-top: px2vw(1px) solid #eee;
+      flex-shrink: 0;
+
+      .btn-cancel,
+      .btn-delete-confirm {
+        flex: 1;
+        max-width: px2vw(250px);
+        height: px2vw(70px);
+        border-radius: px2vw(18px);
+        font-size: px2vw(30px);
+        border: none;
+        cursor: pointer;
+      }
+
+      .btn-cancel {
+        background: #f5f5f5;
+        color: #666;
+      }
+
+      .btn-delete-confirm {
+        background: #f44336;
+        color: white;
+      }
     }
   }
 }
