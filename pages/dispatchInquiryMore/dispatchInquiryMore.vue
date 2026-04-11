@@ -228,12 +228,11 @@ const dispatchInquiryList = ref([
 
 // 获取派工单据列表
 const getDispatchInquiryList = async () => {
-	
   const res = await callWorkflowListAPIPaged({
     worksheetId: 'dddpg',
     filters: [],
-  pageSize: 1000,
-  pageNum: 1
+    pageSize: 100,
+    pageNum: 1
   })
   const statusExclude = ['全部报工', '已转派']
   dispatchInquiryList.value = res.data
