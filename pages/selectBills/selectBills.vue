@@ -192,9 +192,11 @@ const search = async () => {
 	}
 
 	// 先过滤：66974cda2503723eec1af600 不为空；
+	// 且 69db0017665ab27f3913c455 不为「准时交货」；
 	// 正常排产：仅当 688c366082289045da815f97 不为空时，才要求 69a8e4563b5e707f84d33c0c 大于 0
 	// 返工排产：不用数量>0；按 69ccb3e7665ab27f39105da2 返工进度，排除「已完成」
 	const FIELD_REWORK_PROGRESS = '69ccb3e7665ab27f39105da2'
+	const FIELD_DELIVERY_STATUS = '69db0017665ab27f3913c455'
 	const v = (item) => item['66974cda2503723eec1af600']
 	const is688NonEmpty = (item) => {
 		const raw = item['688c366082289045da815f97']
@@ -209,6 +211,8 @@ const search = async () => {
 	const filteredData = billsRes.data.filter(item => {
 		const val = v(item)
 		if (val == null || val === '' || String(val).trim() === '' || val === '[]') return false
+		const deliveryStatus = item[FIELD_DELIVERY_STATUS] == null ? '' : String(item[FIELD_DELIVERY_STATUS]).trim()
+		if (deliveryStatus === '准时交货') return false
 		if (billTypeOptions[billTypeIndex.value] === '返工排产') {
 			return !isReworkProgressCompleted(item)
 		}
