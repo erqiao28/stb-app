@@ -565,6 +565,11 @@
               </view>
             </view>
             <view class="buttons">
+              <button
+                class="btn-first-check"
+                v-if="(workshop === '拉伸车间' || workshop === '组装车间') && item.billType === '正常排产' && isFirstCheckPending(item)"
+                @click="sendFirstCheckReminder(item)"
+              >首检提醒</button>
               <block v-if="item.billType !== '返工排产'">
                 <button class="btn-sop" @click="lookSop(item)">指导书</button>
                 <button class="btn-dispatch" @click="lookImage(item)">技术图纸</button>
@@ -1109,6 +1114,8 @@ const ONE_TO_MANY_DISPATCH_HOOK = 'https://www.dachen.vip/api/workflow/hooks/Njl
 const REWORK_COMPLETE_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjljY2I3ZTEzMzBiMjAyNjg5ODQ1YTYx'
 // 合并工序（原返工开始 webhook）
 const REWORK_START_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjljY2MzYjEzMzBiMjAyNjg5ODY0NDg4'
+// 首检提醒
+const FIRST_CHECK_REMIND_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjllMDdhZWIzMzBiMjAyNjg5NDVmOTE5'
 
 // ==================== 计算属性 ====================
 // 最大派工数量：需派工数量
@@ -1160,6 +1167,14 @@ const canClickOneToManyDispatch = (item) => {
   }
   const count = getSelectedProcessCount(item)
   return count >= 2
+}
+
+// 是否首检为 0 时，才允许显示首检提醒按钮
+const isFirstCheckPending = (item) => {
+  const raw = item?.isFirstCheck
+  if (raw === 0 || raw === '0') return true
+  const n = Number(raw)
+  return Number.isFinite(n) && n === 0
 }
 
 // 打开终止派工模态框
@@ -1462,7 +1477,8 @@ const search = async () => {
       billRowid: item['rowid'],
       billType,
       reworkProgress: item['69ccb3e7665ab27f39105da2'],
-      reworkMergeFlag: item['69ccaf64665ab27f39105bed']
+      reworkMergeFlag: item['69ccaf64665ab27f39105bed'],
+      isFirstCheck: item['69e080b4665ab27f3915d89d']
     }
   })
 
@@ -2771,6 +2787,44 @@ const useNormalProcess = async (item) => {
   }
 }
 
+// 首检提醒
+const sendFirstCheckReminder = async (item) => {
+  const orderCode = item?.orderCode || ''
+  const productName = item?.name || ''
+  const productionCode = item?.productionCode || ''
+
+  if (!orderCode) {
+    uni.showToast({ title: '订单编号不存在', icon: 'none' })
+    return
+  }
+  if (!productName) {
+    uni.showToast({ title: '产品名称不存在', icon: 'none' })
+    return
+  }
+
+  try {
+    uni.showLoading({ title: '发送中...' })
+    const result = await http.post(FIRST_CHECK_REMIND_HOOK, {
+      orderCode,
+      productName,
+      productionCode,
+      workshop: workshop.value || ''
+    })
+    uni.hideLoading()
+
+    if (result.status === 1) {
+      uni.showToast({ title: result.msg || '发送失败', icon: 'none' })
+      return
+    }
+
+    uni.showToast({ title: '首检提醒已发送' })
+  } catch (error) {
+    uni.hideLoading()
+    console.error('首检提醒发送失败:', error)
+    uni.showToast({ title: '发送失败：' + (error.message || '未知错误'), icon: 'none' })
+  }
+}
+
 // 打开删除工序确认模态框
 const deleteProcess = () => {
   const processRowid = selectedProcessData.value?.process?.rowid || ''
@@ -3184,6 +3238,13 @@ onUnload(() => {
                 width: px2vw(200px);
                 background: white;
                 color: #5884f1;
+              }
+
+              &.btn-first-check {
+                width: px2vw(180px);
+                background: #fff7e6;
+                color: #d46b08;
+                border-color: #d46b08;
               }
 
               &.btn-rework-complete {
