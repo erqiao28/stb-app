@@ -121,7 +121,7 @@
 							</view>
 							<view class="form-group">
 								<text class="label">时薪：</text>
-								<input v-model.number="timeWorkForm.hourlyRate" type="digit" placeholder="请输入时薪" class="input-field" />
+								<input v-model.number="timeWorkForm.hourlyRate" type="digit" placeholder="请输入时薪（选填）" class="input-field" />
 							</view>
 						</view>
 						<view class="form-row">
@@ -425,10 +425,6 @@ const doTimeWorkDispatch = async () => {
 	}
 	if (!timeWorkForm.value.workHours) {
 		uni.showToast({ title: '请输入派工工时', icon: 'none' })
-		return
-	}
-	if (!timeWorkForm.value.hourlyRate) {
-		uni.showToast({ title: '请输入时薪', icon: 'none' })
 		return
 	}
 
