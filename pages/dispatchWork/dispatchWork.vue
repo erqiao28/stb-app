@@ -525,7 +525,7 @@
     <view class="btn-list">
       <view class="btn-item" @click="goDispatchInquiry">派工查询</view>
       <view class="btn-item" @click="goWorkload">员工工作量查询</view>
-      <view class="btn-item" v-if="workshop === '组装车间'" @click="goDispatchInquiryMore">多对多派工查询</view>
+      <view class="btn-item" v-if="workshop === '组装车间' || workshop === '喷涂车间'" @click="goDispatchInquiryMore">多对多派工查询</view>
     </view>
 
     <!-- 顶部信息区域：仅展示订单编号 + 生产单号 + 产品名称 -->
@@ -593,7 +593,7 @@
               <button class="btn-detail" :disabled="!canClickDispatch(item)" @click="dispatchWork(item)">操作</button>
               <button class="btn-delete" @click="addProcess(item)">添加工序</button>
               <button class="btn-normal-process" v-if="item.billType === '返工排产'" @click="useNormalProcess(item)">使用正常工序</button>
-              <button class="btn-multi-dispatch" v-if="workshop === '组装车间'" :disabled="!canClickMultiDispatch(item)" @click="openMultiDispatchModal(item)">多对多派工</button>
+              <button class="btn-multi-dispatch" v-if="workshop === '组装车间' || workshop === '喷涂车间'" :disabled="!canClickMultiDispatch(item)" @click="openMultiDispatchModal(item)">多对多派工</button>
               <button class="btn-one-to-many" v-if="workshop === '抛光车间'" :disabled="!canClickOneToManyDispatch(item)" @click="openOneToManyModal(item)">一对多派工</button>
             </view>
           </view>
@@ -644,9 +644,9 @@
                 <view class="process-item" :class="{ 
                   'process-selected': isProcessSelected(item, process), 
                   'process-over': process.isOver == 1,
-                  'process-multi-selected': (workshop === '组装车间' || workshop === '抛光车间') && isMultiProcessSelected(item, process)
+                  'process-multi-selected': isMultiSelectProcessWorkshop && isMultiProcessSelected(item, process)
                 }"
-                @click="(workshop === '组装车间' || workshop === '抛光车间') ? toggleMultiProcess(item, process) : selectProcess(item, process)">
+                @click="selectProcess(item, process)">
                   <view class="process-sequence">{{ process.sequence || '' }}</view>
                   <view class="progress-circle"
                     :style="{
@@ -726,6 +726,12 @@ const modalWorkshop = ref('') // 模态框中的车间选择
 const modalWorkshopIndex = computed(() => {
   const index = workshopOptions.value.indexOf(modalWorkshop.value)
   return index >= 0 ? index : 0
+})
+
+/** 工序列表支持多选：组装/抛光/喷涂（喷涂与组装一致，含多对多派工） */
+const isMultiSelectProcessWorkshop = computed(() => {
+  const w = workshop.value
+  return w === '组装车间' || w === '抛光车间' || w === '喷涂车间'
 })
 
 // 获取当前日期（格式：YYYY-MM-DD）
@@ -1136,8 +1142,8 @@ const isProcessOver = computed(() => {
 
 // 获取指定订单的选中工序数量
 const getSelectedProcessCount = (item) => {
-  if (workshop.value === '组装车间' || workshop.value === '抛光车间') {
-    // 组装车间、抛光车间：统计多选的工序数量
+  if (isMultiSelectProcessWorkshop.value) {
+    // 组装/抛光/喷涂：统计多选的工序数量
     return selectedMultiProcesses.value.filter(p => p.item.orderCode === item.orderCode).length
   } else {
     // 其他车间（包括喷涂）：检查是否有单选工序
@@ -1153,7 +1159,7 @@ const canClickDispatch = (item) => {
 
 // 判断是否可以点击多对多派工按钮
 const canClickMultiDispatch = (item) => {
-  if (workshop.value !== '组装车间') {
+  if (workshop.value !== '组装车间' && workshop.value !== '喷涂车间') {
     return false
   }
   const count = getSelectedProcessCount(item)
@@ -1234,8 +1240,8 @@ const confirmTerminate = async () => {
 const handleWorkshopConfirm = (value) => {
   workshop.value = value
   showWorkshopModal.value = false
-  // 切换车间时，仅组装/抛光使用多选；离开这两类车间时清空多选状态
-  if (value !== '组装车间' && value !== '抛光车间') {
+  // 切换车间时，组装/抛光/喷涂使用多选；离开这些车间时清空多选状态
+  if (value !== '组装车间' && value !== '抛光车间' && value !== '喷涂车间') {
     selectedMultiProcesses.value = []
   }
   search()
@@ -1398,7 +1404,7 @@ const scheduleCodesMatchWhenBothSet = (billSchedule, processSchedule) => {
 const search = async () => {
   // 清除选中状态
   selectedProcess.value = null
-  if (workshop.value !== '组装车间' && workshop.value !== '抛光车间') {
+  if (!isMultiSelectProcessWorkshop.value) {
     selectedMultiProcesses.value = []
   }
 
@@ -1413,7 +1419,7 @@ const search = async () => {
 
   // 固定过滤：
   // 1. 字段 66974cda2503723eec1af600 不能为 "[]"
-  // 2. 正常排产：69a8e4563b5e707f84d33c0c 需大于 0
+  // 2. 正常排产：69e33354665ab27f3916f758（订单数量）需大于 0
   // 3. 返工排产：不用数量>0；按 69ccb3e7665ab27f39105da2 返工进度排除「已完成」
   const FIELD_REWORK_PROGRESS = '69ccb3e7665ab27f39105da2'
   const isReworkProgressCompleted = (row) => {
@@ -1426,7 +1432,7 @@ const search = async () => {
     if (billTypeFilter.value === '返工排产') {
       return !isReworkProgressCompleted(item)
     }
-    const num = Number(item['69a8e4563b5e707f84d33c0c'])
+    const num = Number(item['69e33354665ab27f3916f758'])
     return !Number.isNaN(num) && num > 0
   })
 
@@ -1460,7 +1466,7 @@ const search = async () => {
 
     return {
       orderGoods,
-      orderCount: item['681b0b53b139204fd264c5fd'],
+      orderCount: item['69e33354665ab27f3916f758'],
       productionCount: item['67de8eb5c5377d50a523ef9b'],
       reworkFieldQty: item['653f1c62df3ac906c8a8f4f6'],
       name: item['6937d255ff2b019b3cb34be3'],
@@ -1732,8 +1738,8 @@ const handleImageError = (e) => {
 // ---------- 工序模态相关方法 ----------
 // 选择工序
 const selectProcess = (item, process) => {
-  if (workshop.value === '组装车间' || workshop.value === '抛光车间') {
-    // 组装车间、抛光车间：使用多选逻辑（工序点击处已直接 toggleMultiProcess，此处保留兼容）
+  if (isMultiSelectProcessWorkshop.value) {
+    // 组装/抛光/喷涂：多选 toggle，并同步 selectedProcess（与模板工序点击一致）
     toggleMultiProcess(item, process)
     // 同时更新单选状态，用于兼容
     if (isMultiProcessSelected(item, process)) {
@@ -2686,8 +2692,8 @@ const addProcess = async (item) => {
   // 有工序时：必须先选择工序，才能在选中工序附近插入新工序
   let baseProcess = null
 
-  if (workshop.value === '组装车间' || workshop.value === '抛光车间') {
-    // 组装车间、抛光车间：使用多选工序列表
+  if (isMultiSelectProcessWorkshop.value) {
+    // 组装/抛光/喷涂：使用多选工序列表
     const selected = selectedMultiProcesses.value.find(p => p.item.orderCode === item.orderCode)
     if (!selected) {
       uni.showToast({ title: '请先选择一个工序', icon: 'none' })
@@ -2695,7 +2701,7 @@ const addProcess = async (item) => {
     }
     baseProcess = selected.process
   } else {
-    // 喷涂及其他车间：使用单选选中的工序（与工序点击逻辑一致）
+    // 拉伸等车间：使用单选选中的工序（与工序点击逻辑一致）
     if (!selectedProcess.value || selectedProcess.value.item.orderCode !== item.orderCode) {
       uni.showToast({ title: '请先选择一个工序', icon: 'none' })
       return
@@ -2717,8 +2723,8 @@ const addProcess = async (item) => {
 
 const dispatchWork = (item) => {
   // 检查是否有选中的工序
-  if (workshop.value === '组装车间' || workshop.value === '抛光车间') {
-    // 组装车间、抛光车间：检查多选工序
+  if (isMultiSelectProcessWorkshop.value) {
+    // 组装/抛光/喷涂：检查多选工序
     const selectedCount = selectedMultiProcesses.value.filter(p => p.item.orderCode === item.orderCode).length
     if (selectedCount === 0) {
       uni.showToast({ title: '请先选择一个工序', icon: 'none' })
@@ -3018,7 +3024,7 @@ onUnload(() => {
     }
   }
 
-  /* 按钮栏：按可见按钮数量均分整行（组装车间 3 个、其它车间 2 个） */
+  /* 按钮栏：按可见按钮数量均分整行（组装/喷涂 3 个含多对多查询、其它车间 2 个） */
   .btn-list {
     height: px2vw(120px);
     width: 100%;

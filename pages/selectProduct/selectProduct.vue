@@ -190,7 +190,7 @@ const search = async () => {
   }
 
   // 与选择订单页一致：66974cda2503723eec1af600 不为空；
-  // 正常排产：688 非空时才要求 69a8e4563b5e707f84d33c0c > 0
+  // 正常排产：688 非空时才要求 69e33354665ab27f3916f758（订单数量）> 0
   // 返工排产：按 69ccb3e7665ab27f39105da2 返工进度排除「已完成」
   const FIELD_REWORK_PROGRESS = '69ccb3e7665ab27f39105da2'
   const is688NonEmpty = (row) => {
@@ -217,7 +217,7 @@ const search = async () => {
       return !isReworkProgressCompleted(item)
     }
     if (!is688NonEmpty(item)) return true
-    const num = Number(item['69a8e4563b5e707f84d33c0c'])
+    const num = Number(item['69e33354665ab27f3916f758'])
     return !Number.isNaN(num) && num > 0
   })
 
@@ -232,7 +232,7 @@ const search = async () => {
     const customerName = item['69a8ed3c3b5e707f84d33f8b'] || ''
     const name = item['6937d255ff2b019b3cb34be3'] || ''
     const models = item['6937d255ff2b019b3cb34be4'] || ''
-    const orderCount = item['681b0b53b139204fd264c5fd'] || ''
+    const orderCount = item['69e33354665ab27f3916f758'] || ''
     const reworkRaw = item['653f1c62df3ac906c8a8f4f6']
     const reworkQtyDisplay =
       reworkRaw == null || reworkRaw === '' || String(reworkRaw).trim() === ''

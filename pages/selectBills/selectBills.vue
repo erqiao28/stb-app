@@ -13,7 +13,7 @@
 			<view class="btn-item" @click="goTimeWork">记时派工</view>
 			<view class="btn-item" @click="goDispatchInquiry">派工查询</view>
 			<view class="btn-item" @click="goWorkload">员工工作量查询</view>
-			<view class="btn-item" v-if="workshop === '组装车间'" @click="goDispatchInquiryMore">多对多派工查询</view>
+			<view class="btn-item" v-if="workshop === '组装车间' || workshop === '喷涂车间'" @click="goDispatchInquiryMore">多对多派工查询</view>
 		</view>
 
 		<!-- 搜索区域：销售订单 + 查询 + 排产类型（右侧两个按钮） -->
@@ -193,7 +193,7 @@ const search = async () => {
 
 	// 先过滤：66974cda2503723eec1af600 不为空；
 	// 且 69db0017665ab27f3913c455 不为「准时交货」；
-	// 正常排产：仅当 688c366082289045da815f97 不为空时，才要求 69a8e4563b5e707f84d33c0c 大于 0
+	// 正常排产：仅当 688c366082289045da815f97 不为空时，才要求 69e33354665ab27f3916f758（订单数量）大于 0
 	// 返工排产：不用数量>0；按 69ccb3e7665ab27f39105da2 返工进度，排除「已完成」
 	const FIELD_REWORK_PROGRESS = '69ccb3e7665ab27f39105da2'
 	const FIELD_DELIVERY_STATUS = '69db0017665ab27f3913c455'
@@ -217,7 +217,7 @@ const search = async () => {
 			return !isReworkProgressCompleted(item)
 		}
 		if (!is688NonEmpty(item)) return true
-		const num = Number(item['69a8e4563b5e707f84d33c0c'])
+		const num = Number(item['69e33354665ab27f3916f758'])
 		return !Number.isNaN(num) && num > 0
 	})
 	console.log(
