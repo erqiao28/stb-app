@@ -458,8 +458,7 @@
               </view>
               <view class="form-group">
                 <text class="label">工价：</text>
-                <input v-model.number="processDispatchData.price" type="number" placeholder="请输入工价"
-                  min="0" step="0.01" class="input-field" />
+                <text class="value-readonly">{{ processDispatchData.price ?? 0 }}</text>
               </view>
             </view>
             

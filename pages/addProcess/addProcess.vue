@@ -69,17 +69,6 @@
 					</picker>
 				</view>
 				<view class="input-group">
-					<view class="input-label">返工工价</view>
-					<input 
-						type="number" 
-						class="process-input" 
-						:class="{ 'input-disabled': !canEditPrice }"
-						placeholder="请输入返工工价" 
-						v-model="processPrice"
-						:disabled="!canEditPrice"
-						step="0.01" />
-				</view>
-				<view class="input-group">
 					<view class="input-label">计划生产日期</view>
 					<picker mode="date" :value="plannedProductionDate" @change="onPlannedDateChange" class="picker-wrapper">
 						<view class="process-input date-picker">
@@ -147,11 +136,6 @@ const plannedProductionDate = ref('')
 
 // 是否新增状态（true=手动输入新增，false=从表格选择）
 const isNewProcess = ref(false)
-
-// 是否可以编辑工价（只有返工排产时可以编辑）
-const canEditPrice = computed(() => {
-	return orderData.value.billType === '返工排产'
-})
 
 // 搜索输入值
 const searchValue = ref('')
@@ -296,7 +280,7 @@ const addProcess = async () => {
 		isNew: isNewProcess.value,
 		sequence: parseFloat(productionSequence.value) || 0,
 		modifyMode: modifyMode.value,
-		processPrice: parseFloat(processPrice.value) || 0,
+		processPrice: 0,
 		plannedProductionDate: plannedProductionDate.value || '',
 		billRowid: orderData.value.billRowid,
 		processRowid: orderData.value.processRowid || '',
