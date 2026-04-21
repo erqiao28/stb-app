@@ -2097,14 +2097,18 @@ const loadMultiEmployeesForAdd = async () => {
   }
 }
 
-// 多对多派工员工选择变化
+// 多对多派工：员工 id 统一成字符串；派工列表顺序以 multiEmployeeList 为准（与添加员工弹窗点选顺序一致），接口按该列表自上而下
+const normalizeEmployeeId = (id) => String(id)
+
+// 多对多派工员工选择变化（仅表示勾选集合，顺序以 multiEmployeeList 为准）
 const onMultiEmployeeCheckboxChange = (e) => {
-  selectedMultiEmployees.value = e.detail.value || []
+  selectedMultiEmployees.value = (e.detail.value || []).map(normalizeEmployeeId)
 }
 
 // 判断员工是否被选中（多对多派工）
 const isMultiEmployeeSelected = (employeeId) => {
-  return selectedMultiEmployees.value.includes(employeeId)
+  const id = normalizeEmployeeId(employeeId)
+  return selectedMultiEmployees.value.some((x) => normalizeEmployeeId(x) === id)
 }
 
 // 判断是否可以多对多派工
@@ -2136,8 +2140,10 @@ const confirmMultiDispatch = async () => {
     return
   }
   
-  // 获取选中的员工信息
-  const selectedEmployees = multiEmployeeList.value.filter(emp => selectedMultiEmployees.value.includes(emp.id))
+  // 按派工模态框员工列表自上而下（= 添加员工弹窗点选顺序），仅包含当前勾选
+  const selectedEmployees = multiEmployeeList.value.filter((emp) =>
+    selectedMultiEmployees.value.some((x) => normalizeEmployeeId(x) === normalizeEmployeeId(emp.id))
+  )
   
   // 从选中的工序中获取所属单据的信息（所有工序应该属于同一个订单）
   const firstProcess = selectedMultiProcesses.value[0]
@@ -2559,8 +2565,9 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
     showAddEmployeeModal.value = false
 
     // 自动选中新添加的员工
-    selectedIds.forEach(id => {
-      if (!selectedMultiEmployees.value.includes(id)) {
+    selectedIds.forEach((rawId) => {
+      const id = normalizeEmployeeId(rawId)
+      if (!selectedMultiEmployees.value.some((x) => normalizeEmployeeId(x) === id)) {
         selectedMultiEmployees.value.push(id)
       }
     })

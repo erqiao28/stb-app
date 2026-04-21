@@ -150,13 +150,19 @@ const isChecked = (value) => {
   return internalModel.value.includes(value)
 }
 
+const normalizeId = (v) => String(v)
+
+// 保持「点选顺序」：保留仍勾选项的原顺序，新勾选项按本次事件中的顺序接在后面（不采用平台 detail.value 的固定排序）
 const onCheckboxChange = (e) => {
-  let next = e.detail.value || []
+  const newValues = (e.detail.value || []).map(normalizeId)
+  const prevOrder = internalModel.value.map(normalizeId)
+  const prevSet = new Set(prevOrder)
+  const kept = prevOrder.filter((id) => newValues.includes(id))
+  const newlyAdded = newValues.filter((id) => !prevSet.has(id))
+  let next = [...kept, ...newlyAdded]
+
   if (props.maxSelection === 1 && next.length > 1) {
-    // 单选：只保留最后勾选的那一项
     next = [next[next.length - 1]]
-  } else if (props.maxSelection === 1 && next.length === 1) {
-    // 已是单选，直接使用
   } else if (props.maxSelection > 0 && next.length > props.maxSelection) {
     next = next.slice(-props.maxSelection)
   }
