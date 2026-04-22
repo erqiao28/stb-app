@@ -193,16 +193,12 @@ const search = async () => {
 
 	// 先过滤：66974cda2503723eec1af600 不为空；
 	// 且 69db0017665ab27f3913c455 不为「准时交货」；
-	// 正常排产：仅当 688c366082289045da815f97 不为空时，才要求 69e33354665ab27f3916f758（订单数量）大于 0
+	// 正常排产：69a8e4563b5e707f84d33c0c（未完成工序数量）需大于 0
 	// 返工排产：不用数量>0；按 69ccb3e7665ab27f39105da2 返工进度，排除「已完成」
 	const FIELD_REWORK_PROGRESS = '69ccb3e7665ab27f39105da2'
+	const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
 	const FIELD_DELIVERY_STATUS = '69db0017665ab27f3913c455'
 	const v = (item) => item['66974cda2503723eec1af600']
-	const is688NonEmpty = (item) => {
-		const raw = item['688c366082289045da815f97']
-		if (raw == null || raw === '' || String(raw).trim() === '' || raw === '[]') return false
-		return true
-	}
 	const isReworkProgressCompleted = (item) => {
 		const raw = item[FIELD_REWORK_PROGRESS]
 		const p = raw == null ? '' : String(raw).trim()
@@ -216,8 +212,7 @@ const search = async () => {
 		if (billTypeOptions[billTypeIndex.value] === '返工排产') {
 			return !isReworkProgressCompleted(item)
 		}
-		if (!is688NonEmpty(item)) return true
-		const num = Number(item['69e33354665ab27f3916f758'])
+		const num = Number(item[FIELD_INCOMPLETE_PROCESS_QTY])
 		return !Number.isNaN(num) && num > 0
 	})
 	console.log(

@@ -1418,9 +1418,10 @@ const search = async () => {
 
   // 固定过滤：
   // 1. 字段 66974cda2503723eec1af600 不能为 "[]"
-  // 2. 正常排产：69e33354665ab27f3916f758（订单数量）需大于 0
+  // 2. 正常排产：69a8e4563b5e707f84d33c0c（未完成工序数量）需大于 0
   // 3. 返工排产：不用数量>0；按 69ccb3e7665ab27f39105da2 返工进度排除「已完成」
   const FIELD_REWORK_PROGRESS = '69ccb3e7665ab27f39105da2'
+  const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
   const isReworkProgressCompleted = (row) => {
     const raw = row[FIELD_REWORK_PROGRESS]
     const p = raw == null ? '' : String(raw).trim()
@@ -1431,7 +1432,7 @@ const search = async () => {
     if (billTypeFilter.value === '返工排产') {
       return !isReworkProgressCompleted(item)
     }
-    const num = Number(item['69e33354665ab27f3916f758'])
+    const num = Number(item[FIELD_INCOMPLETE_PROCESS_QTY])
     return !Number.isNaN(num) && num > 0
   })
 
