@@ -168,6 +168,19 @@ const getBillsListRaw = async () => {
 					spliceType: 1,
 					filterType: 2,
 					values: ['已排产']
+				},
+				{
+					controlId: '69db0017665ab27f3913c455',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 6,
+					values: ['准时交货']
+				},
+				{
+					controlId: '66974cda2503723eec1af600',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 8
 				}
 			]
 		},
@@ -191,24 +204,16 @@ const search = async () => {
 		return
 	}
 
-	// 先过滤：66974cda2503723eec1af600 不为空；
-	// 且 69db0017665ab27f3913c455 不为「准时交货」；
 	// 正常排产：69a8e4563b5e707f84d33c0c（未完成工序数量）需大于 0
 	// 返工排产：不用数量>0；按 69ccb3e7665ab27f39105da2 返工进度，排除「已完成」
 	const FIELD_REWORK_PROGRESS = '69ccb3e7665ab27f39105da2'
 	const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
-	const FIELD_DELIVERY_STATUS = '69db0017665ab27f3913c455'
-	const v = (item) => item['66974cda2503723eec1af600']
 	const isReworkProgressCompleted = (item) => {
 		const raw = item[FIELD_REWORK_PROGRESS]
 		const p = raw == null ? '' : String(raw).trim()
 		return p === '已完成'
 	}
 	const filteredData = billsRes.data.filter(item => {
-		const val = v(item)
-		if (val == null || val === '' || String(val).trim() === '' || val === '[]') return false
-		const deliveryStatus = item[FIELD_DELIVERY_STATUS] == null ? '' : String(item[FIELD_DELIVERY_STATUS]).trim()
-		if (deliveryStatus === '准时交货') return false
 		if (billTypeOptions[billTypeIndex.value] === '返工排产') {
 			return !isReworkProgressCompleted(item)
 		}

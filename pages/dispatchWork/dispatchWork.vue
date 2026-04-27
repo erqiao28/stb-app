@@ -1354,6 +1354,11 @@ const getBillsListRaw = async () => {
     spliceType: 1,
     filterType: 2,
     values: [billTypeFilter.value]
+  }, {
+    controlId: '66974cda2503723eec1af600',
+    dataType: 30,
+    spliceType: 1,
+    filterType: 8
   }]
 
   // 如果有选中的订单号和生产单号，则在接口层按订单号 + 生产单号一起过滤单据
@@ -1417,9 +1422,8 @@ const search = async () => {
   }
 
   // 固定过滤：
-  // 1. 字段 66974cda2503723eec1af600 不能为 "[]"
-  // 2. 正常排产：69a8e4563b5e707f84d33c0c（未完成工序数量）需大于 0
-  // 3. 返工排产：不用数量>0；按 69ccb3e7665ab27f39105da2 返工进度排除「已完成」
+  // 1. 正常排产：69a8e4563b5e707f84d33c0c（未完成工序数量）需大于 0
+  // 2. 返工排产：不用数量>0；按 69ccb3e7665ab27f39105da2 返工进度排除「已完成」
   const FIELD_REWORK_PROGRESS = '69ccb3e7665ab27f39105da2'
   const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
   const isReworkProgressCompleted = (row) => {
@@ -1428,7 +1432,6 @@ const search = async () => {
     return p === '已完成'
   }
   const filteredBillsData = billsRes.data.filter(item => {
-    if (item['66974cda2503723eec1af600'] === '[]') return false
     if (billTypeFilter.value === '返工排产') {
       return !isReworkProgressCompleted(item)
     }
@@ -2052,6 +2055,11 @@ const loadMultiEmployeesForAdd = async () => {
         "spliceType": 1,
         "filterType": 2,
         "values": [selectedWorkshop]
+      }, {
+        "controlId": "6943bd902161a0fc58bad5ab",
+        "dataType": 30,
+        "spliceType": 1,
+        "filterType": 8
       }],
       pageSize: 100,
       pageNum: 1
@@ -2071,7 +2079,6 @@ const loadMultiEmployeesForAdd = async () => {
           dispatchWorkDate: dispatchWorkDate
         }
       })
-      .filter(emp => emp.id)
       .filter(emp => emp.dispatchWorkDate === currentDate)
 
       // 更新allEmployeesOptions和allEmployeesMap，供添加员工模态框使用
@@ -2418,6 +2425,11 @@ const loadEmployees = async () => {
         "spliceType": 1,
         "filterType": 2,
         "values": [selectedWorkshop]
+      }, {
+        "controlId": "6943bd902161a0fc58bad5ab",
+        "dataType": 30,
+        "spliceType": 1,
+        "filterType": 8
       }],
       pageSize: 100,
       pageNum: 1
@@ -2437,7 +2449,6 @@ const loadEmployees = async () => {
           dispatchWorkDate: dispatchWorkDate
         }
       })
-      .filter(emp => emp.id)
       .filter(emp => emp.dispatchWorkDate === currentDate)
 
       allEmployeesOptions.value = mappedEmployees.map(emp => ({

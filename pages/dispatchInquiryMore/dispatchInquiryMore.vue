@@ -230,16 +230,17 @@ const dispatchInquiryList = ref([
 const getDispatchInquiryList = async () => {
   const res = await callWorkflowListAPIPaged({
     worksheetId: 'dddpg',
-    filters: [],
+    filters: [{
+      controlId: '697b11b33b5e707f84cd938e',
+      dataType: 30,
+      spliceType: 1,
+      filterType: 6,
+      values: ['全部报工','已转派']
+    }],
     pageSize: 100,
     pageNum: 1
   })
-  const statusExclude = ['全部报工', '已转派']
   dispatchInquiryList.value = res.data
-    .filter(item => {
-      const status = item['697b11b33b5e707f84cd938e'] || ''
-      return !statusExclude.includes(status)
-    })
     .map(item => ({
     goodsName: item['698a94e23b5e707f84d090ba'],
     goodsCode: item['698a94e23b5e707f84d090ba'],

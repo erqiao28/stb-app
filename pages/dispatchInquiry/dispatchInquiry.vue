@@ -234,7 +234,7 @@ const handleIsStopConfirm = (value) => {
 }
 
 // 派工单据列表（分页）
-const PAGE_SIZE = 30
+const PAGE_SIZE = 100
 const pageNum = ref(1)
 const hasMore = ref(true)
 const loadingMore = ref(false)
@@ -242,15 +242,9 @@ const loadingList = ref(false)
 
 const dispatchInquiryList = ref([])
 
-const statusExclude = ['全部报工', '已转派']
-
-/** 将接口行映射为列表项（并做状态过滤） */
+/** 将接口行映射为列表项 */
 const mapRawRows = (raw) => {
 	return raw
-		.filter((item) => {
-			const status = item['66c7f8866440b9d16c7bf908'] || ''
-			return !statusExclude.includes(status)
-		})
 		.map((item) => ({
 			goodsName: item['6944facfdc7b13304885b3ad'],
 			goodsCode: item['6921596021066a9f124f6e63'],
@@ -299,6 +293,12 @@ const fetchDispatchInquiryPage = async (reset = false) => {
 				spliceType: 1,
 				filterType: 2,
 				values: [workshop.value]
+			}, {
+				controlId: '66c7f8866440b9d16c7bf908',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 6,
+				values: ['全部报工','已转派']
 			}],
 			pageSize: PAGE_SIZE,
 			pageNum: nextPage,
