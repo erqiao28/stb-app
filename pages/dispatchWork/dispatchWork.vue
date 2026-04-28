@@ -1408,9 +1408,8 @@ const scheduleCodesMatchWhenBothSet = (billSchedule, processSchedule) => {
 const search = async () => {
   // 清除选中状态
   selectedProcess.value = null
-  if (!isMultiSelectProcessWorkshop.value) {
-    selectedMultiProcesses.value = []
-  }
+  // 每次刷新都清空多选工序，避免删除/刷新后残留旧 rowid 影响按钮可用性
+  selectedMultiProcesses.value = []
 
   // 获取单据列表（按车间和单据类型从后端筛选）
   const billsRes = await getBillsListRaw()
