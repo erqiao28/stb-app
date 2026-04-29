@@ -286,21 +286,13 @@
               </view>
             </view>
             
-            <!-- 派工日期和是否包含最终工序 -->
+            <!-- 派工日期 -->
             <view class="row-group">
               <view class="form-group">
                 <text class="label">派工日期：</text>
                 <picker mode="date" :value="multiDispatchData.date" @change="onMultiDateChange">
                   <view class="value">
                     {{ multiDispatchData.date || '请选择日期' }}
-                  </view>
-                </picker>
-              </view>
-              <view class="form-group">
-                <text class="label">是否包含最终工序：</text>
-                <picker mode="selector" :range="isLastOptions" :value="multiIsLastIndex" @change="onMultiIsLastChange">
-                  <view class="value">
-                    {{ multiDispatchData.isLast || '请选择' }}
                   </view>
                 </picker>
               </view>
@@ -462,17 +454,6 @@
               </view>
             </view>
             
-            <!-- 最终工序 -->
-            <view class="row-group single">
-              <view class="form-group full">
-                <text class="label">最终工序：</text>
-                <picker mode="selector" :range="isLastOptions" :value="isLastIndex" @change="onIsLastChange">
-                  <view class="value">
-                    {{ processDispatchData.isLast || '请选择最终工序' }}
-                  </view>
-                </picker>
-              </view>
-            </view>
           </view>
           
           <!-- 员工选择表格 -->
