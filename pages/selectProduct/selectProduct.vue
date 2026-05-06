@@ -14,44 +14,80 @@
       </view>
     </view>
 
-    <!-- 搜索区域：产品名称标签筛选 + 查询（销售订单不展示，由上一页/路由带入 selectedOrderCode） -->
+    <!-- 搜索区域：订单编号 / 产品名称均为多关键词标签筛选（任一词命中即可，OR）；路由 orderCode 会预填一条订单标签 -->
     <view class="search-box">
-      <view class="orderItem product-name-col">
-        <text class="orderItem-text">产品名称</text>
-        <view class="product-name-stack">
-          <view class="suggest-field">
-            <view class="suggest-input-box suggest-input-box--chips">
-              <view v-if="productNameFilterTags.length" class="filter-tags-inline">
+      <view class="search-filters-row">
+        <view class="filter-row filter-row--order">
+          <text class="filter-label">订单编号</text>
+          <view class="product-name-stack">
+            <view class="suggest-field">
+              <view class="suggest-input-box suggest-input-box--chips suggest-input-box--compact">
+                <view v-if="orderFilterTags.length" class="filter-tags-inline">
+                  <view
+                    v-for="(tag, tIdx) in orderFilterTags"
+                    :key="'ord-' + tIdx + '-' + tag"
+                    class="filter-tag"
+                    @tap.stop="removeOrderTag(tIdx)"
+                  >
+                    <text class="filter-tag-text">{{ tag }}</text>
+                    <text class="filter-tag-close">×</text>
+                  </view>
+                </view>
+                <input
+                  v-model="orderSuggestInput"
+                  type="text"
+                  placeholder="输入关键词，点下方加入"
+                  confirm-type="search"
+                />
+              </view>
+              <view v-if="orderInputTrimmed" class="suggest-dropdown suggest-dropdown--single">
                 <view
-                  v-for="(tag, tIdx) in productNameFilterTags"
-                  :key="'tag-' + tIdx + '-' + tag"
-                  class="filter-tag"
-                  @tap.stop="removeProductNameTag(tIdx)"
+                  class="suggest-item"
+                  @tap.stop="pickOrderSuggestion(orderInputTrimmed)"
                 >
-                  <text class="filter-tag-text">{{ tag }}</text>
-                  <text class="filter-tag-close">×</text>
+                  <text>{{ orderInputTrimmed }}</text>
                 </view>
               </view>
-              <input
-                v-model="productNameSuggestInput"
-                type="text"
-                placeholder="输入筛选词，点下方一行加入条件"
-                confirm-type="search"
-              />
             </view>
-            <view v-if="productNameInputTrimmed" class="suggest-dropdown suggest-dropdown--single">
-              <view
-                class="suggest-item"
-                @tap.stop="pickProductNameSuggestion(productNameInputTrimmed)"
-              >
-                <text>{{ productNameInputTrimmed }}</text>
+          </view>
+        </view>
+
+        <view class="filter-row filter-row--product">
+          <text class="filter-label">产品名称</text>
+          <view class="product-name-stack">
+            <view class="suggest-field">
+              <view class="suggest-input-box suggest-input-box--chips suggest-input-box--compact">
+                <view v-if="productNameFilterTags.length" class="filter-tags-inline">
+                  <view
+                    v-for="(tag, tIdx) in productNameFilterTags"
+                    :key="'tag-' + tIdx + '-' + tag"
+                    class="filter-tag"
+                    @tap.stop="removeProductNameTag(tIdx)"
+                  >
+                    <text class="filter-tag-text">{{ tag }}</text>
+                    <text class="filter-tag-close">×</text>
+                  </view>
+                </view>
+                <input
+                  v-model="productNameSuggestInput"
+                  type="text"
+                  placeholder="输入关键词，点下方加入"
+                  confirm-type="search"
+                />
+              </view>
+              <view v-if="productNameInputTrimmed" class="suggest-dropdown suggest-dropdown--single">
+                <view
+                  class="suggest-item"
+                  @tap.stop="pickProductNameSuggestion(productNameInputTrimmed)"
+                >
+                  <text>{{ productNameInputTrimmed }}</text>
+                </view>
               </view>
             </view>
           </view>
         </view>
       </view>
 
-      <view class="btn-item search-btn" @click="search">查询</view>
       <view class="btn-item confirm-btn" v-if="dispatchMode === 'product'" @click="confirmSelectedProducts">确定</view>
     </view>
 
@@ -59,6 +95,7 @@
     <scroll-view class="orderList" scroll-y @scroll="onListScroll" @scrolltolower="loadMore" lower-threshold="80">
       <view
         class="orderItem"
+        :class="{ 'orderItem--selected': dispatchMode === 'product' && isProductChecked(item) }"
         v-for="item in billsList"
         :key="item.productionCode || item.productCode || (item.orderCode + '-' + item.name)"
         @tap="handleProductItemClick(item)"
@@ -137,8 +174,9 @@ const billTypeIndex = ref(0)
 const isBillTypeReadonly = ref(false)
 const dispatchMode = ref('order')
 
-// 由选择订单页面带入的订单编号，用于接口筛选
-const selectedOrderCode = ref('')
+/** 订单编号筛选标签（与产品名称相同：本地 OR 匹配 orderCode 包含任一关键词） */
+const orderFilterTags = ref([])
+const orderSuggestInput = ref('')
 
 const billsList = ref([])
 const loadingMore = ref(false)
@@ -169,13 +207,17 @@ const productNameInputTrimmed = computed(() =>
   (productNameSuggestInput.value || '').trim()
 )
 
+const orderInputTrimmed = computed(() => (orderSuggestInput.value || '').trim())
+
 const rebuildBillsList = () => {
   let list = [...baseListUnfiltered.value]
-  const orderScope = (selectedOrderCode.value || '').trim().toLowerCase()
-  if (orderScope) {
+  if (orderFilterTags.value.length) {
+    const tagsLower = orderFilterTags.value
+      .map((t) => String(t).trim().toLowerCase())
+      .filter(Boolean)
     list = list.filter((item) => {
       const orderCodeStr = (item.orderCode || '').toString().toLowerCase()
-      return orderCodeStr.includes(orderScope)
+      return tagsLower.some((tag) => orderCodeStr.includes(tag))
     })
   }
   if (productNameFilterTags.value.length) {
@@ -188,6 +230,25 @@ const rebuildBillsList = () => {
     })
   }
   billsList.value = list
+}
+
+const pickOrderSuggestion = (raw) => {
+  const n = (raw || '').toString().trim()
+  if (!n) return
+  const lower = n.toLowerCase()
+  if (orderFilterTags.value.some((t) => String(t).trim().toLowerCase() === lower)) {
+    orderSuggestInput.value = ''
+    return
+  }
+  orderFilterTags.value.push(n)
+  orderSuggestInput.value = ''
+  rebuildBillsList()
+}
+
+const removeOrderTag = (idx) => {
+  if (idx < 0 || idx >= orderFilterTags.value.length) return
+  orderFilterTags.value.splice(idx, 1)
+  rebuildBillsList()
 }
 
 const pickProductNameSuggestion = (name) => {
@@ -242,9 +303,12 @@ onLoad((options) => {
     workshop.value = options.workshop
   }
 
-  // 从选择订单页面带入订单编号（接口筛选 + 列表重建时按订单范围过滤，不展示销售订单输入框）
+  // 从选择订单页面带入订单编号：预填一条订单标签（仍可继续添加关键词）
+  orderFilterTags.value = []
+  orderSuggestInput.value = ''
   if (options && options.orderCode) {
-    selectedOrderCode.value = decodeURIComponent(options.orderCode)
+    const oc = decodeURIComponent(options.orderCode).trim()
+    if (oc) orderFilterTags.value.push(oc)
   }
 
   // 排产类型：与选择订单当前筛选一致（或派工页返回时带入）
@@ -281,7 +345,7 @@ onShow(() => {
   }
 })
 
-// 获取单据原始数据（与选择订单接口一致，但增加订单编号筛选）
+// 获取单据原始数据（与选择订单接口一致；订单编号改由本地多关键词筛选，不在此接口收窄）
 const getBillsListRaw = async (pageNum = 1, silent = false) => {
   const filters = [
     {
@@ -312,17 +376,6 @@ const getBillsListRaw = async (pageNum = 1, silent = false) => {
       filterType: 8
     }
   ]
-
-  // 接口级别增加订单编号筛选（由选择订单页面带入）
-  if (selectedOrderCode.value) {
-    filters.push({
-      controlId: '655e1cbbbd2094b316347f92', // 订单编号字段
-      dataType: 30,
-      spliceType: 1,
-      filterType: 2,
-      values: [selectedOrderCode.value]
-    })
-  }
 
   const res = await callWorkflowListAPIPaged(
     {
@@ -417,6 +470,7 @@ const search = async () => {
   baseListUnfiltered.value = []
   productNameFilterTags.value = []
   productNameSuggestInput.value = ''
+  // 保留 orderFilterTags / orderSuggestInput（含路由预填的订单），避免进入页 search 冲掉 onLoad 已设标签
   await loadPage(1, false)
 }
 
@@ -548,7 +602,7 @@ const confirmSelectedProducts = () => {
 
   .search-box {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     width: 100%;
     background-color: #fff;
     min-height: px2vw(100px);
@@ -556,19 +610,43 @@ const confirmSelectedProducts = () => {
     margin: px2vw(10px);
     border-radius: px2vw(18px);
     box-sizing: border-box;
-    gap: px2vw(10px);
+    gap: px2vw(12px);
     position: relative;
     z-index: 5;
 
-    .orderItem {
-      display: flex;
-      align-items: center;
+    .search-filters-row {
       flex: 1;
       min-width: 0;
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: px2vw(16px);
     }
 
-    .orderItem.product-name-col {
-      align-items: center;
+    .filter-row {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: px2vw(6px);
+    }
+
+    .filter-label {
+      font-size: px2vw(24px);
+      color: #333;
+      line-height: 1.3;
+      flex-shrink: 0;
+    }
+
+    .filter-row--order {
+      position: relative;
+      z-index: 6;
+    }
+
+    .filter-row--product {
+      position: relative;
+      z-index: 5;
     }
 
     .product-name-stack {
@@ -651,6 +729,24 @@ const confirmSelectedProducts = () => {
       }
     }
 
+    /* 双列：输入随剩余空间拉满便于点击；标签 flex-wrap，多条自动换行 */
+    .suggest-input-box--chips.suggest-input-box--compact {
+      min-height: px2vw(76px);
+      padding: px2vw(10px) px2vw(12px);
+      align-items: center;
+
+      input {
+        flex: 1 1 auto;
+        align-self: stretch;
+        min-width: 0;
+        width: auto;
+        font-size: px2vw(22px);
+        min-height: px2vw(52px);
+        height: px2vw(52px);
+        box-sizing: border-box;
+      }
+    }
+
     .suggest-dropdown {
       position: absolute;
       left: 0;
@@ -699,35 +795,21 @@ const confirmSelectedProducts = () => {
       }
     }
 
-    .search-btn {
-      flex-shrink: 0;
-      margin-left: px2vw(10px);
-      margin-right: 0;
-      width: auto;
-      min-width: px2vw(260px);
-      height: px2vw(80px);
-      padding: px2vw(16px) px2vw(25px);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      border-radius: px2vw(18px);
-      color: #fff;
-      background-color: #2755f1;
-      font-size: px2vw(25px);
-    }
-    
     .confirm-btn {
       flex-shrink: 0;
-      margin-left: px2vw(10px);
+      align-self: center;
+      margin-left: 0;
       margin-right: 0;
+      margin-top: 0;
       width: auto;
-      min-width: px2vw(260px);
-      height: px2vw(80px);
-      padding: px2vw(16px) px2vw(25px);
+      min-width: px2vw(148px);
+      height: px2vw(76px);
+      padding: 0 px2vw(22px);
+      box-sizing: border-box;
       display: flex;
       justify-content: center;
       align-items: center;
-      border-radius: px2vw(18px);
+      border-radius: px2vw(14px);
       color: #fff;
       background-color: #28a745;
       font-size: px2vw(25px);
@@ -746,6 +828,12 @@ const confirmSelectedProducts = () => {
       border-radius: px2vw(18px);
       margin: px2vw(15px);
       padding: px2vw(15px);
+      transition: background-color 0.15s ease;
+
+      &.orderItem--selected {
+        background-color: #e8f4fc;
+        box-shadow: inset 0 0 0 px2vw(2px) rgba(88, 132, 241, 0.35);
+      }
 
       .item-checkbox {
         position: absolute;
