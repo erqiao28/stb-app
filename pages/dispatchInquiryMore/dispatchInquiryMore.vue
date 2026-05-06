@@ -147,16 +147,47 @@
 						<text class="date">日期：{{ item.date }}</text>
 					</view>
 					<view class="dispatchInquiry-item-info-bottom">
-						<text class="goodsName">产品名称：{{ item.goodsName }}</text>
-						<text class="goodsCode">产品编码：{{ item.goodsCode }}</text>
-						<text class="processName">工序名称：{{ item.processName }}</text>
-						<text class="worker">加工人：{{ item.worker }}</text>
-						<text class="dispatchCount">派工数量：{{ item.dispatchCount }}</text>
-						<text class="worktime">工时：{{ item.worktime }}</text>
-						<text class="finishCount">完成数量：{{ item.finishCount }}</text>
-						<text class="reworkCount">返工数量：{{ item.reworkCount }}</text>
-						<text class="wasteCount">废品数量：{{ item.wasteCount }}</text>
-						
+						<!-- 第一行：产品名称、派工数量、工时（单行高度一致） -->
+						<view class="info-row info-row-three">
+							<view class="info-cell">
+								<text class="cell-label">产品名称：</text>
+								<text class="cell-value">{{ item.goodsName || '-' }}</text>
+							</view>
+							<view class="info-cell">
+								<text class="cell-label">派工数量：</text>
+								<text class="cell-value">{{ item.dispatchCount ?? '-' }}</text>
+							</view>
+							<view class="info-cell">
+								<text class="cell-label">工时：</text>
+								<text class="cell-value">{{ item.worktime ?? '-' }}</text>
+							</view>
+						</view>
+						<!-- 第二行：完成数量、返工数量、废品数量 -->
+						<view class="info-row info-row-three">
+							<view class="info-cell">
+								<text class="cell-label">完成数量：</text>
+								<text class="cell-value">{{ item.finishCount ?? '-' }}</text>
+							</view>
+							<view class="info-cell">
+								<text class="cell-label">返工数量：</text>
+								<text class="cell-value">{{ item.reworkCount ?? '-' }}</text>
+							</view>
+							<view class="info-cell">
+								<text class="cell-label">废品数量：</text>
+								<text class="cell-value">{{ item.wasteCount ?? '-' }}</text>
+							</view>
+						</view>
+						<!-- 第三行：工序、员工（可多行，单独一行避免撑乱上方面板） -->
+						<view class="info-row info-row-process-worker">
+							<view class="info-cell info-cell-block">
+								<text class="cell-label">工序：</text>
+								<text class="cell-value cell-value-multiline">{{ item.processName || '-' }}</text>
+							</view>
+							<view class="info-cell info-cell-block">
+								<text class="cell-label">员工：</text>
+								<text class="cell-value cell-value-multiline">{{ item.worker || '-' }}</text>
+							</view>
+						</view>
 					</view>
 				</view>
 				<view class="status-badge" v-if="item.status">
@@ -212,7 +243,6 @@ const handleIsStopConfirm = (value) => {
 const dispatchInquiryList = ref([
 	{
 		goodsName: '',
-		goodsCode: '',
 		processName: '',
 		date: '',
 		orderCode: '',
@@ -243,7 +273,6 @@ const getDispatchInquiryList = async () => {
   dispatchInquiryList.value = res.data
     .map(item => ({
     goodsName: item['698a94e23b5e707f84d090ba'],
-    goodsCode: item['698a94e23b5e707f84d090ba'],
     processName: item['69ad18473b5e707f84d42fb4'],
     date: item['698a9d193b5e707f84d0917c'],
     orderCode: item['69acec3a3b5e707f84d4266b'],
@@ -265,8 +294,8 @@ const getDispatchInquiryList = async () => {
     dispatchCount: item['697b0e503b5e707f84cd912f'],
     finishCount: item['6980728c3b5e707f84ce90e4'],
     worktime: item['697c61173b5e707f84cdd7c1'],
-	reworkCount: item['697c8f403b5e707f84ce0430'],
-	wasteCount: item['697c8f4f3b5e707f84ce0437'],
+	reworkCount: item['69c23c283b5e707f84da9bb9'],
+	wasteCount: item['69c23c283b5e707f84da9bba'],
 	rowid: item['rowid'],
 	machineNumber: item['695c9af59223cfe3a0c02d5f'],
 	mouldNumber: item['695c9b009223cfe3a0c02d66'],
@@ -804,23 +833,75 @@ const quit = () => {
 				.dispatchInquiry-item-info-bottom {
 					width: 100%;
 					display: flex;
-					flex-wrap: wrap;
+					flex-direction: column;
 					margin-top: px2vw(10px);
+					gap: 0;
 
-					.goodsName,
-					.goodsCode,
-					.processName,
-					.worker,
-					.dispatchCount,
-					.finishCount,
-					.worktime,
-					.reworkCount,
-					.wasteCount {
-						font-size: px2vw(25px);
+					.info-row {
+						width: 100%;
 						display: flex;
-						justify-content: flex-start;
-						align-items: center;
-						width: px2vw(600px);
+						flex-direction: row;
+						align-items: flex-start;
+						gap: px2vw(12px);
+						margin-top: px2vw(12px);
+
+						&:first-child {
+							margin-top: 0;
+						}
+					}
+
+					.info-row-three .info-cell {
+						flex: 1;
+						min-width: 0;
+						display: flex;
+						flex-direction: row;
+						align-items: flex-start;
+						font-size: px2vw(25px);
+						line-height: 1.35;
+
+						.cell-label {
+							color: #666;
+							flex-shrink: 0;
+							white-space: nowrap;
+						}
+
+						.cell-value {
+							flex: 1;
+							min-width: 0;
+							color: #333;
+							word-break: break-all;
+						}
+					}
+
+					.info-row-process-worker {
+						margin-top: px2vw(12px);
+						padding-top: px2vw(10px);
+						border-top: px2vw(1px) solid #eee;
+						align-items: flex-start;
+						gap: px2vw(16px);
+
+						.info-cell-block {
+							flex: 1;
+							min-width: 0;
+							display: flex;
+							flex-direction: column;
+							align-items: flex-start;
+							gap: px2vw(6px);
+							font-size: px2vw(25px);
+
+							.cell-label {
+								color: #666;
+								flex-shrink: 0;
+							}
+
+							.cell-value-multiline {
+								width: 100%;
+								color: #333;
+								word-break: break-all;
+								white-space: normal;
+								line-height: 1.45;
+							}
+						}
 					}
 				}
 			}

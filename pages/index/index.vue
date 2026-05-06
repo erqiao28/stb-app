@@ -1,5 +1,16 @@
 <template>
 	<view class="content-container" :style="{ paddingTop: statusBarHeight + 'px' }">
+		<view class="main-home" v-if="isMainPage">
+			<view class="btn-box">
+				<button @click="goSelectBills">订单派工</button>
+				<button @click="goSelectProductDispatch">产品派工</button>
+				<button @click="goReworkDispatch">返工派工</button>
+				<button @click="goTimeWork">记时派工</button>
+				<button @click="goDispatchInquiry">派工查询</button>
+				<button @click="goWorkload">员工工作量查询</button>
+			</view>
+		</view>
+		<view v-else>
 		<!-- 用户列表 -->
 		<view class="user-list" v-if="isUserlist">
 			<view class="user-item" v-for="item in userStore.userlist">
@@ -41,6 +52,7 @@
 				<image src="/static/key.svg"></image>修改密码
 			</button>
 		</view>
+		</view>
 	</view>
 </template>
 
@@ -63,7 +75,10 @@ import { callWorkflowListAPIPaged } from '../../utils/workflow'
 // 使用状态栏高度
 const { statusBarHeight } = useStatusBar()
 
-onLoad(() => {
+onLoad((options) => {
+	if (options?.mode === 'main') {
+		isMainPage.value = true
+	}
 	if (userStore.rememberPassword === true) {
 		loginform.value.username = userStore.loginInfo.username
 		loginform.value.password = userStore.loginInfo.password
@@ -284,6 +299,7 @@ const downloadAndInstall = (wgtUrl, newVersion) => {
 // 登录过的用户列表
 const userStore = useUserStore()
 const isUserlist = ref(true)
+const isMainPage = ref(false)
 const isShow = () => {
 	isUserlist.value = !isUserlist.value
 }
@@ -337,8 +353,8 @@ const login = async () => {
 		userStore.loginInfo.username = loginform.value.username
 		userStore.loginInfo.password = loginform.value.password
 	}
-	// 跳转选择订单页面
-	goSelectBills()
+	// 登录后跳转到主页面（index 主页面模式）
+	goMainHome()
 }
 
 // 选择登入的工作者
@@ -353,17 +369,50 @@ const del = (rowid) => {
 	userStore.userlist.splice(index, 1)
 }
 
-// 跳转主页面
-const goMain = () => {
-	uni.navigateTo({
+// 跳转主页面（index 页面）
+const goMainHome = () => {
+	uni.redirectTo({
 		url: '/pages/main/main'
 	})
 }
 
-// 跳转选择订单页面（登录成功后进入）
+// 主页面按钮：订单派工
 const goSelectBills = () => {
 	uni.navigateTo({
-		url: '/pages/selectBills/selectBills'
+		url: `/pages/selectBills/selectBills?billTypeIndex=0&billType=${encodeURIComponent('正常排产')}&billTypeReadonly=1`
+	})
+}
+
+// 主页面按钮：产品派工（暂不设置）
+const goSelectProductDispatch = () => {
+	showToast('产品派工跳转暂未设置')
+}
+
+// 主页面按钮：返工派工（暂不设置）
+const goReworkDispatch = () => {
+	uni.navigateTo({
+		url: `/pages/selectBills/selectBills?billTypeIndex=1&billType=${encodeURIComponent('返工排产')}&billTypeReadonly=1`
+	})
+}
+
+// 主页面按钮：记时派工
+const goTimeWork = () => {
+	uni.navigateTo({
+		url: '/pages/timeWork/timeWork'
+	})
+}
+
+// 主页面按钮：派工查询
+const goDispatchInquiry = () => {
+	uni.navigateTo({
+		url: '/pages/dispatchInquiry/dispatchInquiry'
+	})
+}
+
+// 主页面按钮：员工工作量查询
+const goWorkload = () => {
+	uni.navigateTo({
+		url: '/pages/workload/workload'
 	})
 }
 
@@ -398,6 +447,34 @@ const goFieldTypes = async () => {
 	background-color: #3556e3;
 	display: flex;
 	box-sizing: border-box;
+
+	.main-home {
+		width: 100%;
+		height: 100%;
+		display: flex;
+		align-items: flex-end;
+
+		.btn-box {
+			width: 100%;
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: space-between;
+			padding: 0 px2vw(40px) px2vw(60px);
+			gap: px2vw(25px);
+
+			button {
+				width: calc((100% - #{px2vw(50px)}) / 3);
+				height: px2vw(120px);
+				background-color: white;
+				color: #3556e3;
+				border-radius: px2vw(60px);
+				font-size: px2vw(40px);
+				display: flex;
+				justify-content: center;
+				align-items: center;
+			}
+		}
+	}
 
 	/* 用户列表 */
 	.user-list {
@@ -487,8 +564,6 @@ const goFieldTypes = async () => {
 
 		.rem-box {
 			margin: px2vw(25px);
-
-			.rem-check {}
 
 			.rem-text {
 				color: #fff;

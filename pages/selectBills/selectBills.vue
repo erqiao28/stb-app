@@ -9,14 +9,14 @@
 			<view></view>
 		</view>
 		<!-- 顶部功能按钮栏：派工查询、员工工作量查询、多对多派工查询、记时派工 -->
-		<view class="btn-list">
+		<view class="btn-list" v-show="false">
 			<view class="btn-item" @click="goTimeWork">记时派工</view>
 			<view class="btn-item" @click="goDispatchInquiry">派工查询</view>
 			<view class="btn-item" @click="goWorkload">员工工作量查询</view>
 			<view class="btn-item" v-if="workshop === '组装车间' || workshop === '喷涂车间'" @click="goDispatchInquiryMore">多对多派工查询</view>
 		</view>
 
-		<!-- 搜索区域：销售订单 + 查询 + 排产类型（右侧两个按钮） -->
+		<!-- 搜索区域：销售订单 + 查询（排产类型由入口参数/缓存固定，不再提供切换按钮） -->
 		<view class="search-box">
 			<view class="salesOrder">
 				<text class="salesOrder-text">销售订单</text>
@@ -25,22 +25,15 @@
 				</view>
 			</view>
 			<view class="btn-item search-btn" @click="search">查询</view>
-			<view class="bill-type-btns">
-				<view
-					class="bill-type-btn"
-					:class="{ active: billTypeIndex === 0 }"
-					@click="setBillType(0)"
-				>正常排产</view>
-				<view
-					class="bill-type-btn bill-type-btn--rework"
-					:class="{ active: billTypeIndex === 1 }"
-					@click="setBillType(1)"
-				>返工排产</view>
-			</view>
 		</view>
 
-		<!-- 订单列表：订单编号、出货时间、客户名称、产品数量（返工排产时显示为返工产品数量） -->
-		<view class="orderList">
+		<!-- 订单列表：订单编号、出货时间、客户名称、产品数量（返工排产时显示为返工产品数量）；上拉加载更多 -->
+		<scroll-view
+			class="orderList"
+			scroll-y
+			:lower-threshold="100"
+			@scrolltolower="onScrollToLower"
+		>
 			<view class="orderItem" v-for="item in billsList" :key="item.orderCode" @click="selectOrder(item)">
 				<view class="goodsInfo row-single">
 					<view class="col col-left">
@@ -61,7 +54,10 @@
 					</view>
 				</view>
 			</view>
-		</view>
+			<view v-if="loadingMore" class="list-footer">加载中...</view>
+			<view v-else-if="!hasMore && billsList.length" class="list-footer">没有更多了</view>
+			<view v-else-if="hasMore && billsList.length" class="list-footer hint">上拉加载更多</view>
+		</scroll-view>
 	</view>
 </template>
 
@@ -82,24 +78,53 @@ const workshop = ref('拉伸车间')
 // 排产类型：与接口字段 694a3954687045435008a7c3 一致（正常排产 / 返工排产）
 const billTypeOptions = ['正常排产', '返工排产']
 const billTypeIndex = ref(0)
+const isBillTypeReadonly = ref(false)
 
 const billsList = ref([])
 const searchForm = ref({ salesOrder: '' })
 
-const setBillType = async (idx) => {
-	if (!Number.isFinite(idx) || idx < 0 || idx >= billTypeOptions.length) return
-	if (idx === billTypeIndex.value) return
-	billTypeIndex.value = idx
-	await search()
-}
+/** 每页条数（与接口分页一致，避免单次请求过大） */
+const LIST_PAGE_SIZE = 100
+const listPageNum = ref(1)
+const hasMore = ref(true)
+const accumulatedRawRows = ref([])
+const loadingMore = ref(false)
+const listLoading = ref(false)
 
 onLoad((options) => {
+	let hasExplicitBillType = false
 	// 优先从登录权限取车间
 	if (userStore.loginLimits && userStore.loginLimits.trim()) {
 		workshop.value = userStore.loginLimits
 	} else if (options && options.workshop) {
 		workshop.value = options.workshop
 	}
+	// 通过入口参数指定默认排产类型（优先使用数字索引，其次中文值）
+	const routeBillTypeIdxRaw = options?.billTypeIndex
+	const routeBillTypeIdx = Number(routeBillTypeIdxRaw)
+	if (
+		routeBillTypeIdxRaw !== undefined &&
+		routeBillTypeIdxRaw !== '' &&
+		Number.isFinite(routeBillTypeIdx) &&
+		routeBillTypeIdx >= 0 &&
+		routeBillTypeIdx < billTypeOptions.length
+	) {
+		billTypeIndex.value = routeBillTypeIdx
+		hasExplicitBillType = true
+	}
+	// 兼容中文参数
+	const routeBillTypeRaw = options?.billType || options?.type
+	const routeBillType = routeBillTypeRaw ? decodeURIComponent(routeBillTypeRaw).trim() : ''
+	if (routeBillType && !hasExplicitBillType) {
+		const idx = billTypeOptions.indexOf(routeBillType)
+		if (idx >= 0) {
+			billTypeIndex.value = idx
+			hasExplicitBillType = true
+		}
+	}
+	// 入口要求：向选择产品/派工传递 billTypeReadonly（排产类型已固定，无页面内切换）
+	const readonlyFlag = String(options?.billTypeReadonly || '')
+	isBillTypeReadonly.value = readonlyFlag === '1' || readonlyFlag.toLowerCase() === 'true'
 	// 恢复持久化的销售订单、排产类型
 	try {
 		const saved = uni.getStorageSync(STORAGE_KEY)
@@ -107,13 +132,16 @@ onLoad((options) => {
 			if (saved.salesOrder !== undefined) {
 				searchForm.value.salesOrder = saved.salesOrder || ''
 			}
-			const idx = saved.billTypeIndex
-			if (
-				typeof idx === 'number' &&
-				idx >= 0 &&
-				idx < billTypeOptions.length
-			) {
-				billTypeIndex.value = idx
+			// 若入口明确指定了排产类型，则不使用本地持久化覆盖
+			if (!hasExplicitBillType) {
+				const idx = saved.billTypeIndex
+				if (
+					typeof idx === 'number' &&
+					idx >= 0 &&
+					idx < billTypeOptions.length
+				) {
+					billTypeIndex.value = idx
+				}
 			}
 		}
 	} catch (e) {
@@ -143,65 +171,71 @@ onShow(() => {
 	}
 })
 
-const getBillsListRaw = async () => {
-	const res = await callWorkflowListAPIPaged(
+const buildQueryPayload = (extra = {}) => ({
+	worksheetId: 'paichanjihua',
+	filters: [
 		{
-			worksheetId: 'paichanjihua',
-			filters: [
-				{
-					controlId: '67de26c9c5377d50a523c735',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: [workshop.value]
-				},
-				{
-					controlId: '694a3954687045435008a7c3',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: [billTypeOptions[billTypeIndex.value]]
-				},
-				{
-					controlId: '655b875ffc44a9469a3aa225',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: ['已排产']
-				},
-				{
-					controlId: '69db0017665ab27f3913c455',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 6,
-					values: ['准时交货']
-				},
-				{
-					controlId: '66974cda2503723eec1af600',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 8
-				}
-			]
+			controlId: '67de26c9c5377d50a523c735',
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: [workshop.value]
 		},
-		1000,
-		1
+		{
+			controlId: '694a3954687045435008a7c3',
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: [billTypeOptions[billTypeIndex.value]]
+		},
+		{
+			controlId: '655b875ffc44a9469a3aa225',
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: ['已排产']
+		},
+		{
+			controlId: '69db0017665ab27f3913c455',
+			dataType: 30,
+			spliceType: 1,
+			filterType: 6,
+			values: ['准时交货']
+		},
+		{
+			controlId: '66974cda2503723eec1af600',
+			dataType: 30,
+			spliceType: 1,
+			filterType: 8
+		}
+	],
+	...extra
+})
+
+/** 请求一页；loadMore 时 silent 避免重复全屏 loading */
+const fetchBillsPage = async (pageNum, silent = false) => {
+	return await callWorkflowListAPIPaged(
+		buildQueryPayload(silent ? { silent: true } : {}),
+		LIST_PAGE_SIZE,
+		pageNum
 	)
-	return res
 }
 
-const search = async () => {
-	const billsRes = await getBillsListRaw()
-	console.log('[选择订单] 接口完整返回 billsRes:', billsRes)
-	console.log(
-		'[选择订单] 接口原始 data（条数:',
-		billsRes?.data?.length ?? 0,
-		'）:',
-		billsRes?.data
-	)
-	if (!billsRes.data || billsRes.data.length === 0) {
-		billsList.value = []
-		return
+/** 本页是否还可能存在下一页 */
+const updateHasMoreFromResponse = (res, pageNum) => {
+	const rows = res?.data || []
+	if (!rows.length || rows.length < LIST_PAGE_SIZE) return false
+	const total = Number(res?.total) || 0
+	if (total > 0 && pageNum * LIST_PAGE_SIZE >= total) return false
+	return true
+}
+
+/**
+ * 将已累积的原始行过滤、按订单汇总、关键字与排序（与原先单次拉取逻辑一致）
+ */
+const buildDisplayListFromRawRows = (rawRows) => {
+	if (!rawRows || rawRows.length === 0) {
+		return []
 	}
 
 	// 正常排产：69a8e4563b5e707f84d33c0c（未完成工序数量）需大于 0
@@ -213,25 +247,17 @@ const search = async () => {
 		const p = raw == null ? '' : String(raw).trim()
 		return p === '已完成'
 	}
-	const filteredData = billsRes.data.filter(item => {
+	const filteredData = rawRows.filter(item => {
 		if (billTypeOptions[billTypeIndex.value] === '返工排产') {
 			return !isReworkProgressCompleted(item)
 		}
 		const num = Number(item[FIELD_INCOMPLETE_PROCESS_QTY])
 		return !Number.isNaN(num) && num > 0
 	})
-	console.log(
-		'[选择订单] 过滤后 filteredData（条数:',
-		filteredData.length,
-		'）:',
-		filteredData
-	)
 	if (!filteredData.length) {
-		billsList.value = []
-		return
+		return []
 	}
 
-	// 再按订单（655e1cbbbd2094b316347f92）汇总：同一订单只显示一条，产品数量为该订单的条数，客户名称、出货时间取该订单第一条
 	const orderMap = {}
 	filteredData.forEach(item => {
 		const orderCode = item['655e1cbbbd2094b316347f92'] || ''
@@ -252,7 +278,6 @@ const search = async () => {
 		productCount: orderMap[orderCode].count
 	}))
 
-	// 按销售订单关键字模糊过滤
 	const keyword = (searchForm.value.salesOrder || '').trim().toLowerCase()
 	if (keyword) {
 		list = list.filter(item =>
@@ -260,7 +285,6 @@ const search = async () => {
 		)
 	}
 
-	// 按出货时间升序排列，时间越久的在越下方（无出货时间的排到最后）
 	list.sort((a, b) => {
 		const ta = (a.deliveryTime || '').toString().trim()
 		const tb = (b.deliveryTime || '').toString().trim()
@@ -270,24 +294,76 @@ const search = async () => {
 		return ta.localeCompare(tb)
 	})
 
-	console.log('[选择订单] 汇总并排序后的页面列表 billsList:', list)
-	billsList.value = list
+	return list
+}
+
+const search = async () => {
+	listLoading.value = true
+	listPageNum.value = 1
+	accumulatedRawRows.value = []
+	hasMore.value = true
+	try {
+		const billsRes = await fetchBillsPage(1, false)
+		console.log('[选择订单] 接口完整返回 billsRes:', billsRes)
+		console.log(
+			'[选择订单] 接口原始 data（条数:',
+			billsRes?.data?.length ?? 0,
+			'）:',
+			billsRes?.data
+		)
+		const rows = billsRes?.data || []
+		accumulatedRawRows.value = rows
+		hasMore.value = updateHasMoreFromResponse(billsRes, 1)
+
+		const list = buildDisplayListFromRawRows(accumulatedRawRows.value)
+		console.log('[选择订单] 汇总并排序后的页面列表 billsList:', list)
+		billsList.value = list
+	} finally {
+		listLoading.value = false
+	}
+}
+
+const loadMore = async () => {
+	if (!hasMore.value || loadingMore.value || listLoading.value) return
+	const nextPage = listPageNum.value + 1
+	loadingMore.value = true
+	try {
+		const billsRes = await fetchBillsPage(nextPage, true)
+		const rows = billsRes?.data || []
+		console.log(
+			`[选择订单] 加载更多 第${nextPage}页，条数:`,
+			rows.length,
+			'total:',
+			billsRes?.total
+		)
+		accumulatedRawRows.value = accumulatedRawRows.value.concat(rows)
+		listPageNum.value = nextPage
+		hasMore.value = updateHasMoreFromResponse(billsRes, nextPage)
+		billsList.value = buildDisplayListFromRawRows(accumulatedRawRows.value)
+	} finally {
+		loadingMore.value = false
+	}
+}
+
+const onScrollToLower = () => {
+	loadMore()
 }
 
 // 左箭头固定返回到 index 页面
 const quit = () => {
 	uni.redirectTo({
-		url: '/pages/index/index'
+		url: '/pages/main/main'
 	})
 }
 
 const selectOrder = (item) => {
 	// 进入选择产品页面：车间、订单编号、排产类型（与列表筛选一致）
 	const billType = billTypeOptions[billTypeIndex.value] || '正常排产'
+	const readonlyPart = isBillTypeReadonly.value ? '&billTypeReadonly=1' : ''
 	uni.navigateTo({
 		url: `/pages/selectProduct/selectProduct?workshop=${encodeURIComponent(
 			workshop.value
-		)}&orderCode=${encodeURIComponent(item.orderCode || '')}&billType=${encodeURIComponent(billType)}`
+		)}&orderCode=${encodeURIComponent(item.orderCode || '')}&billTypeIndex=${billTypeIndex.value}&billType=${encodeURIComponent(billType)}&dispatchMode=order${readonlyPart}`
 	})
 }
 
@@ -350,7 +426,7 @@ const goTimeWork = () => {
 		}
 	}
 
-	/* 顶部功能按钮栏；与搜索区排产按钮、查询按钮共用同一套外观 */
+	/* 顶部功能按钮栏；与搜索区查询按钮共用同一套外观 */
 	.btn-list {
 		height: px2vw(120px);
 		width: 100%;
@@ -378,7 +454,6 @@ const goTimeWork = () => {
 	}
 
 	.search-box {
-		/* 排产双按钮组与查询按钮同宽 */
 		$search-row-btn-w: px2vw(340px);
 
 		display: flex;
@@ -392,41 +467,6 @@ const goTimeWork = () => {
 		border-radius: px2vw(18px);
 		box-sizing: border-box;
 		gap: px2vw(10px);
-
-		/* 与 .search-btn 同宽同高同内边距 */
-		.bill-type-btns {
-			display: flex;
-			align-items: stretch;
-			gap: px2vw(10px);
-			box-sizing: border-box;
-		}
-
-		.bill-type-btn {
-			flex: 0 0 $search-row-btn-w;
-			width: $search-row-btn-w;
-			height: px2vw(80px);
-			padding: px2vw(16px) px2vw(25px);
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			border-radius: px2vw(18px);
-			font-size: px2vw(25px);
-			box-sizing: border-box;
-			color: #2755f1;
-			background-color: #e8eefc;
-			border: px2vw(2px) solid #b8c8f5;
-		}
-
-		.bill-type-btn.active {
-			color: #fff;
-			background-color: #2755f1;
-			border-color: #2755f1;
-		}
-
-		.bill-type-btn--rework.active {
-			background-color: #e53935;
-			border-color: #e53935;
-		}
 
 		.salesOrder {
 			display: flex;
@@ -466,8 +506,19 @@ const goTimeWork = () => {
 
 	.orderList {
 		flex: 1;
-		overflow-y: auto;
-		-webkit-overflow-scrolling: touch;
+		min-height: 0;
+		height: 0;
+
+		.list-footer {
+			padding: px2vw(24px);
+			text-align: center;
+			font-size: px2vw(22px);
+			color: #999;
+
+			&.hint {
+				color: #bbb;
+			}
+		}
 
 		.orderItem {
 			width: 98%;

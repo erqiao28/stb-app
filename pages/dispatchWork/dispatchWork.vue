@@ -96,7 +96,9 @@
         <view class="dispatch-confirm-tip">确认派工吗？</view>
         <view class="dispatch-confirm-footer">
           <button class="btn-cancel" @click="closeDispatchConfirmModal">取消</button>
-          <button class="btn-confirm" @click="handleDispatchConfirm">确认派工</button>
+          <button class="btn-confirm" :disabled="processDispatchConfirmSubmitting" @click.stop="handleDispatchConfirm">
+            确认派工
+          </button>
         </view>
       </view>
     </view>
@@ -271,23 +273,44 @@
         
         <!-- 可滚动内容区域（包含表单信息和员工表格） -->
         <scroll-view scroll-y class="modal-scroll-content">
-          <!-- 表单信息区域 -->
-          <view class="modal-body">
-            <!-- 排产数量（返工排产时显示为返工数量）和派工数量 -->
-            <view class="row-group">
-              <view class="form-group">
-                <text class="label">{{ currentMultiDispatchItem?.billType === '返工排产' ? '返工数量' : '排产数量' }}：</text>
-                <text class="value-readonly">{{ multiDispatchData.productionCount }}</text>
-              </view>
-              <view class="form-group">
-                <text class="label">派工数量：</text>
-                <input v-model.number="multiDispatchData.quantity" type="number" placeholder="请输入数量"
-                  min="0" class="input-field" />
+          <!-- 多对多：产品派工才显示按单列表；订单派工用下方表单字段 -->
+          <view
+            v-if="dispatchMode === 'product' && multiDispatchModalSummaryRows.length"
+            class="multi-dispatch-modal-summary"
+          >
+            <view class="multi-dispatch-summary-header">
+              <text class="col order">订单编号</text>
+              <text class="col prod">{{ multiDispatchSummaryProdColTitle }}</text>
+              <text class="col qty-head">派工数量</text>
+            </view>
+            <view
+              v-for="(row, idx) in multiDispatchModalSummaryRows"
+              :key="`md-sum-${row.billKey}-${idx}`"
+              class="multi-dispatch-summary-row"
+            >
+              <text class="col order">{{ row.orderCode }}</text>
+              <text class="col prod">{{ row.productionQtyDisplay }}</text>
+              <view class="col qty-col">
+                <input
+                  v-model.number="multiDispatchQtyByBillKey[row.billKey]"
+                  type="number"
+                  placeholder="请输入"
+                  min="0"
+                  class="multi-dispatch-qty-input"
+                />
               </view>
             </view>
-            
-            <!-- 派工日期 -->
-            <view class="row-group">
+            <view class="multi-dispatch-summary-total-row">
+              <text class="col order">总派工数量</text>
+              <text class="col prod"></text>
+              <text class="col qty-col total-qty">{{ multiDispatchTotalQty }}</text>
+            </view>
+          </view>
+
+          <!-- 表单信息区域 -->
+          <view class="modal-body">
+            <!-- 产品派工：派工日期 + 计薪方式 -->
+            <view class="row-group" v-if="dispatchMode === 'product'">
               <view class="form-group">
                 <text class="label">派工日期：</text>
                 <picker mode="date" :value="multiDispatchData.date" @change="onMultiDateChange">
@@ -296,10 +319,6 @@
                   </view>
                 </picker>
               </view>
-            </view>
-
-            <!-- 计薪方式（与上面行布局一致：左侧字段 + 右侧占位） -->
-            <view class="row-group">
               <view class="form-group">
                 <text class="label">计薪方式：</text>
                 <picker mode="selector" :range="salaryMethodOptions" :value="multiSalaryMethodIndex" @change="onMultiSalaryMethodChange">
@@ -308,7 +327,42 @@
                   </view>
                 </picker>
               </view>
-              <view class="form-group"></view>
+            </view>
+
+            <!-- 订单派工：仅排产数量、派工数量、派工日期、计薪方式（无订单数量） -->
+            <view class="row-group" v-if="dispatchMode !== 'product'">
+              <view class="form-group">
+                <text class="label">{{ multiDispatchSummaryProdColTitle }}：</text>
+                <text class="value-readonly">{{ multiDispatchOrderModeProductionDisplay }}</text>
+              </view>
+              <view class="form-group">
+                <text class="label">派工数量：</text>
+                <input
+                  v-model.number="multiDispatchData.quantity"
+                  type="number"
+                  placeholder="请输入"
+                  min="0"
+                  class="input-field"
+                />
+              </view>
+            </view>
+            <view class="row-group" v-if="dispatchMode !== 'product'">
+              <view class="form-group">
+                <text class="label">派工日期：</text>
+                <picker mode="date" :value="multiDispatchData.date" @change="onMultiDateChange">
+                  <view class="value">
+                    {{ multiDispatchData.date || '请选择日期' }}
+                  </view>
+                </picker>
+              </view>
+              <view class="form-group">
+                <text class="label">计薪方式：</text>
+                <picker mode="selector" :range="salaryMethodOptions" :value="multiSalaryMethodIndex" @change="onMultiSalaryMethodChange">
+                  <view class="value">
+                    {{ multiDispatchData.salaryMethod || '计件' }}
+                  </view>
+                </picker>
+              </view>
             </view>
             
             <!-- 所选工序展示 -->
@@ -316,11 +370,11 @@
               <view class="form-group full">
                 <text class="label">所选工序：</text>
                 <view class="processes-display-inline">
-                  <view v-for="(process, index) in selectedMultiProcesses" :key="index" class="process-display-inline-wrapper">
+                  <view v-for="(process, index) in multiDispatchSelectedProcessesForModal" :key="index" class="process-display-inline-wrapper">
                     <view class="process-display-inline-box">
                       <text class="process-display-inline-name">{{ process.process.processName }}</text>
                     </view>
-                    <view v-if="index < selectedMultiProcesses.length - 1" class="process-display-connector">→</view>
+                    <view v-if="index < multiDispatchSelectedProcessesForModal.length - 1" class="process-display-connector">→</view>
                   </view>
                 </view>
               </view>
@@ -366,94 +420,189 @@
         
         <!-- 可滚动内容区域（包含表单信息和员工表格） -->
         <scroll-view scroll-y class="modal-scroll-content">
-          <!-- 表单信息区域 -->
-          <view class="modal-body">
-            <!-- 订单编号和工序名称 -->
-            <view class="row-group">
-              <view class="form-group">
-                <text class="label">订单编号：</text>
-                <text class="value">{{ selectedProcessData?.item?.orderCode }}</text>
-              </view>
-              <view class="form-group">
-                <text class="label">工序：</text>
-                <text class="value">{{ selectedProcessData?.process?.processName }}</text>
-              </view>
+          <!-- 产品派工：顶部汇总列表（当前工序在各勾选单据上的数量） -->
+          <view
+            v-if="dispatchMode === 'product' && productDispatchModalProcessRows.length"
+            class="product-dispatch-modal-summary"
+          >
+            <view class="product-dispatch-summary-header">
+              <text class="col order">订单编号</text>
+              <text class="col num">需派工数量</text>
+              <text class="col num">已派工数量</text>
+              <text class="col num">标准日产量</text>
+              <text class="col qty-head">派工数量</text>
+              <text class="col time-col">工时</text>
             </view>
-            
-            <!-- 已派工数量和待派工数量 -->
-            <view class="row-group">
-              <view class="form-group">
-                <text class="label">已派工数量：</text>
-                <text class="value">{{ selectedProcessData?.process?.dispatchedCount }}</text>
+            <view
+              v-for="(r, idx) in productDispatchModalProcessRows"
+              :key="`pd-sum-${r.orderCode}-${idx}`"
+              class="product-dispatch-summary-row"
+            >
+              <text class="col order">{{ r.orderCode }}</text>
+              <text class="col num">{{ r.needCount }}</text>
+              <text class="col num">{{ r.dispatchedCount }}</text>
+              <text class="col num">{{ r.dailyoutput === '-' ? '-' : r.dailyoutput }}</text>
+              <view class="col qty-col">
+                <input
+                  v-model="productDispatchQtyByBillKey[r.billKey]"
+                  type="number"
+                  placeholder="请输入"
+                  min="0"
+                  :max="typeof r.needCount === 'number' ? r.needCount : undefined"
+                  class="product-modal-qty-input"
+                />
               </view>
-              <view class="form-group">
-                <text class="label">需派工数量：</text>
-                <text class="value">{{ selectedProcessData?.process?.needCount }}</text>
-              </view>
+              <text class="col time-col">{{ getProductModalRowWorkTime(r) }}</text>
             </view>
-            
-            <!-- 本次派工数量和时数 -->
-            <view class="row-group">
-              <view class="form-group">
-                <text class="label">派工数量：</text>
-                <input v-model.number="processDispatchData.quantity" type="number" placeholder="请输入数量"
-                  :max="maxQuantity" min="0" class="input-field" />
+            <view class="product-dispatch-summary-footer">
+              <text class="col order footer-label">总派工数量</text>
+              <text class="col num"></text>
+              <text class="col num"></text>
+              <text class="col num"></text>
+              <view class="col qty-col">
+                <text class="footer-total">{{ productDispatchModalTotalQty }}</text>
               </view>
-              <view class="form-group">
-                <text class="label">派工工时：</text>
-                <input v-model.number="processDispatchData.time" type="number" placeholder="自动计算" 
-                  class="input-field" readonly />
-              </view>
+              <text class="col time-col"></text>
             </view>
-            
-            <!-- 机台和模具选择 -->
-            <view class="row-group">
-              <view class="form-group">
-                <text class="label">机台：</text>
-                <view class="value" @click="getMachineList">
-                  {{ machine?.name || '请选择机台' }}
+            <view class="product-dispatch-summary-footer hours">
+              <text class="col order footer-label">总工时</text>
+              <text class="col num"></text>
+              <text class="col num"></text>
+              <text class="col num"></text>
+              <text class="col qty-col"></text>
+              <text class="col time-col footer-total">{{ productDispatchModalTotalWorkTime }}</text>
+            </view>
+            <view class="product-dispatch-summary-footer wage">
+              <text class="col order footer-label">总工资</text>
+              <text class="col num"></text>
+              <text class="col num"></text>
+              <text class="col num"></text>
+              <view class="col qty-col">
+                <text class="footer-total">{{ productDispatchModalTotalWage }}</text>
+              </view>
+              <text class="col time-col"></text>
+            </view>
+          </view>
+
+          <!-- 表单：产品派工固定两列网格；订单派工沿用原横向 row-group -->
+          <view class="modal-body" :class="{ 'modal-body--product-grid': dispatchMode === 'product' }">
+            <template v-if="dispatchMode === 'product'">
+              <view class="modal-form-grid">
+                <view class="modal-grid-cell">
+                  <text class="modal-grid-label">工序：</text>
+                  <view class="modal-grid-value modal-grid-value--readonly">{{ selectedProcessData?.process?.processName }}</view>
+                </view>
+                <view class="modal-grid-cell">
+                  <text class="modal-grid-label">机台：</text>
+                  <view class="modal-grid-value modal-grid-value--tap" @click="getMachineList">
+                    {{ machine?.name || '请选择机台' }}
+                  </view>
+                </view>
+                <view class="modal-grid-cell">
+                  <text class="modal-grid-label">模具：</text>
+                  <view class="modal-grid-value modal-grid-value--readonly">{{ selectedProcessData?.process?.mold || '无' }}</view>
+                </view>
+                <view class="modal-grid-cell">
+                  <text class="modal-grid-label">派工日期：</text>
+                  <picker mode="date" :value="processDispatchData.date" @change="onDateChange" class="modal-grid-picker">
+                    <view class="modal-grid-value modal-grid-value--tap">{{ processDispatchData.date || '请选择日期' }}</view>
+                  </picker>
+                </view>
+                <view class="modal-grid-cell">
+                  <text class="modal-grid-label">计薪方式：</text>
+                  <picker mode="selector" :range="salaryMethodOptions" :value="salaryMethodIndex" @change="onSalaryMethodChange" class="modal-grid-picker">
+                    <view class="modal-grid-value modal-grid-value--tap">{{ processDispatchData.salaryMethod || '请选择计薪方式' }}</view>
+                  </picker>
                 </view>
               </view>
-              <view class="form-group">
-                <text class="label">模具：</text>
-                <text class="value-readonly">{{ selectedProcessData?.process?.mold || '无' }}</text>
+            </template>
+            <template v-else>
+              <!-- 订单编号和工序名称 -->
+              <view class="row-group">
+                <view class="form-group" v-if="dispatchMode !== 'product'">
+                  <text class="label">订单编号：</text>
+                  <text class="value">{{ selectedProcessData?.item?.orderCode }}</text>
+                </view>
+                <view class="form-group">
+                  <text class="label">工序：</text>
+                  <text class="value">{{ selectedProcessData?.process?.processName }}</text>
+                </view>
               </view>
-            </view>
-            
-            <!-- 日期选择和日产量 -->
-            <view class="row-group">
-              <view class="form-group">
-                <text class="label">派工日期：</text>
-                <picker mode="date" :value="processDispatchData.date" @change="onDateChange">
-                  <view class="value">
-                    {{ processDispatchData.date || '请选择日期' }}
+
+              <!-- 已派工数量和需派工数量（订单派工） -->
+              <view class="row-group" v-if="dispatchMode !== 'product'">
+                <view class="form-group">
+                  <text class="label">已派工数量：</text>
+                  <text class="value">{{ selectedProcessData?.process?.dispatchedCount }}</text>
+                </view>
+                <view class="form-group">
+                  <text class="label">需派工数量：</text>
+                  <text class="value">{{ selectedProcessData?.process?.needCount }}</text>
+                </view>
+              </view>
+
+              <!-- 本次派工数量与派工工时 -->
+              <view class="row-group" v-if="dispatchMode !== 'product'">
+                <view class="form-group">
+                  <text class="label">派工数量：</text>
+                  <input v-model.number="processDispatchData.quantity" type="number" placeholder="请输入数量"
+                    :max="maxQuantity" min="0" class="input-field" />
+                </view>
+                <view class="form-group">
+                  <text class="label">派工工时：</text>
+                  <input v-model.number="processDispatchData.time" type="number" placeholder="自动计算"
+                    class="input-field" readonly />
+                </view>
+              </view>
+
+              <!-- 机台和模具选择 -->
+              <view class="row-group">
+                <view class="form-group">
+                  <text class="label">机台：</text>
+                  <view class="value" @click="getMachineList">
+                    {{ machine?.name || '请选择机台' }}
                   </view>
-                </picker>
+                </view>
+                <view class="form-group">
+                  <text class="label">模具：</text>
+                  <text class="value-readonly">{{ selectedProcessData?.process?.mold || '无' }}</text>
+                </view>
               </view>
-              <view class="form-group">
-                <text class="label">标准日产量：</text>
-                <text class="value-readonly">
-                  {{ selectedProcessData?.process?.dailyoutput || 0 }}
-                </text>
+
+              <!-- 日期选择和日产量 -->
+              <view class="row-group">
+                <view class="form-group">
+                  <text class="label">派工日期：</text>
+                  <picker mode="date" :value="processDispatchData.date" @change="onDateChange">
+                    <view class="value">
+                      {{ processDispatchData.date || '请选择日期' }}
+                    </view>
+                  </picker>
+                </view>
+                <view class="form-group" v-if="dispatchMode !== 'product'">
+                  <text class="label">标准日产量：</text>
+                  <text class="value-readonly">
+                    {{ selectedProcessData?.process?.dailyoutput || 0 }}
+                  </text>
+                </view>
               </view>
-            </view>
-            
-            <!-- 计薪方式和工价 -->
-            <view class="row-group">
-              <view class="form-group">
-                <text class="label">计薪方式：</text>
-                <picker mode="selector" :range="salaryMethodOptions" :value="salaryMethodIndex" @change="onSalaryMethodChange">
-                  <view class="value">
-                    {{ processDispatchData.salaryMethod || '请选择计薪方式' }}
-                  </view>
-                </picker>
+
+              <!-- 计薪方式和工价 -->
+              <view class="row-group">
+                <view class="form-group">
+                  <text class="label">计薪方式：</text>
+                  <picker mode="selector" :range="salaryMethodOptions" :value="salaryMethodIndex" @change="onSalaryMethodChange">
+                    <view class="value">
+                      {{ processDispatchData.salaryMethod || '请选择计薪方式' }}
+                    </view>
+                  </picker>
+                </view>
+                <view class="form-group" v-if="dispatchMode !== 'product'">
+                  <text class="label">工价：</text>
+                  <text class="value-readonly">{{ processDispatchData.price ?? 0 }}</text>
+                </view>
               </view>
-              <view class="form-group">
-                <text class="label">工价：</text>
-                <text class="value-readonly">{{ processDispatchData.price ?? 0 }}</text>
-              </view>
-            </view>
-            
+            </template>
           </view>
           
           <!-- 员工选择表格 -->
@@ -480,7 +629,7 @@
         <!-- 模态框底部按钮 -->
         <view class="modal-footer">
           <button class="btn-confirm" @click="addEmployee">添加员工</button>
-          <button class="btn-confirm" @click="confirmProcessDispatch" :disabled="!canDispatch">确认派工</button>
+          <button class="btn-confirm" @click.stop="onConfirmProcessDispatchTap">确认派工</button>
           <button class="btn-confirm" :disabled="isProcessOver" @click="overProcess">终止</button>
           <button class="btn-delete-process" @click="deleteProcess">删除</button>
           <!-- <button class="btn-confirm">转派</button>
@@ -498,18 +647,23 @@
       <view class="title">
         派工( {{ userStore?.loginName || '' }} )
       </view>
-      <view></view>
+      <view class="header-tag-wrap">
+        <text
+          class="dispatch-mode-tag"
+          :class="dispatchMode === 'product' ? 'is-product' : 'is-order'"
+        >{{ dispatchMode === 'product' ? '产品派工' : '订单派工' }}</text>
+      </view>
     </view>
     
     <!-- 功能按钮栏（排产类型由选择订单/选择产品传入，不再提供顶部切换） -->
-    <view class="btn-list">
+    <view class="btn-list" v-show="false">
       <view class="btn-item" @click="goDispatchInquiry">派工查询</view>
       <view class="btn-item" @click="goWorkload">员工工作量查询</view>
       <view class="btn-item" v-if="workshop === '组装车间' || workshop === '喷涂车间'" @click="goDispatchInquiryMore">多对多派工查询</view>
     </view>
 
-    <!-- 顶部信息区域：仅展示订单编号 + 生产单号 + 产品名称 -->
-    <view class="search-box">
+    <!-- 顶部信息区域：订单派工显示单条；产品派工显示多条 -->
+    <view class="search-box" v-if="dispatchMode !== 'product' || selectedProductHeaders.length === 0">
       <view class="info-item">
         <text class="info-label">订单编号</text>
         <view class="info-value">{{ selectedOrderCode || '-' }}</view>
@@ -523,10 +677,30 @@
         <view class="info-value">{{ searchForm.orderItem || '-' }}</view>
       </view>
     </view>
+    <view class="search-box multi" v-else>
+      <view class="info-row" v-for="(row, idx) in selectedProductHeaders" :key="`${row.orderCode}-${row.productionCode}-${idx}`">
+        <view class="info-item">
+          <text class="info-label">订单编号</text>
+          <view class="info-value">{{ row.orderCode || '-' }}</view>
+        </view>
+        <view class="info-item">
+          <text class="info-label">生产单号</text>
+          <view class="info-value">{{ row.productionCode || '-' }}</view>
+        </view>
+        <view class="info-item">
+          <text class="info-label">产品名称</text>
+          <view class="info-value">{{ row.name || '-' }}</view>
+        </view>
+        <view class="info-item">
+          <text class="info-label">订单数量</text>
+          <view class="info-value">{{ row.orderCount === 0 || row.orderCount ? row.orderCount : '-' }}</view>
+        </view>
+      </view>
+    </view>
 
     <!-- 单据列表 -->
     <view class="orderList" :key="listKey">
-      <view class="orderItem" v-for="item in billsList" :key="item.orderCode">
+      <view class="orderItem" v-for="item in billsList" :key="`${item.orderCode || ''}-${item.productionCode || ''}`">
         <view class="goodsInfo">
           <!-- 订单信息头部 -->
           <view class="goodsInfo-up">
@@ -570,11 +744,11 @@
                   @click="openReworkCompleteModal(item)"
                 >返工完成</button>
               </view>
-              <button class="btn-detail" :disabled="!canClickDispatch(item)" @click="dispatchWork(item)">操作</button>
+              <button class="btn-detail" :disabled="!canClickDispatch(item)" @click.stop="dispatchWork(item)">操作</button>
               <button class="btn-delete" @click="addProcess(item)">添加工序</button>
               <button class="btn-normal-process" v-if="item.billType === '返工排产'" @click="useNormalProcess(item)">使用正常工序</button>
               <button class="btn-multi-dispatch" v-if="workshop === '组装车间' || workshop === '喷涂车间'" :disabled="!canClickMultiDispatch(item)" @click="openMultiDispatchModal(item)">多对多派工</button>
-              <button class="btn-one-to-many" v-if="workshop === '抛光车间'" :disabled="!canClickOneToManyDispatch(item)" @click="openOneToManyModal(item)">一对多派工</button>
+              <button class="btn-one-to-many" v-if="workshop === '抛光车间' && dispatchMode !== 'product'" :disabled="!canClickOneToManyDispatch(item)" @click="openOneToManyModal(item)">一对多派工</button>
             </view>
           </view>
           
@@ -680,7 +854,8 @@ import {
   ref,
   computed,
   watch,
-  nextTick
+  nextTick,
+  reactive
 } from 'vue'
 import { onLoad, onUnload, onShow } from '@dcloudio/uni-app'
 import http from '../../utils/request'
@@ -731,7 +906,7 @@ const showMachineModal = ref(false)
 // ---------- 搜索和列表相关 ----------
 // searchValue 仅作为当前选中订单号的展示/占位使用，不再从输入框录入
 const searchValue = ref('')
-// 搜索条件：销售订单、订单物品
+// 搜索条件：销售订单、产品名称（orderItem 字段）
 const searchForm = ref({
   salesOrder: '',
   orderItem: ''
@@ -739,10 +914,13 @@ const searchForm = ref({
 // 当前选中的订单号和生产单号（由选择单据页面传入，兼容历史逻辑，不再作为筛选必填项）
 const selectedOrderCode = ref('')
 const selectedProductionCode = ref('')
+const selectedProductHeaders = ref([])
+const dispatchMode = ref('order')
 const billTypeFilter = ref('正常排产')  // 单据类型过滤参数：正常排产、返工排产（用于获取单据）
 // 排产类型下拉选项
 const billTypeOptions = ref(['正常排产', '返工排产'])
 const billTypeIndex = ref(0)
+const isBillTypeReadonly = ref(false)
 const billsList = ref([])
 const processList = ref([])
 const listKey = ref(0)
@@ -765,6 +943,43 @@ const getBillProductionQtyForDispatch = (item) => {
   return Number.isFinite(n) ? n : 0
 }
 
+/** 产品派工 dispatchList：工序 rowid、派工数量、该行工时（派工数量/小时产量，与界面一致） */
+const buildProductProcessModalDispatchList = (rows) => {
+  return (rows || []).map((r) => {
+    const q = Number(productDispatchQtyByBillKey[r.billKey]) || 0
+    const h = toFiniteNum(r.hourlyoutput, 0)
+    const worktime = h > 0 && q > 0 ? parseFloat((q / h).toFixed(2)) : 0
+    return {
+      processRowid: r.processRowid || '',
+      dispatchQuantity: q,
+      worktime
+    }
+  })
+}
+
+/** 多对多派工：弹窗汇总列表整表快照，经额外字段 dispatchList 传给接口 */
+const buildMultiDispatchModalListPayload = (targets, productMode, orderModeQty) => {
+  return (targets || []).map((t) => {
+    const b = t.item
+    const bk = billKeyForMultiDispatch(b)
+    const q = productMode ? Number(multiDispatchQtyByBillKey.value[bk]) || 0 : orderModeQty
+    return {
+      billKey: bk,
+      billRowid: b?.billRowid || '',
+      orderCode: b?.orderCode || '',
+      productionCode: b?.productionCode || '',
+      billType: b?.billType || '',
+      productionCount: getBillProductionQtyForDispatch(b),
+      productionQtyDisplay:
+        b?.billType === '返工排产'
+          ? formatReworkFieldQtyDisplay(b.reworkFieldQty)
+          : String(getBillProductionQtyForDispatch(b)),
+      dispatchQuantity: q,
+      processRowids: (t.processes || []).map((p) => p.process?.rowid).filter(Boolean)
+    }
+  })
+}
+
 // ---------- 图片预览相关 ----------
 const showImagePreview = ref(false)
 const previewImageUrls = ref([])   // 多图预览的 URL 列表
@@ -772,8 +987,12 @@ const previewImageIndex = ref(0)  // 当前显示的图片下标
 
 // ---------- 工序模态相关 ----------
 const showProcessModal = ref(false)
+/** 单次点击被触发两遍时（常见于 uni-app button），防止重复打开工序派工弹窗 */
+const openingProcessModalGuard = ref(false)
 const selectedProcessData = ref(null)
 const selectedProcess = ref(null) // 当前选中的工序 { item, process }
+/** 产品派工：当前跨单据同步的工序键（仅工序名称），与 selectedProcess 同时维护 */
+const productDispatchProcessSyncKey = ref(null)
 const processDispatchData = ref({
   employee: '',
   quantity: 0,
@@ -1056,6 +1275,8 @@ const confirmReworkComplete = async () => {
 const showDispatchConfirmModal = ref(false)
 const dispatchConfirmRows = ref([])
 const dispatchConfirmAction = ref(null)
+/** 防止确认二次弹窗里「确认派工」连触导致 hook 执行两遍 */
+const processDispatchConfirmSubmitting = ref(false)
 
 // ---------- 员工相关 ----------
 const employeeList = ref([])
@@ -1069,18 +1290,20 @@ const allEmployeesMap = ref({})
 const showMultiDispatchModal = ref(false)
 const selectedMultiProcesses = ref([]) // 多选的工序列表 [{ item, process }]
 const multiDispatchData = ref({
-  orderCount: 0,
-  productionCount: 0,
-  quantity: 0,
+  quantity: 0, // 订单派工多对多：单一派工数量；产品派工用 multiDispatchQtyByBillKey
   date: '', // 派工日期
   isLast: '否', // 是否包含最终工序：是、否，默认值为否
   salaryMethod: '计件' // 计薪方式：计件、计时，默认计件
 })
+/** 多对多：每张单据一行派工数量，key 与 billKeyForMultiDispatch 一致 */
+const multiDispatchQtyByBillKey = ref({})
 const multiIsLastIndex = ref(1) // 多对多派工最终工序索引，默认选中第二个选项（否）
 const multiSalaryMethodIndex = ref(0) // 多对多派工计薪方式索引，默认选中计件
 const multiEmployeeList = ref([])
 const selectedMultiEmployees = ref([])
 const currentMultiDispatchItem = ref(null) // 当前多对多派工的单据
+/** 多对多：与当前锚点工序组合一致的全部单据 [{ item, processes }] */
+const multiDispatchTargets = ref([])
 
 // ---------- 一对多派工相关（多工序，每工序独立派工数量，同一批员工） ----------
 const showOneToManyModal = ref(false)
@@ -1096,6 +1319,28 @@ const addEmployeeMaxSelection = computed(() => (showOneToManyModal.value ? 1 : 0
 
 // 一对多派工 webhook：processDispatchList[{ rowid1, dispatchCount1 }, { rowid2, dispatchCount2 }…] + date + 员工信息
 const ONE_TO_MANY_DISPATCH_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjljMGRhMjAwZjBkMGFkODBmYTQyZGNj'
+/** 订单派工 / 产品派工同一 webhook；产品派工一次请求，明细在 dispatchList [{ processRowid, dispatchQuantity, worktime }] */
+const PROCESS_DISPATCH_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjkyMTJlNzdhOWE4ZGM2YmMxZjczYzlk'
+
+/** 相同 body 并发时合并为一次 uni.request（防止极端双击） */
+const processDispatchPostInflight = new Map()
+const postProcessDispatchHook = (dispatchData) => {
+  let key
+  try {
+    key = JSON.stringify(dispatchData)
+  } catch {
+    key = `${Date.now()}-${Math.random()}`
+  }
+  const existing = processDispatchPostInflight.get(key)
+  if (existing) return existing
+
+  const promise = http.post(PROCESS_DISPATCH_HOOK, dispatchData).finally(() => {
+    processDispatchPostInflight.delete(key)
+  })
+  processDispatchPostInflight.set(key, promise)
+  return promise
+}
+
 // 返工完成
 const REWORK_COMPLETE_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjljY2I3ZTEzMzBiMjAyNjg5ODQ1YTYx'
 // 合并工序（原返工开始 webhook）
@@ -1109,22 +1354,125 @@ const maxQuantity = computed(() => {
   return selectedProcessData.value?.process?.needCount || 0
 })
 
-// 判断是否可以派工：只要需派工数量大于0就可以派工
-const canDispatch = computed(() => {
-  const needCount = selectedProcessData.value?.process?.needCount || 0
-  return needCount > 0
-})
-
 // 判断当前工序是否已终止
 const isProcessOver = computed(() => {
   return selectedProcessData.value?.process?.isOver === 1
 })
 
+/** 列表/工作流字段常为字符串，转成有限数字（避免 canDispatch、max 等严格类型判断失效） */
+const toFiniteNum = (v, fallback = 0) => {
+  if (v === null || v === undefined || v === '') return fallback
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/,/g, ''))
+  return Number.isFinite(n) ? n : fallback
+}
+
+/** 产品派工：工序弹窗顶部列表行（含 billKey、工序 rowid 等，供逐单派工） */
+const getProductDispatchModalRows = () => {
+  if (dispatchMode.value !== 'product' || !selectedProcessData.value?.process || !billsList.value.length) {
+    return []
+  }
+  const selProc = selectedProcessData.value.process
+  const pname = selProc.processName
+
+  return billsList.value.map((bill) => {
+    const list = bill?.processes || []
+    const p = pname != null ? list.find(pr => pr.processName === pname) : null
+    const billKey = `${bill?.orderCode || ''}__${bill?.productionCode || ''}`
+    return {
+      billKey,
+      orderCode: bill?.orderCode || '-',
+      productionCode: bill?.productionCode || '',
+      productCode: bill?.productCode || '',
+      processRowid: p?.rowid || '',
+      needCount: p ? toFiniteNum(p.needCount, 0) : '-',
+      dispatchedCount: p ? toFiniteNum(p.dispatchedCount, 0) : '-',
+      hourlyoutput: p ? toFiniteNum(p.hourlyoutput, 0) : 0,
+      dailyoutput: p ? toFiniteNum(p.dailyoutput, 0) : '-',
+      finishCount: p ? toFiniteNum(p.finishCount, 0) : 0,
+      mold: p?.mold || '',
+      price: toFiniteNum(p?.price, 0)
+    }
+  }).filter(row => row.needCount !== '-' || row.dispatchedCount !== '-')
+}
+
+const productDispatchModalProcessRows = computed(() => getProductDispatchModalRows())
+
+/** 产品派工模态框：列表中各单「派工数量」合计 */
+const productDispatchModalTotalQty = computed(() => {
+  let s = 0
+  for (const r of productDispatchModalProcessRows.value) {
+    s += Number(productDispatchQtyByBillKey[r.billKey]) || 0
+  }
+  return s
+})
+
+/** 产品派工模态框：按每单 派工数量 * 工价 汇总总工资 */
+const productDispatchModalTotalWage = computed(() => {
+  let s = 0
+  for (const r of productDispatchModalProcessRows.value) {
+    const qty = Number(productDispatchQtyByBillKey[r.billKey]) || 0
+    const price = Number(r.price) || 0
+    s += qty * price
+  }
+  return Number(s.toFixed(2))
+})
+
+/** 产品派工模态框：各单派工数量/小时产量 之和（与订单派工单行公式一致） */
+const productDispatchModalTotalWorkTime = computed(() => {
+  let t = 0
+  for (const r of productDispatchModalProcessRows.value) {
+    const q = Number(productDispatchQtyByBillKey[r.billKey]) || 0
+    const h = toFiniteNum(r.hourlyoutput, 0)
+    if (h > 0 && q > 0) t += q / h
+  }
+  return parseFloat(t.toFixed(2))
+})
+
+/** 产品派工列表行：该单派工工时 = 派工数量 / 小时产量 */
+const getProductModalRowWorkTime = (r) => {
+  const q = Number(productDispatchQtyByBillKey[r.billKey]) || 0
+  const h = toFiniteNum(r.hourlyoutput, 0)
+  if (h <= 0 || q <= 0) return 0
+  return parseFloat((q / h).toFixed(2))
+}
+
+/** 产品派工模态框：每单派工数量（key = 订单__生产单） */
+const productDispatchQtyByBillKey = reactive({})
+
+/** 产品派工列表某行：派工数量已填且为大于 0 的数字 */
+const isValidPositiveProductDispatchQty = (billKey) => {
+  const raw = productDispatchQtyByBillKey[billKey]
+  if (raw === undefined || raw === null) return false
+  if (String(raw).trim() === '') return false
+  const n = Number(raw)
+  return Number.isFinite(n) && n > 0
+}
+
+// 判断是否可以派工（订单派工：需派工>0；产品派工：列表每一行派工数量都必须 >0）
+const canDispatch = computed(() => {
+  if (dispatchMode.value === 'product') {
+    const rows = productDispatchModalProcessRows.value
+    if (!rows.length) return false
+    return rows.every((r) => isValidPositiveProductDispatchQty(r.billKey))
+  }
+  const needCount = selectedProcessData.value?.process?.needCount || 0
+  return needCount > 0
+})
+
 // 获取指定订单的选中工序数量
 const getSelectedProcessCount = (item) => {
+  if (
+    dispatchMode.value === 'product' &&
+    productDispatchProcessSyncKey.value &&
+    !isMultiSelectProcessWorkshop.value
+  ) {
+    const name = productDispatchProcessSyncKey.value.processName || ''
+    if (!name) return 0
+    return (item.processes || []).filter((p) => p.processName === name).length
+  }
   if (isMultiSelectProcessWorkshop.value) {
-    // 组装/抛光/喷涂：统计多选的工序数量
-    return selectedMultiProcesses.value.filter(p => p.item.orderCode === item.orderCode).length
+    // 组装/抛光/喷涂：统计当前单据上的多选工序数量
+    return selectedMultiProcesses.value.filter(p => isSameBillAs(p.item, item)).length
   } else {
     // 其他车间（包括喷涂）：检查是否有单选工序
     return selectedProcess.value && selectedProcess.value.item.orderCode === item.orderCode ? 1 : 0
@@ -1220,9 +1568,18 @@ const confirmTerminate = async () => {
 const handleWorkshopConfirm = (value) => {
   workshop.value = value
   showWorkshopModal.value = false
+  // 进入多选工序车间时清空产品派工「同名同步」状态，避免干扰多对多/一对多多选
+  if (value === '组装车间' || value === '抛光车间' || value === '喷涂车间') {
+    if (dispatchMode.value === 'product') {
+      productDispatchProcessSyncKey.value = null
+    }
+  }
   // 切换车间时，组装/抛光/喷涂使用多选；离开这些车间时清空多选状态
   if (value !== '组装车间' && value !== '抛光车间' && value !== '喷涂车间') {
     selectedMultiProcesses.value = []
+    if (dispatchMode.value === 'product') {
+      productDispatchProcessSyncKey.value = null
+    }
   }
   search()
 }
@@ -1292,8 +1649,8 @@ const getProcessRaw = async (billTypeValue = '') => {
     values: [processTypeParam]
   }]
 
-  // 如果有选中的订单号和生产单号，则在接口层按订单号 + 生产单号一起过滤工序
-  if (selectedOrderCode.value) {
+  // 订单派工时：接口层按订单号 + 生产单号过滤；产品派工改为前端按 selectedProducts 过滤
+  if (dispatchMode.value !== 'product' && selectedOrderCode.value) {
     filters.push({
       controlId: '6593b07ae97eb866a50eeba1', // 工序中的订单号字段 processOrder
       dataType: 30,
@@ -1303,7 +1660,7 @@ const getProcessRaw = async (billTypeValue = '') => {
     })
   }
 
-  if (selectedProductionCode.value) {
+  if (dispatchMode.value !== 'product' && selectedProductionCode.value) {
     filters.push({
       controlId: '691d6160535b29cbd5c6c0a9', // 工序中的生产单号 / 产品编号字段 productcode
       dataType: 30,
@@ -1319,6 +1676,71 @@ const getProcessRaw = async (billTypeValue = '') => {
   })
 
   return res
+}
+
+/** 按指定订单号 + 生产单号拉取工序（产品派工多单据时逐单请求，避免全表只取第一页导致其它单据无工序） */
+const getProcessRawForOrderProduct = async (billTypeValue, orderCode, productionCode) => {
+  const processTypeParam = getProcessTypeParam(billTypeValue || '正常排产')
+  const filters = [{
+    controlId: '669a6cae2503723eec1b49bb',
+    dataType: 30,
+    spliceType: 1,
+    filterType: 2,
+    values: [workshop.value]
+  }, {
+    controlId: '6954ad997a59e0522d85df35',
+    dataType: 30,
+    spliceType: 1,
+    filterType: 2,
+    values: [processTypeParam]
+  }]
+  if (orderCode) {
+    filters.push({
+      controlId: '6593b07ae97eb866a50eeba1',
+      dataType: 30,
+      spliceType: 1,
+      filterType: 2,
+      values: [orderCode]
+    })
+  }
+  if (productionCode) {
+    filters.push({
+      controlId: '691d6160535b29cbd5c6c0a9',
+      dataType: 30,
+      spliceType: 1,
+      filterType: 2,
+      values: [productionCode]
+    })
+  }
+  return callWorkflowListAPIPaged({
+    worksheetId: 'paigongdan',
+    filters,
+    silent: true
+  })
+}
+
+/** 产品派工：为 baseBills 中每条单据拉工序并合并（按 rowid 去重） */
+const loadProcessesForProductBills = async (baseBills, billTypeValue) => {
+  const pairMap = new Map()
+  for (const b of baseBills) {
+    const k = `${b.orderCode || ''}__${b.productionCode || ''}`
+    if (!pairMap.has(k)) {
+      pairMap.set(k, { orderCode: b.orderCode, productionCode: b.productionCode })
+    }
+  }
+  const merged = []
+  const rowidSeen = new Set()
+  for (const { orderCode, productionCode } of pairMap.values()) {
+    const res = await getProcessRawForOrderProduct(billTypeValue, orderCode, productionCode)
+    const rows = res.data || []
+    for (const row of rows) {
+      const rid = row.rowid
+      if (rid != null && rowidSeen.has(rid)) continue
+      if (rid != null) rowidSeen.add(rid)
+      merged.push(row)
+    }
+  }
+  return merged
 }
 
 // 根据当前车间和单据类型获取单据列表
@@ -1342,8 +1764,8 @@ const getBillsListRaw = async () => {
     filterType: 8
   }]
 
-  // 如果有选中的订单号和生产单号，则在接口层按订单号 + 生产单号一起过滤单据
-  if (selectedOrderCode.value) {
+  // 订单派工时：接口层按订单号 + 生产单号过滤；产品派工改为前端按 selectedProducts 过滤
+  if (dispatchMode.value !== 'product' && selectedOrderCode.value) {
     filters.push({
       controlId: '655e1cbbbd2094b316347f92', // 单据中的订单号字段
       dataType: 30,
@@ -1353,7 +1775,7 @@ const getBillsListRaw = async () => {
     })
   }
 
-  if (selectedProductionCode.value) {
+  if (dispatchMode.value !== 'product' && selectedProductionCode.value) {
     filters.push({
       controlId: '698438933b5e707f84cf51fd', // 单据中的生产单号字段
       dataType: 30,
@@ -1389,6 +1811,7 @@ const scheduleCodesMatchWhenBothSet = (billSchedule, processSchedule) => {
 const search = async () => {
   // 清除选中状态
   selectedProcess.value = null
+  productDispatchProcessSyncKey.value = null
   // 每次刷新都清空多选工序，避免删除/刷新后残留旧 rowid 影响按钮可用性
   selectedMultiProcesses.value = []
 
@@ -1471,19 +1894,35 @@ const search = async () => {
     }
   })
 
+  // 产品派工：仅保留选择产品页勾选带入的单据（订单号 + 生产单号）
+  if (dispatchMode.value === 'product' && selectedProductHeaders.value.length > 0) {
+    const selectedKeys = new Set(
+      selectedProductHeaders.value.map(h => `${h.orderCode || ''}__${h.productionCode || ''}`)
+    )
+    baseBills = baseBills.filter(b => selectedKeys.has(`${b.orderCode || ''}__${b.productionCode || ''}`))
+  }
+
   if (!baseBills.length) {
     billsList.value = []
     processList.value = []
     return
   }
 
-  // 获取当前单据类型对应的工序列表（按车间 + 工序类型）
-  const processRes = await getProcessRaw(billTypeFilter.value)
+  // 获取当前单据类型对应的工序列表
+  // 订单派工：车间 + 工序类型 + 当前选中订单/生产单（接口过滤）
+  // 产品派工：按每条单据的订单号+生产单分别请求后合并，避免分页只返回一页导致其它单据无工序
+  let processRowsRaw = []
+  if (dispatchMode.value === 'product' && baseBills.length > 0) {
+    processRowsRaw = await loadProcessesForProductBills(baseBills, billTypeFilter.value)
+  } else {
+    const processRes = await getProcessRaw(billTypeFilter.value)
+    processRowsRaw = processRes.data || []
+  }
 
-  if (!processRes.data || processRes.data.length === 0) {
+  if (!processRowsRaw.length) {
     processList.value = []
   } else {
-    const allProcesses = processRes.data.map(item => ({
+    const allProcesses = processRowsRaw.map(item => ({
       processName: item['656ffd1bba5ef3863bf3ec1e'],
       needCount: item['690dc19f8d797ee211e7fc60'], // 需派工数量
       finishCount: item['697c8b023b5e707f84ce02cc'], // 完成总数量
@@ -1719,19 +2158,89 @@ const handleImageError = (e) => {
 
 
 // ---------- 工序模态相关方法 ----------
+const buildProductDispatchSyncKey = (process) => ({
+  processName: process?.processName || ''
+})
+
+const syncKeysEqual = (a, b) => {
+  if (!a || !b) return false
+  return a.processName === b.processName
+}
+
+/** 产品派工：在一张单据上找到与同步键对应的工序（仅按工序名称，多条同名取第一条） */
+const findProcessOnBillBySyncKey = (bill, key) => {
+  if (!bill?.processes?.length || !key?.processName) return null
+  return bill.processes.find(pr => pr.processName === key.processName) || null
+}
+
+const collectProductDispatchSyncedPairs = (key) => {
+  const pairs = []
+  for (const bill of billsList.value) {
+    const p = findProcessOnBillBySyncKey(bill, key)
+    if (p) pairs.push({ item: bill, process: p })
+  }
+  return pairs
+}
+
+/** 是否为同一单据（订单号 + 生产单号） */
+const isSameBillAs = (bill, anchor) => {
+  if (!bill || !anchor) return false
+  return (
+    String(bill.orderCode || '') === String(anchor.orderCode || '') &&
+    String(bill.productionCode || '') === String(anchor.productionCode || '')
+  )
+}
+
+/** 多对多分桶：优先 billRowid，避免生产单号缺失时多张单据被合并成一组 */
+const billKeyForMultiDispatch = (item) => {
+  const rid = item?.billRowid
+  if (rid != null && String(rid).trim() !== '') return `rid:${String(rid)}`
+  return `${item?.orderCode || ''}__${item?.productionCode || ''}`
+}
+
+/** 组装/抛光/喷涂：勾选一道工序时，所有单据上同名工序一并勾选或取消（键为工序名） */
+const toggleMultiProcessSyncedGroup = (item, process) => {
+  const key = buildProductDispatchSyncKey(process)
+  const pairs = collectProductDispatchSyncedPairs(key)
+  if (!pairs.length) return
+  const pairIncluded = (pair) =>
+    selectedMultiProcesses.value.some(
+      s => isSameBillAs(s.item, pair.item) && s.process.rowid === pair.process.rowid
+    )
+  const allSelected = pairs.every(pairIncluded)
+  if (allSelected) {
+    selectedMultiProcesses.value = selectedMultiProcesses.value.filter(
+      s => !pairs.some(p => isSameBillAs(p.item, s.item) && p.process.rowid === s.process.rowid)
+    )
+  } else {
+    for (const p of pairs) {
+      if (!pairIncluded(p)) {
+        selectedMultiProcesses.value.push({ item: p.item, process: p.process })
+      }
+    }
+  }
+  const rem = selectedMultiProcesses.value.find(r => isSameBillAs(r.item, item))
+  selectedProcess.value = rem ? { item: rem.item, process: rem.process } : null
+}
+
 // 选择工序
 const selectProcess = (item, process) => {
-  if (isMultiSelectProcessWorkshop.value) {
-    // 组装/抛光/喷涂：多选 toggle，并同步 selectedProcess（与模板工序点击一致）
-    toggleMultiProcess(item, process)
-    // 同时更新单选状态，用于兼容
-    if (isMultiProcessSelected(item, process)) {
-      selectedProcess.value = { item, process }
-    } else {
-      // 如果取消多选，检查是否还有其他选中的
-      const remaining = selectedMultiProcesses.value.find(p => p.item.orderCode === item.orderCode)
-      selectedProcess.value = remaining ? { item: remaining.item, process: remaining.process } : null
+  // 产品派工仅对「单选工序」车间做跨单同名同步；组装/抛光/喷涂仍走多选以便多对多/一对多
+  if (dispatchMode.value === 'product' && !isMultiSelectProcessWorkshop.value) {
+    const key = buildProductDispatchSyncKey(process)
+    if (productDispatchProcessSyncKey.value && syncKeysEqual(productDispatchProcessSyncKey.value, key)) {
+      productDispatchProcessSyncKey.value = null
+      selectedProcess.value = null
+      selectedMultiProcesses.value = []
+      return
     }
+    productDispatchProcessSyncKey.value = { ...key }
+    selectedProcess.value = { item, process }
+    return
+  }
+
+  if (isMultiSelectProcessWorkshop.value) {
+    toggleMultiProcessSyncedGroup(item, process)
   } else {
     // 其他车间：使用单选逻辑
     if (isProcessSelected(item, process)) {
@@ -1742,8 +2251,16 @@ const selectProcess = (item, process) => {
   }
 }
 
-// 判断工序是否被选中（以订单编码 + 工序 rowid 为基准，避免同名工序全部高亮）
+// 判断工序是否被选中（产品派工跨单同步仅按工序名称；其它车间以订单 + rowid）
 const isProcessSelected = (item, process) => {
+  if (
+    dispatchMode.value === 'product' &&
+    productDispatchProcessSyncKey.value &&
+    !isMultiSelectProcessWorkshop.value
+  ) {
+    const kn = productDispatchProcessSyncKey.value.processName || ''
+    return kn !== '' && (process?.processName || '') === kn
+  }
   if (!selectedProcess.value) return false
   return selectedProcess.value.item.orderCode === item.orderCode &&
          selectedProcess.value.process.rowid === process.rowid
@@ -1766,26 +2283,125 @@ const toggleMultiProcess = (item, process) => {
 
 // 判断工序是否被多选（以订单编码 + 工序 rowid 为基准）
 const isMultiProcessSelected = (item, process) => {
+  if (
+    dispatchMode.value === 'product' &&
+    productDispatchProcessSyncKey.value &&
+    !isMultiSelectProcessWorkshop.value
+  ) {
+    const kn = productDispatchProcessSyncKey.value.processName || ''
+    return kn !== '' && (process?.processName || '') === kn
+  }
   return selectedMultiProcesses.value.some(p =>
     p.item.orderCode === item.orderCode && p.process.rowid === process.rowid
   )
 }
 
+const multiDispatchProcessPickKey = (proc) =>
+  `${proc?.processName || ''}\t${String(proc?.sequence ?? '')}`
+
+const countKeysFromMultiEntries = (entries) => {
+  const m = new Map()
+  for (const p of entries) {
+    const k = multiDispatchProcessPickKey(p.process)
+    m.set(k, (m.get(k) || 0) + 1)
+  }
+  return m
+}
+
+const multiDispatchKeyMapsEqual = (a, b) => {
+  if (a.size !== b.size) return false
+  for (const [k, v] of a) {
+    if (b.get(k) !== v) return false
+  }
+  return true
+}
+
+/** 与锚点单据已选工序（工序名+序号 多重集）一致的全部单据，用于跨单多对多 */
+const buildMultiDispatchTargets = (anchorItem) => {
+  const listForBill = selectedMultiProcesses.value.filter(p => isSameBillAs(p.item, anchorItem))
+  if (listForBill.length < 2) return []
+  const anchorCounts = countKeysFromMultiEntries(listForBill)
+  const byBill = new Map()
+  for (const p of selectedMultiProcesses.value) {
+    const bk = billKeyForMultiDispatch(p.item)
+    if (!byBill.has(bk)) byBill.set(bk, [])
+    byBill.get(bk).push(p)
+  }
+  const targets = []
+  for (const entries of byBill.values()) {
+    if (multiDispatchKeyMapsEqual(countKeysFromMultiEntries(entries), anchorCounts)) {
+      targets.push({ item: entries[0].item, processes: entries.slice() })
+    }
+  }
+  targets.sort((a, b) =>
+    billKeyForMultiDispatch(a.item).localeCompare(billKeyForMultiDispatch(b.item))
+  )
+  return targets
+}
+
+/** 多对多弹窗：当前单据下的选中工序（展示顺序用） */
+const multiDispatchSelectedProcessesForModal = computed(() => {
+  if (!showMultiDispatchModal.value || !currentMultiDispatchItem.value) return []
+  const anchor = currentMultiDispatchItem.value
+  return selectedMultiProcesses.value
+    .filter(p => isSameBillAs(p.item, anchor))
+    .sort((a, b) => (Number(a.process?.sequence) || 0) - (Number(b.process?.sequence) || 0))
+})
+
+/** 多对多弹窗：汇总表列标题（排产/返工） */
+const multiDispatchSummaryProdColTitle = computed(() => {
+  if (!currentMultiDispatchItem.value) return '排产数量'
+  return currentMultiDispatchItem.value.billType === '返工排产' ? '返工数量' : '排产数量'
+})
+
+/** 多对多弹窗：汇总表（每张匹配到的单据一行，含多订单） */
+const multiDispatchModalSummaryRows = computed(() => {
+  if (!showMultiDispatchModal.value || !multiDispatchTargets.value.length) return []
+  return multiDispatchTargets.value.map(({ item: b }) => ({
+    billKey: billKeyForMultiDispatch(b),
+    orderCode: b.orderCode || '-',
+    productionQtyDisplay:
+      b.billType === '返工排产'
+        ? formatReworkFieldQtyDisplay(b.reworkFieldQty)
+        : String(getBillProductionQtyForDispatch(b))
+  }))
+})
+
+/** 多对多：各单据派工数量之和 */
+const multiDispatchTotalQty = computed(() => {
+  if (!showMultiDispatchModal.value || !multiDispatchTargets.value.length) return 0
+  const map = multiDispatchQtyByBillKey.value
+  let sum = 0
+  for (const t of multiDispatchTargets.value) {
+    const n = Number(map[billKeyForMultiDispatch(t.item)])
+    sum += Number.isFinite(n) ? Math.max(0, n) : 0
+  }
+  return sum
+})
+
+/** 订单派工多对多：弹窗内只读排产/返工数量展示（与列表一致） */
+const multiDispatchOrderModeProductionDisplay = computed(() => {
+  const item = currentMultiDispatchItem.value
+  if (!item) return '-'
+  if (item.billType === '返工排产') return formatReworkFieldQtyDisplay(item.reworkFieldQty)
+  const n = item.productionCount
+  return n === 0 || n ? String(n) : '-'
+})
+
 // 打开多对多派工模态框
 const openMultiDispatchModal = (item) => {
-  // 检查是否有选中的工序
-  if (selectedMultiProcesses.value.length === 0) {
-    uni.showToast({ title: '请至少选择一个工序', icon: 'none' })
+  const listForBill = selectedMultiProcesses.value.filter(p => isSameBillAs(p.item, item))
+  if (listForBill.length < 2) {
+    uni.showToast({ title: '请至少选择两个工序', icon: 'none' })
     return
   }
-  
-  // 检查选中的工序是否都属于当前订单
-  const allFromSameOrder = selectedMultiProcesses.value.every(p => p.item.orderCode === item.orderCode)
-  if (!allFromSameOrder) {
-    uni.showToast({ title: '请选择同一订单的工序', icon: 'none' })
+
+  const targets = buildMultiDispatchTargets(item)
+  if (!targets.length) {
+    uni.showToast({ title: '未能匹配派工单据', icon: 'none' })
     return
   }
-  
+  multiDispatchTargets.value = targets
   currentMultiDispatchItem.value = item
   // 初始化日期为今天，格式：YYYY-MM-DD
   const today = new Date()
@@ -1795,12 +2411,17 @@ const openMultiDispatchModal = (item) => {
   const todayStr = `${year}-${month}-${day}`
   
   multiDispatchData.value = {
-    orderCount: item.orderCount || 0,
-    productionCount: getBillProductionQtyForDispatch(item),
     quantity: 0,
     date: todayStr, // 默认今天
     isLast: '否', // 默认值为否
     salaryMethod: '计件'
+  }
+  if (dispatchMode.value === 'product') {
+    multiDispatchQtyByBillKey.value = Object.fromEntries(
+      targets.map((t) => [billKeyForMultiDispatch(t.item), 0])
+    )
+  } else {
+    multiDispatchQtyByBillKey.value = {}
   }
   multiIsLastIndex.value = 1 // 默认选中第二个选项（否）
   multiSalaryMethodIndex.value = 0
@@ -1819,35 +2440,33 @@ const openMultiDispatchModal = (item) => {
 const closeMultiDispatchModal = () => {
   showMultiDispatchModal.value = false
   multiDispatchData.value = {
-    orderCount: 0,
-    productionCount: 0,
     quantity: 0,
     date: '',
     isLast: '否',
     salaryMethod: '计件'
   }
+  multiDispatchQtyByBillKey.value = {}
   multiIsLastIndex.value = 1
   multiSalaryMethodIndex.value = 0
   multiEmployeeList.value = []
   selectedMultiEmployees.value = []
   currentMultiDispatchItem.value = null
+  multiDispatchTargets.value = []
   modalWorkshop.value = ''
 }
 
 // ---------- 一对多派工（仅抛光车间） ----------
 const openOneToManyModal = (item) => {
+  if (dispatchMode.value === 'product') {
+    return
+  }
   if (workshop.value !== '抛光车间') {
     uni.showToast({ title: '一对多派工仅适用于抛光车间', icon: 'none' })
     return
   }
-  const list = selectedMultiProcesses.value.filter(p => p.item.orderCode === item.orderCode)
+  const list = selectedMultiProcesses.value.filter(p => isSameBillAs(p.item, item))
   if (list.length < 2) {
     uni.showToast({ title: '请至少选择两个工序', icon: 'none' })
-    return
-  }
-  const allFromSameOrder = list.every(p => p.item.orderCode === item.orderCode)
-  if (!allFromSameOrder) {
-    uni.showToast({ title: '请选择同一订单的工序', icon: 'none' })
     return
   }
 
@@ -2098,18 +2717,40 @@ const isMultiEmployeeSelected = (employeeId) => {
   return selectedMultiEmployees.value.some((x) => normalizeEmployeeId(x) === id)
 }
 
-// 判断是否可以多对多派工
+// 判断是否可以多对多派工（产品派工：每单数量>0；订单派工：单一派工数量>0）
 const canMultiDispatch = computed(() => {
-  return multiDispatchData.value.quantity > 0 && 
-         selectedMultiProcesses.value.length > 0 && 
-         selectedMultiEmployees.value.length > 0
+  if (!multiDispatchTargets.value.length || selectedMultiEmployees.value.length === 0) return false
+  if (selectedMultiProcesses.value.length === 0) return false
+  if (dispatchMode.value === 'product') {
+    const map = multiDispatchQtyByBillKey.value
+    return multiDispatchTargets.value.every((t) => {
+      const n = Number(map[billKeyForMultiDispatch(t.item)])
+      return Number.isFinite(n) && n > 0
+    })
+  }
+  const q = Number(multiDispatchData.value.quantity)
+  return Number.isFinite(q) && q > 0
 })
 
 // 确认多对多派工
 const confirmMultiDispatch = async () => {
-  if (!multiDispatchData.value.quantity || multiDispatchData.value.quantity <= 0) {
-    uni.showToast({ title: '请填写有效的派工数量 (>0)', icon: 'none' })
-    return
+  if (dispatchMode.value === 'product') {
+    const targetsCheck = multiDispatchTargets.value
+    const mapCheck = multiDispatchQtyByBillKey.value
+    const invalidBill = targetsCheck.find((t) => {
+      const n = Number(mapCheck[billKeyForMultiDispatch(t.item)])
+      return !Number.isFinite(n) || n <= 0
+    })
+    if (invalidBill) {
+      uni.showToast({ title: '请为每张单据填写有效的派工数量 (>0)', icon: 'none' })
+      return
+    }
+  } else {
+    const q = Number(multiDispatchData.value.quantity)
+    if (!Number.isFinite(q) || q <= 0) {
+      uni.showToast({ title: '请填写有效的派工数量 (>0)', icon: 'none' })
+      return
+    }
   }
   
   if (selectedMultiProcesses.value.length === 0) {
@@ -2132,102 +2773,161 @@ const confirmMultiDispatch = async () => {
     selectedMultiEmployees.value.some((x) => normalizeEmployeeId(x) === normalizeEmployeeId(emp.id))
   )
   
-  // 从选中的工序中获取所属单据的信息（所有工序应该属于同一个订单）
-  const firstProcess = selectedMultiProcesses.value[0]
-  const billItem = firstProcess?.item
+  const targets = multiDispatchTargets.value
+  if (!targets.length) {
+    uni.showToast({ title: '派工单据数据失效，请关闭后重试', icon: 'none' })
+    return
+  }
 
-  const processNames = selectedMultiProcesses.value
-    .map(p => p.process?.processName || '')
-    .filter(Boolean)
-    .join('、')
+  const firstProcList = [...targets[0].processes].sort(
+    (a, b) => (Number(a.process?.sequence) || 0) - (Number(b.process?.sequence) || 0)
+  )
+  const processNames = firstProcList.map(p => p.process?.processName || '').filter(Boolean).join('、')
   const employeeNames = selectedEmployees.map(emp => emp.name).join('、')
   const dispatchDate = multiDispatchData.value.date || ''
-  const quantity = multiDispatchData.value.quantity || 0
+  const qtyMap = multiDispatchQtyByBillKey.value
+  const orderModeQty = Number(multiDispatchData.value.quantity) || 0
+  const quantityTotal =
+    dispatchMode.value === 'product'
+      ? targets.reduce((s, t) => {
+          const n = Number(qtyMap[billKeyForMultiDispatch(t.item)])
+          return s + (Number.isFinite(n) ? n : 0)
+        }, 0)
+      : orderModeQty * targets.length
+  const orderCount = new Set(targets.map(t => t.item.orderCode)).size
+  const involveLine =
+    targets.length > 1 || orderCount > 1
+      ? `${targets.length} 张单据 / ${orderCount} 个订单`
+      : ''
 
-  openDispatchConfirmModal([
-    { label: '工序', value: processNames },
-    { label: '人员', value: employeeNames },
-    { label: '派工日期', value: dispatchDate },
-    { label: '派工数量', value: String(quantity) }
-  ], async () => {
-    // 构建请求参数
-    const dispatchParams = {  
-      productionCount: getBillProductionQtyForDispatch(billItem),
-      billRowid: billItem?.billRowid || '',
-      orderCode: billItem?.orderCode || '',
-      workshop: workshop.value || '',
-      processes: selectedMultiProcesses.value.map(p => ({
-        rowid: p.process.rowid,
-      })),
-      quantity: multiDispatchData.value.quantity,
-      date: multiDispatchData.value.date || '',
-      isLast: multiDispatchData.value.isLast === '是' ? 1 : 0, // 是为1，否为0
-      salaryMethod: multiDispatchData.value.salaryMethod || '计件',
-      employees: selectedEmployees.map(emp => ({
-        id: emp.id,
-      }))
-    }
+  openDispatchConfirmModal(
+    [
+      { label: '工序', value: processNames },
+      { label: '人员', value: employeeNames },
+      { label: '派工日期', value: dispatchDate },
+      {
+        label: dispatchMode.value === 'product' ? '派工数量合计' : '派工数量',
+        value:
+          dispatchMode.value === 'product'
+            ? String(quantityTotal)
+            : String(orderModeQty)
+      },
+      ...(involveLine ? [{ label: '涉及', value: involveLine }] : [])
+    ],
+    async () => {
+      const hookUrl = 'https://www.dachen.vip/api/workflow/hooks/Njk4MmRkMTUwZjBkMGFkODBmZTM1YjAy'
+      try {
+        const dispatchList = buildMultiDispatchModalListPayload(
+          targets,
+          dispatchMode.value === 'product',
+          orderModeQty
+        )
+        for (const t of targets) {
+          const billItem = t.item
+          const rowQty =
+            dispatchMode.value === 'product'
+              ? Number(multiDispatchQtyByBillKey.value[billKeyForMultiDispatch(billItem)]) || 0
+              : orderModeQty
+          const dispatchParams = {
+            productionCount: getBillProductionQtyForDispatch(billItem),
+            billRowid: billItem?.billRowid || '',
+            orderCode: billItem?.orderCode || '',
+            dispatchMode: dispatchMode.value || 'order',
+            workshop: workshop.value || '',
+            processes: t.processes.map(p => ({
+              rowid: p.process.rowid
+            })),
+            quantity: rowQty,
+            date: multiDispatchData.value.date || '',
+            isLast: multiDispatchData.value.isLast === '是' ? 1 : 0,
+            salaryMethod: multiDispatchData.value.salaryMethod || '计件',
+            employees: selectedEmployees.map(emp => ({
+              id: emp.id
+            })),
+            dispatchList
+          }
+          const resp = await http.post(hookUrl, dispatchParams)
+          if (resp.status === 1) {
+            uni.showToast({
+              title: resp.message || `单据 ${billItem?.orderCode || ''} 派工失败`,
+              icon: 'none'
+            })
+            return
+          }
+        }
 
-    try {
-      const resp = await http.post('https://www.dachen.vip/api/workflow/hooks/Njk4MmRkMTUwZjBkMGFkODBmZTM1YjAy', dispatchParams)
-      
-      if (resp.status === 1) {
-        uni.showToast({ title: resp.message || '派工失败', icon: 'none' })
-        return
+        uni.showToast({ title: '派工成功' })
+        showMultiDispatchModal.value = false
+        selectedMultiProcesses.value = []
+        multiDispatchTargets.value = []
+        multiDispatchQtyByBillKey.value = {}
+
+        setTimeout(async () => {
+          await search()
+        }, 1000)
+      } catch (error) {
+        console.error('多对多派工失败:', error)
+        uni.showToast({ title: '派工失败：' + (error.message || '未知错误'), icon: 'none' })
       }
-      
-      uni.showToast({ title: '派工成功' })
-      showMultiDispatchModal.value = false
-      selectedMultiProcesses.value = []
-      
-      // 派工成功后刷新数据（不再依赖是否带入订单/生产单号）
-      setTimeout(async () => {
-        await search()
-      }, 1000)
-    } catch (error) {
-      console.error('多对多派工失败:', error)
-      uni.showToast({ title: '派工失败：' + (error.message || '未知错误'), icon: 'none' })
     }
-  })
+  )
 }
 
 // 打开工序派工模态框
 const openProcessModal = (item, process) => {
-  selectedProcessData.value = { item, process }
-  machine.value = null
-  // 初始化日期为今天，格式：YYYY-MM-DD
-  const today = new Date()
-  const year = today.getFullYear()
-  const month = String(today.getMonth() + 1).padStart(2, '0')
-  const day = String(today.getDate()).padStart(2, '0')
-  const todayStr = `${year}-${month}-${day}`
-  
-  // 初始化模态框车间为页面当前车间
-  // 特殊规则：当页面车间为喷涂车间时，添加员工默认使用组装车间
-  modalWorkshop.value = workshop.value === '喷涂车间' ? '组装车间' : workshop.value
-  
-  processDispatchData.value = {
-    employee: '',
-    quantity: 0,
-    time: 0,
-    machine: '',
-    mold: '',
-    date: todayStr,
-    salaryMethod: '计件',  // 默认值为计件
-    price: process?.price || 0,  // 将工序的工价赋值给派工模态框
-    isLast: '否'  // 默认值为否
+  if (openingProcessModalGuard.value || showProcessModal.value) return
+  openingProcessModalGuard.value = true
+
+  try {
+    selectedProcessData.value = { item, process }
+    machine.value = null
+    // 初始化日期为今天，格式：YYYY-MM-DD
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = String(today.getMonth() + 1).padStart(2, '0')
+    const day = String(today.getDate()).padStart(2, '0')
+    const todayStr = `${year}-${month}-${day}`
+
+    // 初始化模态框车间为页面当前车间
+    // 特殊规则：当页面车间为喷涂车间时，添加员工默认使用组装车间
+    modalWorkshop.value = workshop.value === '喷涂车间' ? '组装车间' : workshop.value
+
+    processDispatchData.value = {
+      employee: '',
+      quantity: 0,
+      time: 0,
+      machine: '',
+      mold: '',
+      date: todayStr,
+      salaryMethod: '计件',  // 默认值为计件
+      price: process?.price || 0,  // 将工序的工价赋值给派工模态框
+      isLast: '否'  // 默认值为否
+    }
+    if (dispatchMode.value === 'product') {
+      Object.keys(productDispatchQtyByBillKey).forEach((k) => {
+        delete productDispatchQtyByBillKey[k]
+      })
+      // 不预置 0，避免输入框先出现 0 不便修改；未填的 key 在计算/提交时按 0 处理
+    }
+    salaryMethodIndex.value = 0  // 默认选中第一个选项（计件）
+    isLastIndex.value = 1  // 默认选中第二个选项（否）
+    selectedEmployee.value = []
+    employeeList.value = []
+    loadEmployees()
+    showProcessModal.value = true
+  } finally {
+    nextTick(() => {
+      openingProcessModalGuard.value = false
+    })
   }
-  salaryMethodIndex.value = 0  // 默认选中第一个选项（计件）
-  isLastIndex.value = 1  // 默认选中第二个选项（否）
-  selectedEmployee.value = []
-  employeeList.value = []
-  loadEmployees()
-  showProcessModal.value = true
 }
 
 const closeProcessModal = () => {
   showProcessModal.value = false
   processDispatchData.value = { employee: '', quantity: 0, time: 0, machine: '', mold: '', date: '', salaryMethod: '计件', price: 0, isLast: '否' }
+  Object.keys(productDispatchQtyByBillKey).forEach((k) => {
+    delete productDispatchQtyByBillKey[k]
+  })
   machine.value = null
   employeeList.value = []
   selectedEmployee.value = []
@@ -2278,39 +2978,67 @@ const onIsLastChange = (e) => {
   processDispatchData.value.isLast = isLastOptions.value[e.detail.value]
 }
 
+/** 点击确认派工：前置校验与「请至少选择一个员工」一致用 Toast */
+const onConfirmProcessDispatchTap = () => {
+  if (dispatchMode.value === 'product') {
+    const rows = productDispatchModalProcessRows.value
+    const invalid = rows.find((r) => !isValidPositiveProductDispatchQty(r.billKey))
+    if (invalid) {
+      uni.showToast({ title: '请填写每一单的派工数量', icon: 'none' })
+      return
+    }
+  } else if (!canDispatch.value) {
+    uni.showToast({ title: '该工序无需派工', icon: 'none' })
+    return
+  }
+  confirmProcessDispatch()
+}
+
 const confirmProcessDispatch = async () => {
-  // 检查是否可以派工
-  if (!canDispatch.value) {
-    uni.showToast({ title: '该工序需派工数量为0，无法派工', icon: 'none' })
+  const isProduct = dispatchMode.value === 'product'
+  // 订单派工：需派工为 0 不可派；产品派工由 onConfirmProcessDispatchTap / 下列校验约束
+  if (!isProduct && !canDispatch.value) {
+    uni.showToast({ title: '该工序无需派工', icon: 'none' })
     return
   }
-  
-  if (!processDispatchData.value.quantity || processDispatchData.value.quantity <= 0) {
-    uni.showToast({ title: '请填写有效的派工数量 (>0)', icon: 'none' })
-    return
+
+  const modalRows = productDispatchModalProcessRows.value
+  let productSubmitRows = null
+
+  if (isProduct) {
+    for (const r of modalRows) {
+      if (!isValidPositiveProductDispatchQty(r.billKey)) {
+        uni.showToast({ title: `请为订单 ${r.orderCode} 填写大于 0 的派工数量`, icon: 'none' })
+        return
+      }
+    }
+    productSubmitRows = modalRows.map((r) => ({
+      ...r,
+      qty: Number(productDispatchQtyByBillKey[r.billKey])
+    }))
+    for (const r of productSubmitRows) {
+      if (!r.processRowid) {
+        uni.showToast({ title: `订单 ${r.orderCode} 工序数据异常`, icon: 'none' })
+        return
+      }
+      const maxNeed = toFiniteNum(r.needCount, 0)
+      if (r.qty > maxNeed) {
+        uni.showToast({ title: `订单 ${r.orderCode} 派工数量不能超过需派工 ${maxNeed}`, icon: 'none' })
+        return
+      }
+    }
+  } else {
+    if (!processDispatchData.value.quantity || processDispatchData.value.quantity <= 0) {
+      uni.showToast({ title: '请填写有效的派工数量 (>0)', icon: 'none' })
+      return
+    }
+    const maxQty = maxQuantity.value
+    if (processDispatchData.value.quantity > maxQty) {
+      uni.showToast({ title: `派工数量不能超过需派工数量 ${maxQty}`, icon: 'none' })
+      return
+    }
   }
-  
-  // 检查派工数量是否超过需派工数量（不再限制日产量）
-  const maxQty = maxQuantity.value
-  if (processDispatchData.value.quantity > maxQty) {
-    uni.showToast({ title: `派工数量不能超过需派工数量 ${maxQty}`, icon: 'none' })
-    return
-  }
-  
-  const hourlyOutput = selectedProcessData.value?.process?.hourlyoutput || 0
-  // if (!hourlyOutput || hourlyOutput <= 0) {
-  //   uni.showToast({ title: '该工序的小时产量数据异常，无法计算派工工时', icon: 'none' })
-  //   return
-  // }
-  
-  // if (!processDispatchData.value.time || processDispatchData.value.time <= 0) {
-  //   uni.showToast({ title: '派工工时计算错误，请检查派工数量', icon: 'none' })
-  //   return
-  // }
-  // if (!machine.value?.code) {
-  //   uni.showToast({ title: '请选择机台', icon: 'none' })
-  //   return
-  // }
+
   if (!selectedEmployee.value || selectedEmployee.value.length === 0) {
     uni.showToast({ title: '请至少选择一个员工', icon: 'none' })
     return
@@ -2326,46 +3054,97 @@ const confirmProcessDispatch = async () => {
 
   const processName = selectedProcessData.value?.process?.processName || ''
   const dispatchDate = processDispatchData.value.date || ''
-  const quantity = processDispatchData.value.quantity || 0
+  const qtySummary = isProduct
+    ? productSubmitRows.map((r) => `${r.orderCode}：${r.qty}`).join('；')
+    : String(processDispatchData.value.quantity || 0)
 
-  openDispatchConfirmModal([
-    { label: '工序', value: processName },
-    { label: '人员', value: selectedEmployeeNames },
-    { label: '派工日期', value: dispatchDate },
-    { label: '派工数量', value: String(quantity) }
-  ], async () => {
-    const dispatchData = {
-      productCode: selectedProcessData.value?.item?.productCode || '',
-      orderCode: selectedProcessData.value?.item?.orderCode || '',
-      processName: selectedProcessData.value?.process?.processName || '',
-      finishCount: selectedProcessData.value?.process?.finishCount || 0,
-      needCount: selectedProcessData.value?.process?.needCount || 0,
-      quantity: processDispatchData.value.quantity,
-      time: processDispatchData.value.time,
-      employee: processDispatchData.value.employee,
-      employees: selectedEmployees,
-      machine: machine.value?.code || '',
-      mold: selectedProcessData.value?.process?.mold || '',
-      workshop: workshop.value || '',
-      rowid: selectedProcessData.value?.process?.rowid || '',
-      date: processDispatchData.value.date || '',
-      salaryMethod: processDispatchData.value.salaryMethod || '',
-      price: processDispatchData.value.price || 0,
-      isLast: processDispatchData.value.isLast || '否'
-    }
+  openDispatchConfirmModal(
+    [
+      { label: '工序', value: processName },
+      { label: '人员', value: selectedEmployeeNames },
+      { label: '派工日期', value: dispatchDate },
+      { label: '派工数量', value: qtySummary }
+    ],
+    async () => {
+      const dispatchList = isProduct ? buildProductProcessModalDispatchList(modalRows) : []
+      const afterSuccess = () => {
+        uni.showToast({ title: '派工成功' })
+        showProcessModal.value = false
+        setTimeout(async () => {
+          await search()
+        }, 1000)
+      }
 
-    const resp = await http.post('https://www.dachen.vip/api/workflow/hooks/NjkyMTJlNzdhOWE4ZGM2YmMxZjczYzlk', dispatchData)
-    if (resp.status === 1) {
-      uni.showToast({ title: '派工成功' })
-      showProcessModal.value = false
-      // 派工成功后刷新数据，确保进度条更新（不再依赖是否带入订单/生产单号）
-      setTimeout(async () => {
-        await search()
-      }, 1000)
-    } else {
-      uni.showToast({ title: resp.message })
+      if (isProduct) {
+        const anchor = selectedProcessData.value
+        const totalQty = productSubmitRows.reduce((s, r) => s + r.qty, 0)
+        let totalTimeAcc = 0
+        for (const r of productSubmitRows) {
+          const h = toFiniteNum(r.hourlyoutput, 0)
+          const q = r.qty
+          if (h > 0 && q > 0) totalTimeAcc += q / h
+        }
+        const totalTime = parseFloat(totalTimeAcc.toFixed(2))
+        const dispatchListFiltered = dispatchList.filter((it) => Number(it.dispatchQuantity) > 0)
+
+        const dispatchData = {
+          productCode: anchor?.item?.productCode || '',
+          orderCode: anchor?.item?.orderCode || '',
+          dispatchMode: 'product',
+          processName,
+          finishCount: anchor?.process?.finishCount ?? 0,
+          needCount: toFiniteNum(anchor?.process?.needCount, 0),
+          quantity: totalQty,
+          time: totalTime,
+          employee: processDispatchData.value.employee,
+          employees: selectedEmployees,
+          machine: machine.value?.code || '',
+          mold: anchor?.process?.mold || '',
+          workshop: workshop.value || '',
+          rowid: anchor?.process?.rowid || '',
+          date: processDispatchData.value.date || '',
+          salaryMethod: processDispatchData.value.salaryMethod || '',
+          price: processDispatchData.value.price ?? anchor?.process?.price ?? 0,
+          isLast: processDispatchData.value.isLast || '否',
+          dispatchList: dispatchListFiltered
+        }
+        const resp = await postProcessDispatchHook(dispatchData)
+        if (resp.status === 1) {
+          afterSuccess()
+        } else {
+          uni.showToast({ title: resp.message || '派工失败', icon: 'none' })
+        }
+      } else {
+        const dispatchData = {
+          productCode: selectedProcessData.value?.item?.productCode || '',
+          orderCode: selectedProcessData.value?.item?.orderCode || '',
+          dispatchMode: dispatchMode.value || 'order',
+          processName: selectedProcessData.value?.process?.processName || '',
+          finishCount: selectedProcessData.value?.process?.finishCount || 0,
+          needCount: selectedProcessData.value?.process?.needCount || 0,
+          quantity: processDispatchData.value.quantity,
+          time: processDispatchData.value.time,
+          employee: processDispatchData.value.employee,
+          employees: selectedEmployees,
+          machine: machine.value?.code || '',
+          mold: selectedProcessData.value?.process?.mold || '',
+          workshop: workshop.value || '',
+          rowid: selectedProcessData.value?.process?.rowid || '',
+          date: processDispatchData.value.date || '',
+          salaryMethod: processDispatchData.value.salaryMethod || '',
+          price: processDispatchData.value.price || 0,
+          isLast: processDispatchData.value.isLast || '否',
+          dispatchList
+        }
+        const resp = await postProcessDispatchHook(dispatchData)
+        if (resp.status === 1) {
+          afterSuccess()
+        } else {
+          uni.showToast({ title: resp.message })
+        }
+      }
     }
-  })
+  )
 }
 
 const openDispatchConfirmModal = (rows, onConfirm) => {
@@ -2381,10 +3160,23 @@ const closeDispatchConfirmModal = () => {
 }
 
 const handleDispatchConfirm = async () => {
-  const action = dispatchConfirmAction.value
-  closeDispatchConfirmModal()
-  if (typeof action === 'function') {
+  // 必须先同步占用锁，再读回调；否则同一时刻两次点击都会通过第一道判断（竞态）
+  if (processDispatchConfirmSubmitting.value) return
+  processDispatchConfirmSubmitting.value = true
+
+  try {
+    const action = dispatchConfirmAction.value
+    if (typeof action !== 'function') {
+      closeDispatchConfirmModal()
+      return
+    }
+    dispatchConfirmAction.value = null
+    showDispatchConfirmModal.value = false
+    dispatchConfirmRows.value = []
+
     await action()
+  } finally {
+    processDispatchConfirmSubmitting.value = false
   }
 }
 
@@ -2699,12 +3491,20 @@ const addProcess = async (item) => {
     }
     baseProcess = selected.process
   } else {
-    // 拉伸等车间：使用单选选中的工序（与工序点击逻辑一致）
-    if (!selectedProcess.value || selectedProcess.value.item.orderCode !== item.orderCode) {
+    // 拉伸等车间：使用单选选中的工序（与工序点击一致）；产品派工按同步键取当前单据工序
+    if (dispatchMode.value === 'product' && productDispatchProcessSyncKey.value) {
+      const proc = findProcessOnBillBySyncKey(item, productDispatchProcessSyncKey.value)
+      if (!proc) {
+        uni.showToast({ title: '请先选择一个工序', icon: 'none' })
+        return
+      }
+      baseProcess = proc
+    } else if (!selectedProcess.value || selectedProcess.value.item.orderCode !== item.orderCode) {
       uni.showToast({ title: '请先选择一个工序', icon: 'none' })
       return
+    } else {
+      baseProcess = selectedProcess.value.process
     }
-    baseProcess = selectedProcess.value.process
   }
 
   // 基于当前选中工序计算新工序顺序：选中工序顺序 + 0.01
@@ -2722,25 +3522,39 @@ const addProcess = async (item) => {
 const dispatchWork = (item) => {
   // 检查是否有选中的工序
   if (isMultiSelectProcessWorkshop.value) {
-    // 组装/抛光/喷涂：检查多选工序
-    const selectedCount = selectedMultiProcesses.value.filter(p => p.item.orderCode === item.orderCode).length
+    // 组装/抛光/喷涂：检查多选工序（仅当前单据）
+    const selectedCount = selectedMultiProcesses.value.filter(p => isSameBillAs(p.item, item)).length
     if (selectedCount === 0) {
       uni.showToast({ title: '请先选择一个工序', icon: 'none' })
       return
     }
     if (selectedCount > 1) {
-      uni.showToast({
-        title: workshop.value === '抛光车间' ? '选择了多个工序，请使用一对多派工' : '选择了多个工序，请使用多对多派工',
-        icon: 'none'
-      })
+      const title =
+        dispatchMode.value === 'product'
+          ? '产品派工请只选一个工序'
+          : workshop.value === '抛光车间'
+            ? '选择了多个工序，请使用一对多派工'
+            : '选择了多个工序，请使用多对多派工'
+      uni.showToast({ title, icon: 'none' })
       return
     }
     // 只有一个选中工序，使用第一个
-    const selected = selectedMultiProcesses.value.find(p => p.item.orderCode === item.orderCode)
+    const selected = selectedMultiProcesses.value.find(p => isSameBillAs(p.item, item))
     if (selected) {
       openProcessModal(selected.item, selected.process)
     }
   } else {
+    // 产品派工：按同步键取「当前单据」上的同名工序，避免选中在别的订单上导致无法打开
+    if (dispatchMode.value === 'product' && productDispatchProcessSyncKey.value) {
+      const proc = findProcessOnBillBySyncKey(item, productDispatchProcessSyncKey.value)
+      if (!proc) {
+        uni.showToast({ title: '当前单据无该工序', icon: 'none' })
+        return
+      }
+      openProcessModal(item, proc)
+      return
+    }
+
     // 其他车间（包括喷涂）：检查单选工序
     if (!selectedProcess.value) {
       uni.showToast({ title: '请先选择一个工序', icon: 'none' })
@@ -2878,16 +3692,24 @@ const confirmDeleteProcess = async () => {
 // 左箭头固定返回到选择产品页面
 const quit = () => {
   const bt = billTypeFilter.value || '正常排产'
-  uni.redirectTo({
-    url: `/pages/selectProduct/selectProduct?workshop=${encodeURIComponent(
-      workshop.value || ''
-    )}&orderCode=${encodeURIComponent(selectedOrderCode.value || '')}&billType=${encodeURIComponent(bt)}`
+  const readonlyPart = isBillTypeReadonly.value ? '&billTypeReadonly=1' : ''
+  const modePart = `&dispatchMode=${dispatchMode.value || 'order'}`
+  uni.navigateBack({
+    delta: 1,
+    fail: () => {
+      uni.redirectTo({
+        url: `/pages/selectProduct/selectProduct?workshop=${encodeURIComponent(
+          workshop.value || ''
+        )}&orderCode=${encodeURIComponent(selectedOrderCode.value || '')}&billTypeIndex=${billTypeIndex.value}&billType=${encodeURIComponent(bt)}${modePart}${readonlyPart}`
+      })
+    }
   })
 }
 
 // ==================== Watch监听器 ====================
 // 监听派工数量变化，验证并计算派工工时
 watch(() => processDispatchData.value.quantity, (newVal) => {
+  if (dispatchMode.value === 'product') return
   const maxQty = maxQuantity.value
   // 允许的最大数量：不能超过需派工数量（不再限制日产量）
   if (newVal > maxQty) {
@@ -2901,6 +3723,22 @@ watch(() => processDispatchData.value.quantity, (newVal) => {
   // 自动计算派工工时：派工数量 / 小时产量（从工序数据中获取）
   calculateWorkTime()
 })
+
+// 产品派工：列表中每单数量变化时，合计派工工时（各单行 qty/小时产量 之和）
+watch(
+  [productDispatchModalProcessRows, productDispatchQtyByBillKey, showProcessModal],
+  () => {
+    if (dispatchMode.value !== 'product' || !showProcessModal.value) return
+    let t = 0
+    for (const r of productDispatchModalProcessRows.value) {
+      const q = Number(productDispatchQtyByBillKey[r.billKey]) || 0
+      const h = Number(r.hourlyoutput) || 0
+      if (h > 0 && q > 0) t += q / h
+    }
+    processDispatchData.value.time = parseFloat(t.toFixed(2))
+  },
+  { deep: true }
+)
 
 // 计算派工工时
 const calculateWorkTime = () => {
@@ -2933,19 +3771,50 @@ onLoad((options) => {
   } else if (options && options.type) {
     applyBillTypeParam(options.type)
   }
+  if (options && options.billTypeIndex !== undefined && options.billTypeIndex !== '') {
+    const idx = Number(options.billTypeIndex)
+    if (Number.isFinite(idx) && idx >= 0 && idx < billTypeOptions.value.length) {
+      billTypeIndex.value = idx
+      billTypeFilter.value = billTypeOptions.value[idx]
+    }
+  }
+  const readonlyFlag = String(options?.billTypeReadonly || '')
+  isBillTypeReadonly.value = readonlyFlag === '1' || readonlyFlag.toLowerCase() === 'true'
+  const mode = String(options?.dispatchMode || '').trim()
+  dispatchMode.value = mode === 'product' ? 'product' : 'order'
+  if (options && options.selectedProducts) {
+    try {
+      const parsed = JSON.parse(decodeURIComponent(options.selectedProducts))
+      if (Array.isArray(parsed)) {
+        selectedProductHeaders.value = parsed.map(x => ({
+          orderCode: x?.orderCode || '',
+          productionCode: x?.productionCode || '',
+          name: x?.name || '',
+          orderCount: x?.orderCount
+        }))
+        // 产品派工模式：不再回填首条作为接口筛选条件，避免只显示第一条单据
+        selectedOrderCode.value = ''
+        selectedProductionCode.value = ''
+        searchValue.value = ''
+        searchForm.value.salesOrder = ''
+      }
+    } catch (e) {
+      selectedProductHeaders.value = []
+    }
+  }
 
   // 从选择订单页进入时：将订单号填入销售订单搜索框，onShow 中会执行 search() 按该订单号过滤列表
-  if (options && options.orderCode) {
+  if (dispatchMode.value !== 'product' && options && options.orderCode) {
     const orderCode = decodeURIComponent(options.orderCode)
     selectedOrderCode.value = orderCode
     searchValue.value = orderCode
     searchForm.value.salesOrder = orderCode
   }
-  if (options && options.productionCode) {
+  if (dispatchMode.value !== 'product' && options && options.productionCode) {
     selectedProductionCode.value = decodeURIComponent(options.productionCode)
   }
-  // 从选择产品页面带入的物品名称，用于初始化订单物品搜索条件
-  if (options && options.orderItem) {
+  // 从选择产品页面带入的产品名称，用于初始化 orderItem 搜索条件
+  if (dispatchMode.value !== 'product' && options && options.orderItem) {
     const orderItem = decodeURIComponent(options.orderItem)
     searchForm.value.orderItem = orderItem
   }
@@ -2963,6 +3832,9 @@ onLoad((options) => {
     searchValue.value = ''
     billsList.value = []
     processList.value = []
+    selectedProcess.value = null
+    productDispatchProcessSyncKey.value = null
+    selectedMultiProcesses.value = []
   })
 })
 
@@ -3019,6 +3891,38 @@ onUnload(() => {
       margin-left: 0;
       font-size: px2vw(35px);
       color: white;
+    }
+
+    .header-tag-wrap {
+      position: relative;
+      z-index: 2;
+      margin-left: auto;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding-right: px2vw(16px);
+      min-width: px2vw(100px);
+      flex-shrink: 0;
+      box-sizing: border-box;
+    }
+
+    .dispatch-mode-tag {
+      font-size: px2vw(22px);
+      color: #fff;
+      padding: px2vw(6px) px2vw(14px);
+      border-radius: px2vw(10px);
+      background: rgba(255, 255, 255, 0.2);
+      border: px2vw(1px) solid rgba(255, 255, 255, 0.45);
+      white-space: nowrap;
+    }
+
+    .dispatch-mode-tag.is-order {
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .dispatch-mode-tag.is-product {
+      background: rgba(255, 193, 7, 0.35);
+      border-color: rgba(255, 224, 130, 0.85);
     }
   }
 
@@ -3113,6 +4017,20 @@ onUnload(() => {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+    }
+
+    &.multi {
+      height: auto;
+      flex-direction: column;
+      align-items: stretch;
+      gap: px2vw(8px);
+
+      .info-row {
+        display: flex;
+        align-items: center;
+        gap: px2vw(10px);
+        width: 100%;
       }
     }
   }
@@ -4240,6 +5158,293 @@ onUnload(() => {
   display: flex;
   flex-direction: column;
   gap: px2vw(10px);
+
+  &.modal-body--product-grid {
+    display: block;
+  }
+}
+
+/* 产品派工：固定两列网格，标题与控件固定高度（与列表卡片对齐风格一致） */
+.modal-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: px2vw(20px);
+  row-gap: px2vw(16px);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.modal-grid-cell {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: px2vw(10px);
+  min-width: 0;
+}
+
+.modal-grid-label {
+  flex: 0 0 px2vw(168px);
+  width: px2vw(168px);
+  font-size: px2vw(28px);
+  color: #666;
+  font-weight: bold;
+  line-height: 1.25;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modal-grid-value {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  height: px2vw(56px);
+  min-height: px2vw(56px);
+  padding: 0 px2vw(12px);
+  font-size: px2vw(28px);
+  color: #333;
+  background: #f9f9f9;
+  border: px2vw(1px) solid #eee;
+  border-radius: px2vw(8px);
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-grid-picker {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  display: block;
+  box-sizing: border-box;
+
+  .modal-grid-value {
+    width: 100%;
+  }
+}
+
+/* 产品派工：工序弹窗顶部汇总表 */
+.product-dispatch-modal-summary {
+  margin: px2vw(16px) px2vw(20px) px2vw(8px);
+  padding: px2vw(12px) px2vw(16px);
+  background: #f7f8fa;
+  border-radius: px2vw(12px);
+  border: px2vw(1px) solid #e8eaed;
+
+  .product-dispatch-summary-header,
+  .product-dispatch-summary-row {
+    display: flex;
+    align-items: center;
+    gap: px2vw(8px);
+  }
+
+  .product-dispatch-summary-header {
+    padding-bottom: px2vw(10px);
+    margin-bottom: px2vw(8px);
+    border-bottom: px2vw(1px) solid #dde1e6;
+    font-size: px2vw(24px);
+    color: #666;
+    font-weight: 500;
+  }
+
+  .product-dispatch-summary-row {
+    font-size: px2vw(26px);
+    color: #333;
+    padding: px2vw(8px) 0;
+    border-bottom: px2vw(1px) solid #eee;
+
+    &:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+  }
+
+  .col {
+    min-width: 0;
+    word-break: break-all;
+
+    &.order {
+      flex: 1.4;
+    }
+
+    &.num {
+      flex: 0.85;
+      text-align: right;
+    }
+
+    &.qty-head {
+      flex: 0.95;
+      text-align: right;
+      font-size: px2vw(24px);
+    }
+
+    &.qty-col {
+      flex: 0.95;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+    }
+
+    &.time-col {
+      flex: 0.72;
+      text-align: right;
+      font-size: px2vw(24px);
+      color: #333;
+    }
+  }
+
+  .product-modal-qty-input {
+    width: 100%;
+    max-width: px2vw(140px);
+    min-width: px2vw(72px);
+    height: px2vw(52px);
+    padding: 0 px2vw(8px);
+    font-size: px2vw(24px);
+    text-align: right;
+    border: px2vw(1px) solid #ccc;
+    border-radius: px2vw(8px);
+    box-sizing: border-box;
+    background: #fff;
+  }
+
+  .product-dispatch-summary-footer {
+    display: flex;
+    align-items: center;
+    gap: px2vw(8px);
+    margin-top: px2vw(10px);
+    padding-top: px2vw(12px);
+    border-top: px2vw(2px) solid #dde1e6;
+
+    .footer-label {
+      font-size: px2vw(26px);
+      font-weight: 600;
+      color: #333;
+    }
+
+    .footer-total {
+      font-size: px2vw(28px);
+      font-weight: 600;
+      color: #5884f1;
+      text-align: right;
+      width: 100%;
+      max-width: px2vw(140px);
+    }
+
+    &.hours {
+      margin-top: px2vw(6px);
+      padding-top: px2vw(8px);
+      border-top: none;
+
+      .footer-total {
+        color: #5884f1;
+        font-weight: 600;
+      }
+    }
+
+    &.wage {
+      margin-top: px2vw(6px);
+      padding-top: px2vw(8px);
+      border-top: none;
+
+      .footer-total {
+        color: #2e7d32;
+      }
+    }
+  }
+}
+
+/* 多对多派工模态：顶部汇总表（订单、排产/返工、派工数量） */
+.multi-dispatch-modal-summary {
+  margin: px2vw(16px) px2vw(20px) px2vw(8px);
+  padding: px2vw(12px) px2vw(16px);
+  background: #f7f8fa;
+  border-radius: px2vw(12px);
+  border: px2vw(1px) solid #e8eaed;
+
+  .multi-dispatch-summary-header,
+  .multi-dispatch-summary-row {
+    display: flex;
+    align-items: center;
+    gap: px2vw(8px);
+  }
+
+  .multi-dispatch-summary-header {
+    padding-bottom: px2vw(10px);
+    margin-bottom: px2vw(8px);
+    border-bottom: px2vw(1px) solid #dde1e6;
+    font-size: px2vw(24px);
+    color: #666;
+    font-weight: 500;
+  }
+
+  .multi-dispatch-summary-row {
+    font-size: px2vw(26px);
+    color: #333;
+    padding: px2vw(8px) 0;
+    border-bottom: px2vw(1px) solid #eee;
+  }
+
+  .multi-dispatch-summary-total-row {
+    display: flex;
+    align-items: center;
+    gap: px2vw(8px);
+    margin-top: px2vw(8px);
+    padding-top: px2vw(12px);
+    border-top: px2vw(2px) solid #dde1e6;
+    font-size: px2vw(26px);
+    font-weight: 600;
+    color: #333;
+
+    .total-qty {
+      color: #2e7d32;
+      text-align: right;
+    }
+  }
+
+  .col {
+    min-width: 0;
+    word-break: break-all;
+
+    &.order {
+      flex: 1.2;
+    }
+
+    &.prod {
+      flex: 1;
+      text-align: right;
+    }
+
+    &.qty-head {
+      flex: 0.95;
+      text-align: right;
+      font-size: px2vw(24px);
+    }
+
+    &.qty-col {
+      flex: 0.95;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+    }
+  }
+
+  .multi-dispatch-qty-input {
+    width: 100%;
+    max-width: px2vw(140px);
+    min-width: px2vw(72px);
+    height: px2vw(52px);
+    padding: 0 px2vw(8px);
+    font-size: px2vw(24px);
+    text-align: right;
+    border: px2vw(1px) solid #ccc;
+    border-radius: px2vw(8px);
+    box-sizing: border-box;
+    background: #fff;
+  }
 }
 
 /* 一对多派工：每行四列（工序宽、后三列数值框短） */

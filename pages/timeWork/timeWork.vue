@@ -48,50 +48,27 @@
 				</view>
 				<view class="bill-row">
 					<view class="bill-col">
-						<text class="bill-label">派工时间：</text>
+						<text class="bill-label">派工日期：</text>
 						<text class="bill-value">{{ bill.dispatchTime || '-' }}</text>
 					</view>
-					<view class="bill-col">
-						<text class="bill-label">开工时间：</text>
-						<text class="bill-value">{{ bill.startTime || '-' }}</text>
-					</view>
-				</view>
-				<view class="bill-row">
 					<view class="bill-col">
 						<text class="bill-label">派工工时：</text>
 						<text class="bill-value">{{ bill.dispatchHours || '-' }}</text>
 					</view>
+				</view>
+				<view class="bill-row">
 					<view class="bill-col">
 						<text class="bill-label">时薪：</text>
 						<text class="bill-value">{{ bill.hourlyRate || '-' }}</text>
 					</view>
-				</view>
-				<view class="bill-row">
-					<view class="bill-col">
-						<text class="bill-label">完工时间：</text>
-						<text class="bill-value">{{ bill.finishTime || '-' }}</text>
-					</view>
-					<view class="bill-col">
-						<text class="bill-label">用时：</text>
-						<text class="bill-value">{{ bill.duration || '-' }}</text>
-					</view>
-				</view>
-				<view class="bill-row">
 					<view class="bill-col">
 						<text class="bill-label">工资：</text>
 						<text class="bill-value">{{ bill.salary || '-' }}</text>
-					</view>
-					<view class="bill-col">
-						<text class="bill-label">报工备注：</text>
-						<text class="bill-value">{{ bill.reportRemark || '-' }}</text>
 					</view>
 				</view>
 				<view class="bill-detail-row">
 					<text class="bill-label">具体事项：</text>
 					<text class="bill-value detail-text">{{ bill.detail || '-' }}</text>
-				</view>
-				<view class="status-tag" :class="getStatusTagClass(bill.status)">
-					{{ bill.status || '-' }}
 				</view>
 			</view>
 			<view v-if="!timeWorkBills.length" class="bill-empty">暂无记时派工记录</view>
@@ -323,7 +300,7 @@ const loadTimeWorkBills = async () => {
 				return {
 					id: item.rowid || item['rowid'] || '',
 					workshop: item['69a7eb4c3b5e707f84d2f8dc'] || '',
-					employee: item['69ae75563b5e707f84d481df'] || '',
+					employee: item['69f2fa6fc03685667d5e5f30'] || '',
 					dispatchTime: item['69a7dd4c3b5e707f84d2f31c'] || '',
 					startTime: item['69ad32953b5e707f84d43ae2'] || '',
 					dispatchHours: item['69a7dfdf3b5e707f84d2f464'] || '',
@@ -343,6 +320,13 @@ const loadTimeWorkBills = async () => {
 		mapped.sort((a, b) =>
 			String(b.dispatchTime || '').localeCompare(String(a.dispatchTime || ''))
 		)
+
+		console.log('[timeWork] 记时派工单据中的员工数据:', mapped.map(item => ({
+			id: item.id,
+			employee: item.employee,
+			workshop: item.workshop,
+			dispatchTime: item.dispatchTime
+		})))
 
 		timeWorkBills.value = mapped
 	} catch (e) {
@@ -393,10 +377,10 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
 	uni.showToast({ title: `已选 ${next.length} 名员工`, icon: 'success' })
 }
 
-// 返回选择订单页面
+// 返回 index 主页面
 const quit = () => {
 	uni.redirectTo({
-		url: '/pages/selectBills/selectBills'
+		url: '/pages/main/main'
 	})
 }
 

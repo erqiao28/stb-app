@@ -6,44 +6,72 @@
       <view class="title">
         选择产品
       </view>
-      <view></view>
+      <view class="header-tag-wrap">
+        <text
+          class="dispatch-mode-tag"
+          :class="dispatchMode === 'product' ? 'is-product' : 'is-order'"
+        >{{ dispatchMode === 'product' ? '产品派工' : '订单派工' }}</text>
+      </view>
     </view>
 
-    <!-- 搜索区域：销售订单 + 订单物品 + 查询按钮 -->
+    <!-- 搜索区域：产品名称标签筛选 + 查询（销售订单不展示，由上一页/路由带入 selectedOrderCode） -->
     <view class="search-box">
-      <view class="salesOrder">
-        <text class="salesOrder-text">销售订单</text>
-        <view class="input-box">
-          <input
-            type="text"
-            v-model="searchForm.salesOrder"
-            placeholder="请输入销售订单"
-          />
-        </view>
-      </view>
-
-      <view class="orderItem">
-        <text class="orderItem-text">订单物品</text>
-        <view class="input-box">
-          <input
-            type="text"
-            v-model="searchForm.orderItem"
-            placeholder="请输入订单物品"
-          />
+      <view class="orderItem product-name-col">
+        <text class="orderItem-text">产品名称</text>
+        <view class="product-name-stack">
+          <view class="suggest-field">
+            <view class="suggest-input-box suggest-input-box--chips">
+              <view v-if="productNameFilterTags.length" class="filter-tags-inline">
+                <view
+                  v-for="(tag, tIdx) in productNameFilterTags"
+                  :key="'tag-' + tIdx + '-' + tag"
+                  class="filter-tag"
+                  @tap.stop="removeProductNameTag(tIdx)"
+                >
+                  <text class="filter-tag-text">{{ tag }}</text>
+                  <text class="filter-tag-close">×</text>
+                </view>
+              </view>
+              <input
+                v-model="productNameSuggestInput"
+                type="text"
+                placeholder="输入筛选词，点下方一行加入条件"
+                confirm-type="search"
+              />
+            </view>
+            <view v-if="productNameInputTrimmed" class="suggest-dropdown suggest-dropdown--single">
+              <view
+                class="suggest-item"
+                @tap.stop="pickProductNameSuggestion(productNameInputTrimmed)"
+              >
+                <text>{{ productNameInputTrimmed }}</text>
+              </view>
+            </view>
+          </view>
         </view>
       </view>
 
       <view class="btn-item search-btn" @click="search">查询</view>
+      <view class="btn-item confirm-btn" v-if="dispatchMode === 'product'" @click="confirmSelectedProducts">确定</view>
     </view>
 
     <!-- 单据列表：在选择订单基础上，展示订单编号 + 客户名称 + 产品名称 + 规格型号 -->
-    <view class="orderList">
+    <scroll-view class="orderList" scroll-y @scroll="onListScroll" @scrolltolower="loadMore" lower-threshold="80">
       <view
         class="orderItem"
         v-for="item in billsList"
         :key="item.productionCode || item.productCode || (item.orderCode + '-' + item.name)"
-        @click="selectProductItem(item)"
+        @tap="handleProductItemClick(item)"
       >
+        <!-- 小程序里原生 checkbox 常拦截触摸；透明层盖住框，由父级统一 @tap 勾选，避免点框无效 -->
+        <view
+          class="item-checkbox"
+          v-if="dispatchMode === 'product'"
+          @tap.stop="toggleProductChecked(item)"
+        >
+          <checkbox :checked="isProductChecked(item)" />
+          <view class="item-checkbox-cover" aria-hidden="true" />
+        </view>
         <view class="goodsInfo">
           <!-- 第一行：订单编号 + 客户名称 + 生产单号 -->
           <view class="row-top">
@@ -83,13 +111,16 @@
           </view>
         </view>
       </view>
-    </view>
+      <view class="list-status" v-if="loadingMore">加载中...</view>
+      <view class="list-status" v-else-if="!hasMore && billsList.length > 0">没有更多数据了</view>
+      <view class="list-status" v-else-if="!billsList.length">暂无数据</view>
+    </scroll-view>
   </view>
 </template>
 
 <script setup>
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
@@ -102,15 +133,106 @@ const workshop = ref('拉伸车间')
 // 排产类型：默认正常排产；由选择订单 / 派工返回 URL 参数 billType 带入，与接口 694a3954687045435008a7c3 一致
 const BILL_TYPE_ALLOWED = ['正常排产', '返工排产']
 const billTypeFilter = ref('正常排产')
+const billTypeIndex = ref(0)
+const isBillTypeReadonly = ref(false)
+const dispatchMode = ref('order')
 
 // 由选择订单页面带入的订单编号，用于接口筛选
 const selectedOrderCode = ref('')
 
 const billsList = ref([])
-const searchForm = ref({
-  salesOrder: '',
-  orderItem: ''
-})
+const loadingMore = ref(false)
+const hasMore = ref(true)
+const currentPage = ref(1)
+const pageSize = 100
+const totalRaw = ref(0)
+const loadedRawCount = ref(0)
+const hasUserScrolled = ref(false)
+const selectedProductKeys = ref([])
+
+/** 已选中的产品名称筛选条件（标签）；列表需匹配其中任一词（OR） */
+const productNameFilterTags = ref([])
+/** 输入框内容（trim 后点下方选项加入 productNameFilterTags，不做数据联想） */
+const productNameSuggestInput = ref('')
+/** 接口已加载并映射后的全集（不含销售订单、不含产品名标签筛选） */
+const baseListUnfiltered = ref([])
+
+const getProductKey = (item) => {
+  return (
+    item?.productionCode ||
+    item?.productCode ||
+    `${item?.orderCode || ''}-${item?.name || ''}`
+  )
+}
+
+const productNameInputTrimmed = computed(() =>
+  (productNameSuggestInput.value || '').trim()
+)
+
+const rebuildBillsList = () => {
+  let list = [...baseListUnfiltered.value]
+  const orderScope = (selectedOrderCode.value || '').trim().toLowerCase()
+  if (orderScope) {
+    list = list.filter((item) => {
+      const orderCodeStr = (item.orderCode || '').toString().toLowerCase()
+      return orderCodeStr.includes(orderScope)
+    })
+  }
+  if (productNameFilterTags.value.length) {
+    const tagsLower = productNameFilterTags.value
+      .map((t) => String(t).trim().toLowerCase())
+      .filter(Boolean)
+    list = list.filter((item) => {
+      const nameStr = (item.name || '').toString().toLowerCase()
+      return tagsLower.some((tag) => nameStr.includes(tag))
+    })
+  }
+  billsList.value = list
+}
+
+const pickProductNameSuggestion = (name) => {
+  const n = (name || '').toString().trim()
+  if (!n) return
+  const lower = n.toLowerCase()
+  if (
+    productNameFilterTags.value.some((t) => String(t).trim().toLowerCase() === lower)
+  ) {
+    productNameSuggestInput.value = ''
+    return
+  }
+  productNameFilterTags.value.push(n)
+  productNameSuggestInput.value = ''
+  rebuildBillsList()
+}
+
+const removeProductNameTag = (idx) => {
+  if (idx < 0 || idx >= productNameFilterTags.value.length) return
+  productNameFilterTags.value.splice(idx, 1)
+  rebuildBillsList()
+}
+
+const isProductChecked = (item) => {
+  const key = getProductKey(item)
+  return selectedProductKeys.value.includes(key)
+}
+
+const toggleProductChecked = (item) => {
+  const key = getProductKey(item)
+  const idx = selectedProductKeys.value.indexOf(key)
+  if (idx >= 0) {
+    selectedProductKeys.value.splice(idx, 1)
+  } else {
+    selectedProductKeys.value.push(key)
+  }
+}
+
+const handleProductItemClick = (item) => {
+  if (dispatchMode.value === 'product') {
+    toggleProductChecked(item)
+    return
+  }
+  selectProductItem(item)
+}
 
 onLoad((options) => {
   // 优先从登录权限取车间
@@ -120,20 +242,30 @@ onLoad((options) => {
     workshop.value = options.workshop
   }
 
-  // 从选择订单页面带入订单编号，并赋值到搜索栏
+  // 从选择订单页面带入订单编号（接口筛选 + 列表重建时按订单范围过滤，不展示销售订单输入框）
   if (options && options.orderCode) {
-    const orderCode = decodeURIComponent(options.orderCode)
-    selectedOrderCode.value = orderCode
-    searchForm.value.salesOrder = orderCode
+    selectedOrderCode.value = decodeURIComponent(options.orderCode)
   }
 
   // 排产类型：与选择订单当前筛选一致（或派工页返回时带入）
+  if (options && options.billTypeIndex !== undefined && options.billTypeIndex !== '') {
+    const idx = Number(options.billTypeIndex)
+    if (Number.isFinite(idx) && idx >= 0 && idx < BILL_TYPE_ALLOWED.length) {
+      billTypeIndex.value = idx
+      billTypeFilter.value = BILL_TYPE_ALLOWED[idx]
+    }
+  }
   if (options && options.billType) {
     const bt = decodeURIComponent(options.billType)
     if (BILL_TYPE_ALLOWED.includes(bt)) {
       billTypeFilter.value = bt
+      billTypeIndex.value = BILL_TYPE_ALLOWED.indexOf(bt)
     }
   }
+  const readonlyFlag = String(options?.billTypeReadonly || '')
+  isBillTypeReadonly.value = readonlyFlag === '1' || readonlyFlag.toLowerCase() === 'true'
+  const mode = String(options?.dispatchMode || '').trim()
+  dispatchMode.value = mode === 'product' ? 'product' : 'order'
 
   // 进入页面后立即根据当前条件获取数据
   search()
@@ -143,10 +275,14 @@ onShow(() => {
   if (userStore.loginLimits && userStore.loginLimits.trim()) {
     workshop.value = userStore.loginLimits
   }
+  // 产品派工：每次进入/从派工页返回不保留勾选（页面栈复用时不应记住上次选中）
+  if (dispatchMode.value === 'product') {
+    selectedProductKeys.value = []
+  }
 })
 
 // 获取单据原始数据（与选择订单接口一致，但增加订单编号筛选）
-const getBillsListRaw = async () => {
+const getBillsListRaw = async (pageNum = 1, silent = false) => {
   const filters = [
     {
       controlId: '67de26c9c5377d50a523c735',
@@ -188,19 +324,21 @@ const getBillsListRaw = async () => {
     })
   }
 
-  const res = await callWorkflowListAPIPaged({
-    worksheetId: 'paichanjihua',
-    filters
-  })
+  const res = await callWorkflowListAPIPaged(
+    {
+      worksheetId: 'paichanjihua',
+      filters,
+      silent
+    },
+    pageSize,
+    pageNum
+  )
   return res
 }
 
-const search = async () => {
-  const billsRes = await getBillsListRaw()
-  if (!billsRes.data || billsRes.data.length === 0) {
-    billsList.value = []
-    return
-  }
+/** 映射 + 排产类型相关行过滤；不含销售订单与产品名称标签筛选（供联想与 rebuildBillsList） */
+const mapRowsBaseOnly = (rows) => {
+  if (!rows || rows.length === 0) return []
 
   // 正常排产：69a8e4563b5e707f84d33c0c（未完成工序数量）> 0
   // 返工排产：按 69ccb3e7665ab27f39105da2 返工进度排除「已完成」
@@ -211,7 +349,7 @@ const search = async () => {
     const p = raw == null ? '' : String(raw).trim()
     return p === '已完成'
   }
-  const filteredData = billsRes.data.filter(item => {
+  const filteredData = rows.filter(item => {
     if (billTypeFilter.value === '返工排产') {
       return !isReworkProgressCompleted(item)
     }
@@ -219,13 +357,9 @@ const search = async () => {
     return !Number.isNaN(num) && num > 0
   })
 
-  if (!filteredData.length) {
-    billsList.value = []
-    return
-  }
+  if (!filteredData.length) return []
 
-  // 单条维度展示：正常排产显示订单数量；返工排产显示返工数量（653f1c62df3ac906c8a8f4f6）
-  let list = filteredData.map(item => {
+  return filteredData.map(item => {
     const orderCode = item['655e1cbbbd2094b316347f92'] || ''
     const customerName = item['69a8ed3c3b5e707f84d33f8b'] || ''
     const name = item['6937d255ff2b019b3cb34be3'] || ''
@@ -248,35 +382,71 @@ const search = async () => {
       productCode: item['691d6336535b29cbd5c6c0ca'] || ''
     }
   })
+}
 
-  // 前端模糊过滤：销售订单 -> orderCode，订单物品 -> name
-  const salesOrderKeyword = (searchForm.value.salesOrder || '').trim().toLowerCase()
-  const orderItemKeyword = (searchForm.value.orderItem || '').trim().toLowerCase()
+const loadPage = async (pageNum = 1, append = false) => {
+  if (loadingMore.value) return
+  loadingMore.value = true
+  try {
+    const billsRes = await getBillsListRaw(pageNum, pageNum > 1)
+    const rawRows = billsRes.data || []
+    totalRaw.value = Number(billsRes.total || 0)
+    loadedRawCount.value += rawRows.length
 
-  if (salesOrderKeyword || orderItemKeyword) {
-    list = list.filter(item => {
-      const orderCodeStr = (item.orderCode || '').toString().toLowerCase()
-      const nameStr = (item.name || '').toString().toLowerCase()
+    const pageBase = mapRowsBaseOnly(rawRows)
+    baseListUnfiltered.value = append
+      ? baseListUnfiltered.value.concat(pageBase)
+      : pageBase
+    rebuildBillsList()
 
-      const matchSalesOrder = !salesOrderKeyword || orderCodeStr.includes(salesOrderKeyword)
-      const matchOrderItem = !orderItemKeyword || nameStr.includes(orderItemKeyword)
-
-      return matchSalesOrder && matchOrderItem
-    })
+    hasMore.value = loadedRawCount.value < totalRaw.value
+    currentPage.value = pageNum
+  } finally {
+    loadingMore.value = false
   }
+}
 
-  billsList.value = list
+const search = async () => {
+  currentPage.value = 1
+  loadedRawCount.value = 0
+  totalRaw.value = 0
+  hasMore.value = true
+  hasUserScrolled.value = false
+  selectedProductKeys.value = []
+  billsList.value = []
+  baseListUnfiltered.value = []
+  productNameFilterTags.value = []
+  productNameSuggestInput.value = ''
+  await loadPage(1, false)
+}
+
+const onListScroll = (e) => {
+  const top = Number(e?.detail?.scrollTop || 0)
+  if (top > 0) hasUserScrolled.value = true
+}
+
+const loadMore = async () => {
+  // 防止初始渲染时 scroll-view 自动触底，导致连续加载所有分页
+  if (!hasUserScrolled.value) return
+  if (loadingMore.value || !hasMore.value) return
+  await loadPage(currentPage.value + 1, true)
 }
 
 // 返回选择订单页面
 const quit = () => {
-  uni.redirectTo({
-    url: '/pages/selectBills/selectBills'
+  uni.navigateBack({
+    delta: 1,
+    fail: () => {
+      uni.redirectTo({
+        url: '/pages/main/main'
+      })
+    }
   })
 }
 
 // 选择产品后，跳转到派工页面：车间、订单、生产单号、物品名称、排产类型（与当前列表筛选一致）
 const selectProductItem = (item) => {
+  const readonlyPart = isBillTypeReadonly.value ? '&billTypeReadonly=1' : ''
   uni.navigateTo({
     url: `/pages/dispatchWork/dispatchWork?workshop=${encodeURIComponent(
       workshop.value
@@ -284,7 +454,31 @@ const selectProductItem = (item) => {
       item.productionCode || ''
     )}&orderItem=${encodeURIComponent(item.name || '')}&billType=${encodeURIComponent(
       billTypeFilter.value || '正常排产'
-    )}`
+    )}&billTypeIndex=${billTypeIndex.value}&dispatchMode=${dispatchMode.value}${readonlyPart}`
+  })
+}
+
+const confirmSelectedProducts = () => {
+  const selectedItems = billsList.value.filter(item => isProductChecked(item))
+  if (!selectedItems.length) {
+    uni.showToast({ title: '请先勾选单据', icon: 'none' })
+    return
+  }
+  const readonlyPart = isBillTypeReadonly.value ? '&billTypeReadonly=1' : ''
+  const payload = selectedItems.map(item => ({
+    orderCode: item.orderCode || '',
+    productionCode: item.productionCode || '',
+    name: item.name || '',
+    orderCount: item.orderCount
+  }))
+  uni.navigateTo({
+    url: `/pages/dispatchWork/dispatchWork?workshop=${encodeURIComponent(
+      workshop.value
+    )}&billType=${encodeURIComponent(
+      billTypeFilter.value || '正常排产'
+    )}&billTypeIndex=${billTypeIndex.value}&dispatchMode=product&selectedProducts=${encodeURIComponent(
+      JSON.stringify(payload)
+    )}${readonlyPart}`
   })
 }
 </script>
@@ -292,6 +486,7 @@ const selectProductItem = (item) => {
 <style scoped lang="scss">
 .selectProduct-container {
   height: 100vh;
+  min-height: 100vh;
   width: 100vw;
   background-color: #f0f0f0;
   display: flex;
@@ -313,25 +508,58 @@ const selectProductItem = (item) => {
     }
 
     .title {
-      margin-right: px2vw(80px);
+      flex: 1;
+      min-width: 0;
+      text-align: center;
+      margin-right: 0;
       font-size: px2vw(35px);
       color: white;
+    }
+
+    .header-tag-wrap {
+      flex-shrink: 0;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding-right: px2vw(16px);
+      min-width: px2vw(100px);
+      box-sizing: border-box;
+    }
+
+    .dispatch-mode-tag {
+      font-size: px2vw(22px);
+      color: #fff;
+      padding: px2vw(6px) px2vw(14px);
+      border-radius: px2vw(10px);
+      background: rgba(255, 255, 255, 0.2);
+      border: px2vw(1px) solid rgba(255, 255, 255, 0.45);
+      white-space: nowrap;
+    }
+
+    .dispatch-mode-tag.is-order {
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .dispatch-mode-tag.is-product {
+      background: rgba(255, 193, 7, 0.35);
+      border-color: rgba(255, 224, 130, 0.85);
     }
   }
 
   .search-box {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     width: 100%;
     background-color: #fff;
-    height: px2vw(100px);
+    min-height: px2vw(100px);
     padding: px2vw(15px) px2vw(20px);
     margin: px2vw(10px);
     border-radius: px2vw(18px);
     box-sizing: border-box;
     gap: px2vw(10px);
+    position: relative;
+    z-index: 5;
 
-    .salesOrder,
     .orderItem {
       display: flex;
       align-items: center;
@@ -339,7 +567,116 @@ const selectProductItem = (item) => {
       min-width: 0;
     }
 
-    .salesOrder-text,
+    .orderItem.product-name-col {
+      align-items: center;
+    }
+
+    .product-name-stack {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .filter-tag {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      max-width: 100%;
+      padding: px2vw(6px) px2vw(12px);
+      border-radius: px2vw(10px);
+      background-color: #e8eefc;
+      border: px2vw(2px) solid #b8c8f5;
+      font-size: px2vw(22px);
+      color: #2755f1;
+      box-sizing: border-box;
+    }
+
+    .filter-tag-text {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin-right: px2vw(8px);
+    }
+
+    .filter-tag-close {
+      flex-shrink: 0;
+      font-size: px2vw(30px);
+      line-height: 1;
+      color: #666;
+    }
+
+    .suggest-field {
+      position: relative;
+      width: 100%;
+    }
+
+    .suggest-input-box {
+      width: 100%;
+      border: px2vw(3px) solid #5884f1;
+      border-radius: px2vw(18px);
+      box-sizing: border-box;
+      background-color: #fff;
+    }
+
+    .filter-tags-inline {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: px2vw(8px);
+      margin-right: px2vw(6px);
+    }
+
+    /* 标签与输入同在框内：横向排列，过多时换行 */
+    .suggest-input-box--chips {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      align-content: center;
+      gap: px2vw(8px);
+      min-height: px2vw(80px);
+      padding: px2vw(10px) px2vw(18px);
+      box-sizing: border-box;
+
+      input {
+        flex: 1;
+        min-width: px2vw(160px);
+        height: px2vw(52px);
+        font-size: px2vw(25px);
+        border: none;
+        background: transparent;
+        padding: 0;
+      }
+    }
+
+    .suggest-dropdown {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 100%;
+      margin-top: px2vw(4px);
+      max-height: px2vw(420px);
+      overflow-y: auto;
+      background-color: #fff;
+      border: px2vw(3px) solid #5884f1;
+      border-radius: px2vw(14px);
+      z-index: 30;
+      box-shadow: 0 px2vw(8px) px2vw(24px) rgba(0, 0, 0, 0.12);
+    }
+
+    .suggest-item {
+      padding: px2vw(20px) px2vw(22px);
+      font-size: px2vw(26px);
+      color: #333;
+      border-bottom: px2vw(1px) solid #f0f0f0;
+    }
+
+    .suggest-item:last-child {
+      border-bottom: none;
+    }
+
     .orderItem-text {
       font-size: px2vw(25px);
       margin-right: px2vw(10px);
@@ -378,19 +715,56 @@ const selectProductItem = (item) => {
       background-color: #2755f1;
       font-size: px2vw(25px);
     }
+    
+    .confirm-btn {
+      flex-shrink: 0;
+      margin-left: px2vw(10px);
+      margin-right: 0;
+      width: auto;
+      min-width: px2vw(260px);
+      height: px2vw(80px);
+      padding: px2vw(16px) px2vw(25px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      border-radius: px2vw(18px);
+      color: #fff;
+      background-color: #28a745;
+      font-size: px2vw(25px);
+    }
   }
 
   .orderList {
     flex: 1;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    min-height: 0;
+    background-color: #f0f0f0;
 
     .orderItem {
+      position: relative;
       width: 98%;
       background-color: #fff;
       border-radius: px2vw(18px);
       margin: px2vw(15px);
       padding: px2vw(15px);
+
+      .item-checkbox {
+        position: absolute;
+        top: px2vw(12px);
+        right: px2vw(12px);
+        z-index: 2;
+        padding: px2vw(8px);
+        margin: px2vw(-8px);
+        box-sizing: content-box;
+      }
+
+      .item-checkbox-cover {
+        position: absolute;
+        left: 0;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1;
+      }
 
       .goodsInfo {
         display: flex;
@@ -476,6 +850,13 @@ const selectProductItem = (item) => {
           }
         }
       }
+    }
+    
+    .list-status {
+      text-align: center;
+      color: #999;
+      font-size: px2vw(24px);
+      padding: px2vw(20px) 0;
     }
   }
 }

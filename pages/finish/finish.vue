@@ -77,7 +77,7 @@
 		<view class="table">
 			<uni-table stripe style="width: 100%;">
 				<uni-tr class="table-header-row">
-					<uni-th align="center" class="table-header-cell">订单物品</uni-th>
+					<uni-th align="center" class="table-header-cell">产品名称</uni-th>
 					<uni-th align="center" class="table-header-cell">物品名称</uni-th>
 					<uni-th align="center" class="table-header-cell">规格型号</uni-th>
 					<uni-th align="center" class="table-header-cell">工序序号</uni-th>

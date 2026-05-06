@@ -83,7 +83,7 @@
 				<uni-table stripe style="width: max-content; min-width: 1800px;">
 					<uni-tr class="table-header-row">
 						<uni-th align="center" class="table-header-cell">检验状态</uni-th>
-						<uni-th align="center" class="table-header-cell">订单物品</uni-th>
+						<uni-th align="center" class="table-header-cell">产品名称</uni-th>
 						<uni-th align="center" class="table-header-cell">派工条码</uni-th>
 						<uni-th align="center" class="table-header-cell">物品名称</uni-th>
 						<uni-th align="center" class="table-header-cell">工序名称</uni-th>
