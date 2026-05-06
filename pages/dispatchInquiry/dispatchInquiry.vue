@@ -188,12 +188,15 @@ import Radiobox from '../../component/radiobox/radiobox.vue'
 import AddWorkerRadiobox from '../../component/addWorkerRadiobox/addWorkerRadiobox.vue'
 import http from '../../utils/request'
 import { useStatusBar } from '../../composables/useStatusBar'
+import { defaultWorkshopFromLoginLimits } from '../../utils/workshop'
 const userStore = useUserStore()
 const { statusBarHeight } = useStatusBar()
 onLoad((options) => {
-	// 从URL参数获取workshop值，如果存在则使用，否则使用默认值
-	if (options.workshop) {
+	// URL 带车间则以路由为准；否则默认登录权限车间（与派工/选单一致）
+	if (options?.workshop) {
 		workshop.value = decodeURIComponent(options.workshop).trim()
+	} else if (userStore.loginLimits && userStore.loginLimits.trim()) {
+		workshop.value = defaultWorkshopFromLoginLimits(userStore.loginLimits.trim())
 	}
 	getDispatchInquiryList()
 })

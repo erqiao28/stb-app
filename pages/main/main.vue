@@ -24,6 +24,7 @@
 import { computed } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
+import { defaultWorkshopFromLoginLimits } from '../../utils/workshop'
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
 
@@ -46,9 +47,8 @@ const goSelectBills = () => {
 }
 
 const goSelectProductDispatch = () => {
-	const workshop = userStore.loginLimits && userStore.loginLimits.trim()
-		? userStore.loginLimits.trim()
-		: '拉伸车间'
+	const raw = (userStore.loginLimits && userStore.loginLimits.trim()) || ''
+	const workshop = defaultWorkshopFromLoginLimits(raw) || raw || '拉伸车间'
 	uni.navigateTo({
 		url: `/pages/selectProduct/selectProduct?workshop=${encodeURIComponent(workshop)}&billTypeIndex=0&billType=${encodeURIComponent('正常排产')}&billTypeReadonly=1&dispatchMode=product`
 	})
@@ -73,10 +73,8 @@ const goDispatchInquiry = () => {
 }
 
 const goDispatchInquiryMore = () => {
-	const workshop =
-		userStore.loginLimits && userStore.loginLimits.trim()
-			? userStore.loginLimits.trim()
-			: ''
+	const raw = (userStore.loginLimits && userStore.loginLimits.trim()) || ''
+	const workshop = defaultWorkshopFromLoginLimits(raw) || raw
 	uni.navigateTo({
 		url: `/pages/dispatchInquiryMore/dispatchInquiryMore?workshop=${encodeURIComponent(workshop)}`
 	})

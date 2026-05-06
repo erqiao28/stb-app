@@ -67,6 +67,7 @@ import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { ref, watch } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
+import { defaultWorkshopFromLoginLimits } from '../../utils/workshop'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -93,11 +94,12 @@ const listLoading = ref(false)
 
 onLoad((options) => {
 	let hasExplicitBillType = false
-	// 优先从登录权限取车间
+	// 优先从登录权限取车间（喷涂权限默认按组装车间）
 	if (userStore.loginLimits && userStore.loginLimits.trim()) {
-		workshop.value = userStore.loginLimits
+		workshop.value = defaultWorkshopFromLoginLimits(userStore.loginLimits.trim())
 	} else if (options && options.workshop) {
-		workshop.value = options.workshop
+		const ow = decodeURIComponent(String(options.workshop)).trim()
+		workshop.value = defaultWorkshopFromLoginLimits(ow) || ow
 	}
 	// 通过入口参数指定默认排产类型（优先使用数字索引，其次中文值）
 	const routeBillTypeIdxRaw = options?.billTypeIndex
@@ -167,7 +169,7 @@ watch(
 
 onShow(() => {
 	if (userStore.loginLimits && userStore.loginLimits.trim()) {
-		workshop.value = userStore.loginLimits
+		workshop.value = defaultWorkshopFromLoginLimits(userStore.loginLimits.trim())
 	}
 })
 

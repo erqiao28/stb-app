@@ -860,6 +860,7 @@ import {
 import { onLoad, onUnload, onShow } from '@dcloudio/uni-app'
 import http from '../../utils/request'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
+import { defaultWorkshopFromLoginLimits } from '../../utils/workshop'
 import { useUserStore } from '../../store/user.store'
 import { useStatusBar } from '../../composables/useStatusBar'
 import Radiobox from "../../component/radiobox/radiobox.vue"
@@ -3819,9 +3820,9 @@ onLoad((options) => {
     searchForm.value.orderItem = orderItem
   }
 
-  // 检查仓库中的权限字段（车间）
+  // 检查仓库中的权限字段（车间）；喷涂权限默认按组装车间（与记时派工一致）
   if (userStore.loginLimits && userStore.loginLimits.trim()) {
-    workshop.value = userStore.loginLimits
+    workshop.value = defaultWorkshopFromLoginLimits(userStore.loginLimits.trim())
     isWorkshopLocked.value = true // 锁定车间，不允许修改
   }
 
@@ -3841,8 +3842,9 @@ onLoad((options) => {
 onShow(() => {
   // 每次显示页面时也检查一次权限字段（车间）
   if (userStore.loginLimits && userStore.loginLimits.trim()) {
-    if (workshop.value !== userStore.loginLimits) {
-      workshop.value = userStore.loginLimits
+    const effective = defaultWorkshopFromLoginLimits(userStore.loginLimits.trim())
+    if (workshop.value !== effective) {
+      workshop.value = effective
     }
     if (!isWorkshopLocked.value) {
       isWorkshopLocked.value = true

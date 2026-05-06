@@ -67,6 +67,7 @@ import { useUserStore } from '../../store/user.store'
 const userStore = useUserStore()
 const { statusBarHeight } = useStatusBar()
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
+import { defaultWorkshopFromLoginLimits } from '../../utils/workshop'
 
 // 获取当前日期（格式：YYYY-MM-DD）
 const getCurrentDate = () => {
@@ -87,6 +88,7 @@ const loading = ref(false)
 // 车间单选
 const workshopOptions = ref([
 	{ label: '拉伸车间', value: '拉伸车间' },
+	{ label: '喷涂车间', value: '喷涂车间' },
 	{ label: '抛光车间', value: '抛光车间' },
 	{ label: '组装车间', value: '组装车间' }
 ])
@@ -108,6 +110,10 @@ const onWorkshopChange = (e) => {
 }
 
 onLoad(() => {
+	const lim = defaultWorkshopFromLoginLimits((userStore.loginLimits || '').trim())
+	if (lim && workshopOptions.value.some((o) => o.value === lim)) {
+		selectedWorkshop.value = lim
+	}
 	getWorkloadList(1, true)
 })
 

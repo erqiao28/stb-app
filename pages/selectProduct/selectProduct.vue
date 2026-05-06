@@ -161,6 +161,7 @@ import { ref, computed } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
+import { defaultWorkshopFromLoginLimits } from '../../utils/workshop'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -296,11 +297,12 @@ const handleProductItemClick = (item) => {
 }
 
 onLoad((options) => {
-  // 优先从登录权限取车间
+  // 优先从登录权限取车间（喷涂权限默认按组装车间）
   if (userStore.loginLimits && userStore.loginLimits.trim()) {
-    workshop.value = userStore.loginLimits
+    workshop.value = defaultWorkshopFromLoginLimits(userStore.loginLimits.trim())
   } else if (options && options.workshop) {
-    workshop.value = options.workshop
+    const ow = decodeURIComponent(String(options.workshop)).trim()
+    workshop.value = defaultWorkshopFromLoginLimits(ow) || ow
   }
 
   // 从选择订单页面带入订单编号：预填一条订单标签（仍可继续添加关键词）
@@ -337,7 +339,7 @@ onLoad((options) => {
 
 onShow(() => {
   if (userStore.loginLimits && userStore.loginLimits.trim()) {
-    workshop.value = userStore.loginLimits
+    workshop.value = defaultWorkshopFromLoginLimits(userStore.loginLimits.trim())
   }
   // 产品派工：每次进入/从派工页返回不保留勾选（页面栈复用时不应记住上次选中）
   if (dispatchMode.value === 'product') {
