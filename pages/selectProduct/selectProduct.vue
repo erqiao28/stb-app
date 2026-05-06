@@ -157,7 +157,7 @@
 
 <script setup>
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
@@ -231,6 +231,13 @@ const rebuildBillsList = () => {
     })
   }
   billsList.value = list
+  nextTick(() => {
+    // 须在单次 loadPage 结束（loadingMore 已置 false）后再拉取，否则会与当前请求冲突被 loadPage 首行拦截
+    if (loadingMore.value) return
+    if (billsList.value.length === 0 && hasMore.value) {
+      prefetchUntilListNonEmptyIfNeeded()
+    }
+  })
 }
 
 const pickOrderSuggestion = (raw) => {
@@ -461,6 +468,21 @@ const loadPage = async (pageNum = 1, append = false) => {
   }
 }
 
+/** 订单/产品关键词为本地筛选：若当前已加载行筛完后为空，但服务端仍有分页，则自动继续拉取，避免仅加载前几页就「暂无数据」且无法触发上拉 */
+const MAX_AUTO_PREFETCH_PAGES = 40
+
+const prefetchUntilListNonEmptyIfNeeded = async () => {
+  let steps = 0
+  while (
+    steps < MAX_AUTO_PREFETCH_PAGES &&
+    billsList.value.length === 0 &&
+    hasMore.value
+  ) {
+    steps++
+    await loadPage(currentPage.value + 1, true)
+  }
+}
+
 const search = async () => {
   currentPage.value = 1
   loadedRawCount.value = 0
@@ -482,9 +504,9 @@ const onListScroll = (e) => {
 }
 
 const loadMore = async () => {
-  // 防止初始渲染时 scroll-view 自动触底，导致连续加载所有分页
-  if (!hasUserScrolled.value) return
   if (loadingMore.value || !hasMore.value) return
+  // 有数据时需用户先滚动过再加载更多，避免首屏误触发连刷；筛选结果为空时允许直接触底继续拉取
+  if (billsList.value.length > 0 && !hasUserScrolled.value) return
   await loadPage(currentPage.value + 1, true)
 }
 
