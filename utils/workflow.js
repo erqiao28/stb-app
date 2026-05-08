@@ -93,10 +93,7 @@ export const callWorkflowListAPI = async (
         filters,
       }
 
-      const res = await http.post(
-        'https://www.dachen.vip/api/workflow/hooks2/NjkxMmQzOTI3NDM1ZTE5MjVmMDkyMjM1',
-        params
-      )
+      const res = await http.post(config.WORKFLOW_API.LIST_URL, params)
 
       if (res && res.data) {
         const responseData = JSON.parse(res.data)

@@ -859,8 +859,19 @@ import {
 } from 'vue'
 import { onLoad, onUnload, onShow } from '@dcloudio/uni-app'
 import http from '../../utils/request'
+import {
+  API_BASE,
+  DISPATCH_ONE_TO_MANY_URL,
+  DISPATCH_PROCESS_URL,
+  REWORK_COMPLETE_URL,
+  REWORK_START_URL,
+  FIRST_CHECK_REMIND_URL,
+  TERMINATE_PROCESS_URL,
+  DISPATCH_MULTI_URL,
+  USE_NORMAL_PROCESS_URL,
+  DELETE_PROCESS_URL,
+} from '../../utils/api'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
-import { defaultWorkshopFromLoginLimits } from '../../utils/workshop'
 import { useUserStore } from '../../store/user.store'
 import { useStatusBar } from '../../composables/useStatusBar'
 import Radiobox from "../../component/radiobox/radiobox.vue"
@@ -1194,7 +1205,7 @@ const confirmReworkStart = async () => {
   }
 
   try {
-    const resp = await http.post(REWORK_START_HOOK, payload)
+    const resp = await http.post(REWORK_START_URL, payload)
     if (resp.status === 1) {
       uni.showToast({ title: resp.message || resp.msg || '提交失败', icon: 'none' })
       return
@@ -1257,7 +1268,7 @@ const confirmReworkComplete = async () => {
   }
 
   try {
-    const resp = await http.post(REWORK_COMPLETE_HOOK, payload)
+    const resp = await http.post(REWORK_COMPLETE_URL, payload)
     if (resp.status === 1) {
       uni.showToast({ title: resp.message || resp.msg || '提交失败', icon: 'none' })
       return
@@ -1318,12 +1329,7 @@ const currentOneToManyItem = ref(null)
 // 一对多派工打开「添加员工」时限制为单选
 const addEmployeeMaxSelection = computed(() => (showOneToManyModal.value ? 1 : 0))
 
-// 一对多派工 webhook：processDispatchList[{ rowid1, dispatchCount1 }, { rowid2, dispatchCount2 }…] + date + 员工信息
-const ONE_TO_MANY_DISPATCH_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjljMGRhMjAwZjBkMGFkODBmYTQyZGNj'
-/** 订单派工 / 产品派工同一 webhook；产品派工一次请求，明细在 dispatchList [{ processRowid, dispatchQuantity, worktime }] */
-const PROCESS_DISPATCH_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjkyMTJlNzdhOWE4ZGM2YmMxZjczYzlk'
-
-/** 相同 body 并发时合并为一次 uni.request（防止极端双击） */
+/** 相同 body 并发时合并为一次 uni.request（防止极端双击）；地址见 utils/api DISPATCH_PROCESS_URL */
 const processDispatchPostInflight = new Map()
 const postProcessDispatchHook = (dispatchData) => {
   let key
@@ -1335,19 +1341,12 @@ const postProcessDispatchHook = (dispatchData) => {
   const existing = processDispatchPostInflight.get(key)
   if (existing) return existing
 
-  const promise = http.post(PROCESS_DISPATCH_HOOK, dispatchData).finally(() => {
+  const promise = http.post(DISPATCH_PROCESS_URL, dispatchData).finally(() => {
     processDispatchPostInflight.delete(key)
   })
   processDispatchPostInflight.set(key, promise)
   return promise
 }
-
-// 返工完成
-const REWORK_COMPLETE_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjljY2I3ZTEzMzBiMjAyNjg5ODQ1YTYx'
-// 合并工序（原返工开始 webhook）
-const REWORK_START_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjljY2MzYjEzMzBiMjAyNjg5ODY0NDg4'
-// 首检提醒
-const FIRST_CHECK_REMIND_HOOK = 'https://www.dachen.vip/api/workflow/hooks/NjllMDdhZWIzMzBiMjAyNjg5NDVmOTE5'
 
 // ==================== 计算属性 ====================
 // 最大派工数量：需派工数量
@@ -1540,7 +1539,7 @@ const confirmTerminate = async () => {
   }
   
   try {
-    const result = await http.post('https://www.dachen.vip/api/workflow/hooks/Njk0NGRjYTI0NDUzNWFkMTg3ZWFiZmFj', {
+    const result = await http.post(TERMINATE_PROCESS_URL, {
       rowid: selectedProcessData.value?.process?.rowid || '',
       terminateReason: terminateReason.value.trim(),
       loginCode: userStore.loginCode || ''
@@ -2096,9 +2095,8 @@ const lookSop = (item) => {
 
   // H5 环境下通过本地代理转发，去掉固定域名，避免 CORS；App 等其他端保留完整地址
   if (process.env.UNI_PLATFORM === 'h5') {
-    const domainPrefix = 'https://www.dachen.vip'
-    if (url.startsWith(domainPrefix)) {
-      url = url.slice(domainPrefix.length)
+    if (url.startsWith(API_BASE)) {
+      url = url.slice(API_BASE.length)
     }
   }
 
@@ -2430,8 +2428,7 @@ const openMultiDispatchModal = (item) => {
   selectedMultiEmployees.value = []
   
   // 初始化模态框车间为页面当前车间
-  // 特殊规则：当页面车间为喷涂车间时，添加员工默认使用组装车间
-  modalWorkshop.value = workshop.value === '喷涂车间' ? '组装车间' : workshop.value
+  modalWorkshop.value = workshop.value
   
   // 不自动加载员工列表，只有点击添加员工按钮后才加载
   showMultiDispatchModal.value = true
@@ -2499,7 +2496,7 @@ const openOneToManyModal = (item) => {
 
   oneToManyEmployeeList.value = []
   selectedOneToManyEmployeeId.value = ''
-  modalWorkshop.value = workshop.value === '喷涂车间' ? '组装车间' : workshop.value
+  modalWorkshop.value = workshop.value
   currentOneToManyItem.value = item
   showOneToManyModal.value = true
 }
@@ -2524,7 +2521,7 @@ const onOneToManyEmployeeRadioChange = (e) => {
 
 const addOneToManyEmployee = async () => {
   if (!modalWorkshop.value) {
-    modalWorkshop.value = workshop.value === '喷涂车间' ? '组装车间' : workshop.value
+    modalWorkshop.value = workshop.value
   }
   await loadMultiEmployeesForAdd()
   selectedEmployeesForAdd.value = []
@@ -2604,7 +2601,7 @@ const confirmOneToManyDispatch = async () => {
     }
 
     try {
-      const resp = await http.post(ONE_TO_MANY_DISPATCH_HOOK, dispatchParams)
+      const resp = await http.post(DISPATCH_ONE_TO_MANY_URL, dispatchParams)
       if (resp.status === 1) {
         uni.showToast({ title: resp.message || '派工失败', icon: 'none' })
         return
@@ -2630,8 +2627,7 @@ const confirmOneToManyDispatch = async () => {
 const addMultiEmployee = async () => {
   // 如果模态框车间值还没有设置，使用当前页面车间值
   if (!modalWorkshop.value) {
-    // 特殊规则：当页面车间为喷涂车间时，添加员工默认使用组装车间
-    modalWorkshop.value = workshop.value === '喷涂车间' ? '组装车间' : workshop.value
+    modalWorkshop.value = workshop.value
   }
   
   // 加载所有可选的员工列表（用于添加员工模态框）
@@ -2816,7 +2812,6 @@ const confirmMultiDispatch = async () => {
       ...(involveLine ? [{ label: '涉及', value: involveLine }] : [])
     ],
     async () => {
-      const hookUrl = 'https://www.dachen.vip/api/workflow/hooks/Njk4MmRkMTUwZjBkMGFkODBmZTM1YjAy'
       try {
         const dispatchList = buildMultiDispatchModalListPayload(
           targets,
@@ -2847,7 +2842,7 @@ const confirmMultiDispatch = async () => {
             })),
             dispatchList
           }
-          const resp = await http.post(hookUrl, dispatchParams)
+          const resp = await http.post(DISPATCH_MULTI_URL, dispatchParams)
           if (resp.status === 1) {
             uni.showToast({
               title: resp.message || `单据 ${billItem?.orderCode || ''} 派工失败`,
@@ -2890,8 +2885,7 @@ const openProcessModal = (item, process) => {
     const todayStr = `${year}-${month}-${day}`
 
     // 初始化模态框车间为页面当前车间
-    // 特殊规则：当页面车间为喷涂车间时，添加员工默认使用组装车间
-    modalWorkshop.value = workshop.value === '喷涂车间' ? '组装车间' : workshop.value
+    modalWorkshop.value = workshop.value
 
     processDispatchData.value = {
       employee: '',
@@ -3249,8 +3243,7 @@ const loadEmployees = async () => {
 const addEmployee = async () => {
   // 如果模态框车间值还没有设置，使用当前页面车间值
   if (!modalWorkshop.value) {
-    // 特殊规则：当页面车间为喷涂车间时，添加员工默认使用组装车间
-    modalWorkshop.value = workshop.value === '喷涂车间' ? '组装车间' : workshop.value
+    modalWorkshop.value = workshop.value
   }
   
   // 重新加载员工列表，确保使用最新的车间值
@@ -3584,7 +3577,7 @@ const useNormalProcess = async (item) => {
   
   try {
     uni.showLoading({ title: '处理中...' })
-    const result = await http.post('https://www.dachen.vip/api/workflow/hooks/Njk3MWMwODkwZjBkMGFkODBmMjhjOGU1', {
+    const result = await http.post(USE_NORMAL_PROCESS_URL, {
       billRowid: billRowid
     })
     uni.hideLoading()
@@ -3623,7 +3616,7 @@ const sendFirstCheckReminder = async (item) => {
 
   try {
     uni.showLoading({ title: '发送中...' })
-    const result = await http.post(FIRST_CHECK_REMIND_HOOK, {
+    const result = await http.post(FIRST_CHECK_REMIND_URL, {
       orderCode,
       productName,
       productionCode,
@@ -3667,7 +3660,7 @@ const confirmDeleteProcess = async () => {
   }
   try {
     uni.showLoading({ title: '删除中...' })
-    const result = await http.post('https://www.dachen.vip/api/workflow/hooks/Njk3MWNkY2UwZjBkMGFkODBmMmE3NGM3', {
+    const result = await http.post(DELETE_PROCESS_URL, {
       rowid: processRowid
     })
     uni.hideLoading()
@@ -3820,10 +3813,11 @@ onLoad((options) => {
     searchForm.value.orderItem = orderItem
   }
 
-  // 检查仓库中的权限字段（车间）；喷涂权限默认按组装车间（与记时派工一致）
-  if (userStore.loginLimits && userStore.loginLimits.trim()) {
-    workshop.value = defaultWorkshopFromLoginLimits(userStore.loginLimits.trim())
-    isWorkshopLocked.value = true // 锁定车间，不允许修改
+  // 与登录权限 loginLimits 一致，不将喷涂映射为组装
+  const limitsOnLoad = (userStore.loginLimits || '').trim()
+  if (limitsOnLoad && workshopOptions.value.includes(limitsOnLoad)) {
+    workshop.value = limitsOnLoad
+    isWorkshopLocked.value = true
   }
 
   uni.$on('processAdded', (data) => {
@@ -3840,15 +3834,12 @@ onLoad((options) => {
 })
 
 onShow(() => {
-  // 每次显示页面时也检查一次权限字段（车间）
-  if (userStore.loginLimits && userStore.loginLimits.trim()) {
-    const effective = defaultWorkshopFromLoginLimits(userStore.loginLimits.trim())
-    if (workshop.value !== effective) {
-      workshop.value = effective
+  const limitsOnShow = (userStore.loginLimits || '').trim()
+  if (limitsOnShow && workshopOptions.value.includes(limitsOnShow)) {
+    if (workshop.value !== limitsOnShow) {
+      workshop.value = limitsOnShow
     }
-    if (!isWorkshopLocked.value) {
-      isWorkshopLocked.value = true
-    }
+    isWorkshopLocked.value = true
   }
   
   // 页面展示时，根据当前车间与排产类型加载所有符合条件的单据和工序

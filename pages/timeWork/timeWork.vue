@@ -156,8 +156,8 @@ import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
-import { defaultWorkshopFromLoginLimits } from '../../utils/workshop'
 import http from '../../utils/request'
+import { TIME_WORK_DISPATCH_URL } from '../../utils/api'
 import { useUserStore } from '../../store/user.store'
 import AddWorkerRadiobox from '../../component/addWorkerRadiobox/addWorkerRadiobox.vue'
 
@@ -173,13 +173,13 @@ const timeWorkBills = ref([])
 // 车间选项（与派工页面一致）
 const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
 
-/** 喷涂车间时，筛选/员工与派工页一致，按组装车间处理（与 utils/workshop 一致） */
+/** 筛选/添员工用车间：与当前所选车间一致（权限不做喷涂→组装映射） */
 const workshopForFilter = (w) => {
 	if (!w) return '拉伸车间'
-	return defaultWorkshopFromLoginLimits(w) || w
+	return w
 }
 
-/** 默认车间：与登录权限 loginLimits 一致；喷涂车间时默认为组装车间 */
+/** 默认车间：与登录权限 loginLimits 一致 */
 const getDefaultTimeWorkshop = () => {
 	const raw = (userStore.loginLimits && userStore.loginLimits.trim()) || ''
 	if (raw && workshopOptions.value.includes(raw)) {
@@ -196,7 +196,7 @@ const timeWorkForm = ref({
 	remark: ''
 })
 
-// 记时派工模态框内的车间（用于添加员工时传给 AddWorkerRadiobox；喷涂→组装）
+// 记时派工模态框内的车间（传给 AddWorkerRadiobox）
 const modalWorkshop = ref(workshopForFilter(timeWorkForm.value.workshop))
 const timeWorkWorkshopIndex = computed(() => {
 	const i = workshopOptions.value.indexOf(timeWorkForm.value.workshop)
@@ -434,7 +434,7 @@ const doTimeWorkDispatch = async () => {
 
 	try {
 		uni.showLoading({ title: '提交中...', mask: true })
-		const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjlhZTZiOTIwZjBkMGFkODBmZDQ3MWEz', payload)
+		const res = await http.post(TIME_WORK_DISPATCH_URL, payload)
 		uni.hideLoading()
 
 		// 约定：status === 1 视为失败（与登录、修改密码接口一致）

@@ -38,6 +38,7 @@
 	import http, {
 		showToast
 	} from '../../utils/request'
+	import { CHANGE_PASSWORD_URL } from '../../utils/api'
 	import {
 		useUserStore
 	} from '../../store/user.store'
@@ -84,8 +85,7 @@
 		}
 
 		// 发送请求
-		const res = await http.post(
-			'https://www.dachen.vip/api/workflow/hooks/NjkxYTdlNjg5ZDQzNzY1NDk1YmYyOGQy', formdata.value)
+		const res = await http.post(CHANGE_PASSWORD_URL, formdata.value)
 		if (res.status === 1) {
 			showToast('账号或密码错误')
 			return

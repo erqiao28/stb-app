@@ -72,6 +72,7 @@ import {
 } from '../../store/user.store'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
+import { LOGIN_URL } from '../../utils/api'
 // 使用状态栏高度
 const { statusBarHeight } = useStatusBar()
 
@@ -318,7 +319,7 @@ const login = async () => {
 		return
 	}
 	// 发请求
-	const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjkxNTc3NDc4YTVhMDAzMjI2M2I1ZGJi', loginform.value)
+	const res = await http.post(LOGIN_URL, loginform.value)
 	if (res.status === 1) {
 		showToast('账号或密码错误')
 		return

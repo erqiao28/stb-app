@@ -73,10 +73,9 @@ const goDispatchInquiry = () => {
 }
 
 const goDispatchInquiryMore = () => {
-	const raw = (userStore.loginLimits && userStore.loginLimits.trim()) || ''
-	const workshop = defaultWorkshopFromLoginLimits(raw) || raw
+	// 不带车间参数：由多对多派工查询页根据登录权限 loginLimits 默认选中车间
 	uni.navigateTo({
-		url: `/pages/dispatchInquiryMore/dispatchInquiryMore?workshop=${encodeURIComponent(workshop)}`
+		url: '/pages/dispatchInquiryMore/dispatchInquiryMore'
 	})
 }
 

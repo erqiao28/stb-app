@@ -92,6 +92,7 @@ import {
 import { callWorkflowListAPIPaged } from '../../utils/workflow';
 import http from '../../utils/request.js'
 import { showToast } from '../../utils/request.js'
+import { ADD_PROCESS_URL } from '../../utils/api'
 import { useStatusBar } from '../../composables/useStatusBar'
 const { statusBarHeight } = useStatusBar()
 const orderData = ref({
@@ -272,7 +273,7 @@ const addProcess = async () => {
 		return
 	}
 
-	const res = await http.post('https://www.dachen.vip/api/workflow/hooks/NjkxYzU0ODlkMjYxYWY3YTM3ZjA3M2Nm', {
+	const res = await http.post(ADD_PROCESS_URL, {
 		ordercode: orderData.value.ordercode,
 		productcode: orderData.value.productcode,
 		workshop: orderData.value.workshop,

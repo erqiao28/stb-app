@@ -86,7 +86,10 @@
 			title="选择转派员工" 
 			:visible="showSelectEmployeeModal" 
 			@update:visible="handleSelectEmployeeModalClose" 
-			@confirm="handleSelectEmployeeConfirm" 
+			@confirm="handleSelectEmployeeConfirm"
+			:workshopOptions="workshopTabOptions"
+			:workshop="modalWorkshop"
+			@update:workshop="onModalWorkshopChange"
 		/>
 		<!-- 导航栏（与派工页面一致：仅左侧返回 + 中间标题） -->
 		<view class="header">
@@ -95,6 +98,19 @@
 				多对多派工查询
 			</view>
 			<view></view>
+		</view>
+
+		<!-- 车间：喷涂 / 组装；默认登录权限，派工等入口可 URL 覆盖 -->
+		<view class="workshop-tabs">
+			<view
+				v-for="name in workshopTabOptions"
+				:key="name"
+				class="workshop-tab"
+				:class="{ 'workshop-tab--active': workshop === name }"
+				@click="selectWorkshop(name)"
+			>
+				<text class="workshop-tab-text">{{ name }}</text>
+			</view>
 		</view>
 
 		<!-- 搜索区域 -->
@@ -206,20 +222,29 @@ import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import Radiobox from '../../component/radiobox/radiobox.vue'
 import AddWorkerRadiobox from '../../component/addWorkerRadiobox/addWorkerRadiobox.vue'
 import http from '../../utils/request'
+import {
+	DISPATCH_INQUIRY_MORE_DELETE_URL,
+	DISPATCH_TRANSFER_URL,
+} from '../../utils/api'
 import { useStatusBar } from '../../composables/useStatusBar'
 const userStore = useUserStore()
 const { statusBarHeight } = useStatusBar()
-onLoad((options) => {
-	// 从URL参数获取workshop值，如果存在则使用，否则使用默认值
-	if (options.workshop) {
-		workshop.value = decodeURIComponent(options.workshop)
-	}
-	getDispatchInquiryList()
-})
 
-// 车间相关
-const workshop = ref('拉伸车间')
-const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
+/** 本页仅喷涂、组装；默认优先登录权限，无 URL 时不用派工页带入车间 */
+const workshopTabOptions = ref(['喷涂车间', '组装车间'])
+const workshop = ref('组装车间')
+const modalWorkshop = ref('')
+
+const onModalWorkshopChange = (value) => {
+	modalWorkshop.value = value || ''
+	loadEmployees()
+}
+
+const selectWorkshop = (name) => {
+	if (workshop.value === name) return
+	workshop.value = name
+	getDispatchInquiryList()
+}
 
 // 需检验单选框
 const report = ref('全部')
@@ -256,21 +281,107 @@ const dispatchInquiryList = ref([
 	}
 ])
 
-// 获取派工单据列表
+// 接口只按报工状态拉取；车间在前端筛。明道「车间」控件常为对象或 JSON 字符串，不能直接 === 比较
+const WORKSHOP_FIELD = '69b295d13b5e707f84d705cf'
+
+/** 从原始行解析车间展示文案 */
+function cellWorkshopText(raw) {
+	const v = raw[WORKSHOP_FIELD]
+	if (v == null || v === '') return ''
+	if (typeof v === 'string') {
+		const t = v.trim()
+		if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
+			try {
+				const p = JSON.parse(t)
+				return cellWorkshopText({ ...raw, [WORKSHOP_FIELD]: p })
+			} catch {
+				return t
+			}
+		}
+		return t
+	}
+	if (Array.isArray(v)) {
+		const first = v[0]
+		if (first && typeof first === 'object') {
+			return String(first.name || first.text || first.value || first.fullname || '').trim()
+		}
+		return v.filter(Boolean).map((x) => (typeof x === 'string' ? x : '')).join('、').trim()
+	}
+	if (typeof v === 'object') {
+		return String(v.name || v.text || v.value || v.label || v.title || '').trim()
+	}
+	return String(v).trim()
+}
+
+/** 与当前选中的「喷涂车间/组装车间」是否视为同一车间 */
+function workshopMatchesRow(rowLabel, selected) {
+	const b = String(selected || '').trim()
+	if (!b) return true
+	const a = String(rowLabel || '').trim()
+	if (!a) return false
+	if (a === b) return true
+	const strip = (s) => s.replace(/车间$/, '').replace(/\s/g, '')
+	if (strip(a) && strip(b) && strip(a) === strip(b)) return true
+	return a.includes(b) || b.includes(a)
+}
+
 const getDispatchInquiryList = async () => {
-  const res = await callWorkflowListAPIPaged({
-    worksheetId: 'dddpg',
-    filters: [{
-      controlId: '697b11b33b5e707f84cd938e',
-      dataType: 30,
-      spliceType: 1,
-      filterType: 6,
-      values: ['全部报工','已转派']
-    }],
-    pageSize: 100,
-    pageNum: 1
-  })
-  dispatchInquiryList.value = res.data
+  let res
+  try {
+    res = await callWorkflowListAPIPaged({
+      worksheetId: 'dddpg',
+      filters: [{
+        controlId: '697b11b33b5e707f84cd938e',
+        dataType: 30,
+        spliceType: 1,
+        filterType: 6,
+        values: ['全部报工','已转派']
+      }],
+      pageSize: 100,
+      pageNum: 1
+    })
+  } catch (e) {
+    console.error('多对多派工列表请求失败:', e)
+    dispatchInquiryList.value = []
+    uni.showToast({ title: '加载失败', icon: 'none' })
+    return
+  }
+
+  let rows = Array.isArray(res.data) ? res.data : []
+  // 带报工状态筛时若 0 条，再试无筛选（明道选项值若变更会导致一直空）
+  if (rows.length === 0) {
+    try {
+      const res2 = await callWorkflowListAPIPaged({
+        worksheetId: 'dddpg',
+        filters: [],
+        pageSize: 100,
+        pageNum: 1,
+        silent: true
+      })
+      const r2 = Array.isArray(res2.data) ? res2.data : []
+      if (r2.length) {
+        rows = r2
+        uni.showToast({ title: '已显示本页数据（报工条件无匹配时放宽）', icon: 'none' })
+      }
+    } catch (_) {
+      /* 忽略 */
+    }
+  }
+
+  const currentWs = String(workshop.value || '').trim()
+
+  const hasWorkshopValues = rows.some((raw) => cellWorkshopText(raw))
+  let filtered = rows
+  if (currentWs && hasWorkshopValues) {
+    filtered = rows.filter((raw) => workshopMatchesRow(cellWorkshopText(raw), currentWs))
+  }
+  // 有车间数据但筛完为空：多半是文案不一致，避免整页空白，退回全量并提示
+  if (rows.length > 0 && filtered.length === 0 && hasWorkshopValues) {
+    uni.showToast({ title: '车间未匹配到记录，已显示全部', icon: 'none' })
+    filtered = rows
+  }
+
+  dispatchInquiryList.value = filtered
     .map(item => ({
     goodsName: item['698a94e23b5e707f84d090ba'],
     processName: item['69ad18473b5e707f84d42fb4'],
@@ -300,12 +411,28 @@ const getDispatchInquiryList = async () => {
 	machineNumber: item['695c9af59223cfe3a0c02d5f'],
 	mouldNumber: item['695c9b009223cfe3a0c02d66'],
 	remainCount: item['6901c87f7a33416aedfd6bc4'],
-	workshop: item['66f130864a66ee0d85e400a9'],
+	workshop: item['69b295d13b5e707f84d705cf'],
 	status: item['697b11b33b5e707f84cd938e'],
 	isRedeploy: item['695b7efca820885c2979af50'],
 	isredeploy: item['695b7efca820885c2979af4f'],
   }))
 }
+
+onLoad((options) => {
+	const two = workshopTabOptions.value
+	if (options?.workshop) {
+		const w = decodeURIComponent(String(options.workshop)).trim()
+		if (two.includes(w)) {
+			workshop.value = w
+		}
+	} else {
+		const lim = (userStore.loginLimits || '').trim()
+		if (lim && two.includes(lim)) {
+			workshop.value = lim
+		}
+	}
+	getDispatchInquiryList()
+})
 
 // 转派相关数据
 const showTransferModal = ref(false)
@@ -340,7 +467,8 @@ const getCurrentDate = () => {
 
 // 获取员工列表
 const loadEmployees = async () => {
-	if (!workshop.value) {
+	const selectedWorkshop = modalWorkshop.value || workshop.value
+	if (!selectedWorkshop) {
 		uni.showToast({
 			title: '缺少车间信息',
 			icon: 'none'
@@ -350,7 +478,7 @@ const loadEmployees = async () => {
 	
 	try {
 		const currentDate = getCurrentDate()
-		console.log('派工查询页面 - 获取员工列表 - 当前日期:', currentDate)
+		console.log('多对多派工查询 - 获取员工列表 - 当前日期:', currentDate)
 		const res = await callWorkflowListAPIPaged({
 			worksheetId: 'yggs',
 			filters: [{
@@ -358,7 +486,7 @@ const loadEmployees = async () => {
 				"dataType": 30,
 				"spliceType": 1,
 				"filterType": 2,
-				"values": [workshop.value]
+				"values": [selectedWorkshop]
 			}],
 			pageSize: 100,
 			pageNum: 1
@@ -437,7 +565,7 @@ const handleDeleteDispatch = async (item) => {
 			if (!res.confirm) return
 
 			try {
-				const result = await http.post('https://www.dachen.vip/api/workflow/hooks/NjliZDAwNWIwZjBkMGFkODBmODJkZTQx', {
+				const result = await http.post(DISPATCH_INQUIRY_MORE_DELETE_URL, {
 					rowid: item.rowid
 				})
 
@@ -506,6 +634,9 @@ const closeTransferModal = () => {
 
 // 打开选择员工模态框
 const openSelectEmployeeModal = async () => {
+	if (!modalWorkshop.value) {
+		modalWorkshop.value = workshop.value
+	}
 	if (allEmployeesOptions.value.length === 0) {
 		await loadEmployees()
 	}
@@ -550,7 +681,7 @@ const confirmTransfer = async () => {
 	}
 	
 	try {
-		const res = await http.post('https://www.dachen.vip/api/workflow/hooks/Njk1Y2E1ZDIwODY3ZmI3ZDc1Njc2ZDUx', transferData.value)
+		const res = await http.post(DISPATCH_TRANSFER_URL, transferData.value)
 		
 		// 判断转派是否成功
 		const isSuccess = (typeof res === 'string' && res.includes('转派成功')) || 
@@ -610,6 +741,45 @@ const quit = () => {
 			font-size: px2vw(35px);
 			color: white;
 		}
+	}
+
+	.workshop-tabs {
+		display: flex;
+		flex-wrap: nowrap;
+		gap: px2vw(16px);
+		padding: px2vw(16px) px2vw(20px);
+		background-color: #fff;
+		box-sizing: border-box;
+		width: 100%;
+	}
+
+	.workshop-tab {
+		flex: 1;
+		min-width: 0;
+		height: px2vw(72px);
+		border: px2vw(2px) solid #5884f1;
+		border-radius: px2vw(12px);
+		background-color: #fff;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		box-sizing: border-box;
+	}
+
+	.workshop-tab--active {
+		background-color: #5884f1;
+		border-color: #5884f1;
+	}
+
+	.workshop-tab-text {
+		font-size: px2vw(28px);
+		color: #333;
+		text-align: center;
+		line-height: 1.2;
+	}
+
+	.workshop-tab--active .workshop-tab-text {
+		color: #fff;
 	}
 
 	/* 搜索区域 */

@@ -304,7 +304,7 @@ const handleProductItemClick = (item) => {
 }
 
 onLoad((options) => {
-  // 优先从登录权限取车间（喷涂权限默认按组装车间）
+  // 优先从登录权限取车间（与权限一致）
   if (userStore.loginLimits && userStore.loginLimits.trim()) {
     workshop.value = defaultWorkshopFromLoginLimits(userStore.loginLimits.trim())
   } else if (options && options.workshop) {

@@ -100,6 +100,19 @@
 			<view></view>
 		</view>
 
+		<!-- 车间：四个按钮切换，默认登录权限 -->
+		<view class="workshop-tabs">
+			<view
+				v-for="name in workshopOptions"
+				:key="name"
+				class="workshop-tab"
+				:class="{ 'workshop-tab--active': workshop === name }"
+				@click="selectWorkshop(name)"
+			>
+				<text class="workshop-tab-text">{{ name }}</text>
+			</view>
+		</view>
+
 		<!-- 搜索区域 -->
 		<!-- <view class="search-box">
 			<view class="startdate">
@@ -187,16 +200,35 @@ import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import Radiobox from '../../component/radiobox/radiobox.vue'
 import AddWorkerRadiobox from '../../component/addWorkerRadiobox/addWorkerRadiobox.vue'
 import http from '../../utils/request'
+import {
+	DISPATCH_INQUIRY_DELETE_URL,
+	DISPATCH_TRANSFER_URL,
+} from '../../utils/api'
 import { useStatusBar } from '../../composables/useStatusBar'
-import { defaultWorkshopFromLoginLimits } from '../../utils/workshop'
 const userStore = useUserStore()
 const { statusBarHeight } = useStatusBar()
+
+const workshop = ref('拉伸车间')
+const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
+
+const selectWorkshop = (name) => {
+	if (workshop.value === name) return
+	workshop.value = name
+	getDispatchInquiryList()
+}
+
 onLoad((options) => {
-	// URL 带车间则以路由为准；否则默认登录权限车间（与派工/选单一致）
+	// URL 带车间则以路由为准；否则默认登录权限车间（须在四个车间内）
 	if (options?.workshop) {
-		workshop.value = decodeURIComponent(options.workshop).trim()
-	} else if (userStore.loginLimits && userStore.loginLimits.trim()) {
-		workshop.value = defaultWorkshopFromLoginLimits(userStore.loginLimits.trim())
+		const w = decodeURIComponent(options.workshop).trim()
+		if (workshopOptions.value.includes(w)) {
+			workshop.value = w
+		}
+	} else {
+		const lim = (userStore.loginLimits || '').trim()
+		if (lim && workshopOptions.value.includes(lim)) {
+			workshop.value = lim
+		}
 	}
 	getDispatchInquiryList()
 })
@@ -206,9 +238,6 @@ onReachBottom(() => {
 	loadMore()
 })
 
-// 车间相关
-const workshop = ref('拉伸车间')
-const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
 // 选择员工模态框中的车间选择（用于 AddWorkerRadiobox）
 const modalWorkshop = ref('')
 
@@ -396,9 +425,8 @@ const getCurrentDate = () => {
 
 // 获取员工列表
 const loadEmployees = async () => {
-	// 选择员工用的车间：优先使用模态框中的车间；
-	// 若为空，则使用当前页面车间，但喷涂车间特殊处理，默认切到组装车间
-	const selectedWorkshop = modalWorkshop.value || (workshop.value === '喷涂车间' ? '组装车间' : workshop.value)
+	// 选择员工用的车间：优先模态框中的车间，否则为当前页面车间
+	const selectedWorkshop = modalWorkshop.value || workshop.value
 
 	if (!selectedWorkshop) {
 		uni.showToast({
@@ -526,7 +554,7 @@ const handleDeleteDispatch = async (item) => {
 			if (!res.confirm) return
 
 			try {
-				const result = await http.post('https://www.dachen.vip/api/workflow/hooks/NjliOTIzMTIwZjBkMGFkODBmNTQ5Mzhh', {
+				const result = await http.post(DISPATCH_INQUIRY_DELETE_URL, {
 					rowid: item.rowid
 				})
 
@@ -574,9 +602,8 @@ const closeTransferModal = () => {
 
 // 打开选择员工模态框
 const openSelectEmployeeModal = async () => {
-	// 初始化选择员工模态框中的车间：喷涂车间特殊处理，默认组装车间
 	if (!modalWorkshop.value) {
-		modalWorkshop.value = workshop.value === '喷涂车间' ? '组装车间' : workshop.value
+		modalWorkshop.value = workshop.value
 	}
 	if (allEmployeesOptions.value.length === 0) {
 		await loadEmployees()
@@ -622,7 +649,7 @@ const confirmTransfer = async () => {
 	}
 	
 	try {
-		const res = await http.post('https://www.dachen.vip/api/workflow/hooks/Njk1Y2E1ZDIwODY3ZmI3ZDc1Njc2ZDUx', transferData.value)
+		const res = await http.post(DISPATCH_TRANSFER_URL, transferData.value)
 		
 		// 判断转派是否成功
 		const isSuccess = (typeof res === 'string' && res.includes('转派成功')) || 
@@ -682,6 +709,45 @@ const quit = () => {
 			font-size: px2vw(35px);
 			color: white;
 		}
+	}
+
+	.workshop-tabs {
+		display: flex;
+		flex-wrap: nowrap;
+		gap: px2vw(12px);
+		padding: px2vw(16px) px2vw(20px);
+		background-color: #fff;
+		box-sizing: border-box;
+		width: 100%;
+	}
+
+	.workshop-tab {
+		flex: 1;
+		min-width: 0;
+		height: px2vw(72px);
+		border: px2vw(2px) solid #5884f1;
+		border-radius: px2vw(12px);
+		background-color: #fff;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		box-sizing: border-box;
+	}
+
+	.workshop-tab--active {
+		background-color: #5884f1;
+		border-color: #5884f1;
+	}
+
+	.workshop-tab-text {
+		font-size: px2vw(26px);
+		color: #333;
+		text-align: center;
+		line-height: 1.2;
+	}
+
+	.workshop-tab--active .workshop-tab-text {
+		color: #fff;
 	}
 
 	/* 搜索区域 */
