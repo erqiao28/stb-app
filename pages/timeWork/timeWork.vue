@@ -36,7 +36,7 @@
 				:key="bill.id || bill.dispatchTime + bill.employee"
 				class="bill-item"
 			>
-				<view class="bill-row">
+				<view class="bill-row bill-row-first">
 					<view class="bill-col">
 						<text class="bill-label">车间：</text>
 						<text class="bill-value">{{ bill.workshop || '-' }}</text>
@@ -45,6 +45,7 @@
 						<text class="bill-label">员工：</text>
 						<text class="bill-value">{{ bill.employee || '-' }}</text>
 					</view>
+					<button class="btn-hourly-rate" @click.stop="openHourlyRateModal(bill)">时薪</button>
 				</view>
 				<view class="bill-row">
 					<view class="bill-col">
@@ -136,6 +137,29 @@
 			</view>
 		</view>
 
+		<!-- 修改单据时薪 -->
+		<view class="hourly-rate-modal" v-if="showHourlyRateModal" @click.self="closeHourlyRateModal">
+			<view class="hourly-rate-modal-content" @click.stop>
+				<view class="hourly-rate-modal-header">
+					<text class="hourly-rate-modal-title">时薪</text>
+					<view class="hourly-rate-modal-close" @click="closeHourlyRateModal">×</view>
+				</view>
+				<view class="hourly-rate-modal-body">
+					<text class="hourly-rate-label">时薪（元/时）</text>
+					<input
+						v-model="hourlyRateModalInput"
+						class="hourly-rate-input"
+						type="digit"
+						placeholder="请输入时薪"
+					/>
+				</view>
+				<view class="hourly-rate-modal-footer">
+					<button class="btn-hourly-cancel" @click="closeHourlyRateModal">取消</button>
+					<button class="btn-hourly-confirm" @click="confirmHourlyRateModal">确认</button>
+				</view>
+			</view>
+		</view>
+
 		<!-- 添加员工模态框（与派工页面一致；可多选） -->
 		<AddWorkerRadiobox
 			v-model="selectedEmployeesForAdd"
@@ -157,7 +181,7 @@ import { onLoad } from '@dcloudio/uni-app'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import http from '../../utils/request'
-import { TIME_WORK_DISPATCH_URL } from '../../utils/api'
+import { TIME_WORK_DISPATCH_URL, TIME_WORK_UPDATE_HOURLY_URL } from '../../utils/api'
 import { useUserStore } from '../../store/user.store'
 import AddWorkerRadiobox from '../../component/addWorkerRadiobox/addWorkerRadiobox.vue'
 
@@ -167,23 +191,30 @@ const userStore = useUserStore()
 const showTimeWorkModal = ref(false)
 const showAddEmployeeModal = ref(false)
 
+/** 单据行「时薪」弹窗 */
+const showHourlyRateModal = ref(false)
+const hourlyRateModalBill = ref(null)
+const hourlyRateModalInput = ref('')
+
 // 记时派工记录列表
 const timeWorkBills = ref([])
 
 // 车间选项（与派工页面一致）
 const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
 
-/** 筛选/添员工用车间：与当前所选车间一致（权限不做喷涂→组装映射） */
+/** 筛选/添员工用车间：与当前所选车间一致；默认车间喷涂→组装见 getDefaultTimeWorkshop */
 const workshopForFilter = (w) => {
 	if (!w) return '拉伸车间'
 	return w
 }
 
-/** 默认车间：与登录权限 loginLimits 一致 */
+/** 默认车间：与登录权限 loginLimits 一致；若为喷涂则在记时派工页默认改为组装（仅本页） */
 const getDefaultTimeWorkshop = () => {
 	const raw = (userStore.loginLimits && userStore.loginLimits.trim()) || ''
 	if (raw && workshopOptions.value.includes(raw)) {
-		return workshopForFilter(raw)
+		let w = workshopForFilter(raw)
+		if (w === '喷涂车间') w = '组装车间'
+		return w
 	}
 	return '拉伸车间'
 }
@@ -404,6 +435,62 @@ const closeTimeWorkModal = () => {
 	showTimeWorkModal.value = false
 }
 
+const openHourlyRateModal = (bill) => {
+	hourlyRateModalBill.value = bill
+	const hr = bill?.hourlyRate
+	hourlyRateModalInput.value =
+		hr !== undefined && hr !== null && hr !== '' ? String(hr) : ''
+	showHourlyRateModal.value = true
+}
+
+const closeHourlyRateModal = () => {
+	showHourlyRateModal.value = false
+	hourlyRateModalBill.value = null
+	hourlyRateModalInput.value = ''
+}
+
+const confirmHourlyRateModal = async () => {
+	const bill = hourlyRateModalBill.value
+	if (!bill?.id) {
+		closeHourlyRateModal()
+		return
+	}
+	const raw = String(hourlyRateModalInput.value).trim()
+	let hourlyRateNum = 0
+	if (raw !== '') {
+		const num = parseFloat(raw.replace(/,/g, ''))
+		if (!Number.isFinite(num) || num < 0) {
+			uni.showToast({ title: '请输入有效时薪', icon: 'none' })
+			return
+		}
+		hourlyRateNum = num
+	}
+
+	try {
+		uni.showLoading({ title: '保存中...', mask: true })
+		const res = await http.post(TIME_WORK_UPDATE_HOURLY_URL, {
+			rowid: bill.id,
+			hourlyRate: hourlyRateNum
+		})
+		uni.hideLoading()
+
+		if (res && res.status === 1) {
+			uni.showToast({ title: res.msg || res.message || '保存失败', icon: 'none' })
+			return
+		}
+
+		closeHourlyRateModal()
+		uni.showToast({ title: res?.msg || res?.message || '已更新时薪', icon: 'success' })
+		setTimeout(() => {
+			loadTimeWorkBills()
+		}, 400)
+	} catch (error) {
+		uni.hideLoading()
+		console.error('更新时薪失败:', error)
+		uni.showToast({ title: '保存失败：' + (error.message || '未知错误'), icon: 'none' })
+	}
+}
+
 const doTimeWorkDispatch = async () => {
 	// 基本校验
 	if (!timeWorkEmployeeList.value.length) {
@@ -476,8 +563,10 @@ onLoad((options) => {
 	if (options && options.workshop) {
 		const w = decodeURIComponent(options.workshop)
 		if (workshopOptions.value.includes(w)) {
-			timeWorkForm.value.workshop = w
-			modalWorkshop.value = workshopForFilter(w)
+			let ws = w
+			if (ws === '喷涂车间') ws = '组装车间'
+			timeWorkForm.value.workshop = ws
+			modalWorkshop.value = workshopForFilter(ws)
 		}
 	} else {
 		timeWorkForm.value.workshop = getDefaultTimeWorkshop()
@@ -588,6 +677,28 @@ onLoad((options) => {
 	margin-bottom: px2vw(8px);
 }
 
+.bill-row-first {
+	align-items: center;
+
+	.bill-col {
+		min-width: 0;
+	}
+
+	.btn-hourly-rate {
+		flex-shrink: 0;
+		align-self: center;
+		margin: 0 0 0 px2vw(12px);
+		padding: 0 px2vw(22px);
+		height: px2vw(52px);
+		line-height: px2vw(52px);
+		font-size: px2vw(24px);
+		color: #fff;
+		background-color: #5884f1;
+		border-radius: px2vw(10px);
+		border: none;
+	}
+}
+
 .bill-col {
 	flex: 1;
 	display: flex;
@@ -655,6 +766,100 @@ onLoad((options) => {
 
 .status-default {
 	background-color: #ccc;
+}
+
+.hourly-rate-modal {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: rgba(0, 0, 0, 0.5);
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	z-index: 300;
+	padding: px2vw(40px);
+	box-sizing: border-box;
+
+	.hourly-rate-modal-content {
+		width: 100%;
+		max-width: px2vw(640px);
+		background: #fff;
+		border-radius: px2vw(18px);
+		overflow: hidden;
+		box-shadow: 0 px2vw(8px) px2vw(24px) rgba(0, 0, 0, 0.15);
+	}
+
+	.hourly-rate-modal-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: px2vw(28px) px2vw(32px);
+		border-bottom: px2vw(2px) solid #eee;
+	}
+
+	.hourly-rate-modal-title {
+		font-size: px2vw(34px);
+		font-weight: bold;
+		color: #333;
+	}
+
+	.hourly-rate-modal-close {
+		font-size: px2vw(48px);
+		line-height: 1;
+		color: #999;
+		padding: px2vw(8px);
+	}
+
+	.hourly-rate-modal-body {
+		padding: px2vw(32px);
+	}
+
+	.hourly-rate-label {
+		display: block;
+		font-size: px2vw(28px);
+		color: #666;
+		margin-bottom: px2vw(16px);
+	}
+
+	.hourly-rate-input {
+		width: 100%;
+		height: px2vw(72px);
+		padding: 0 px2vw(20px);
+		box-sizing: border-box;
+		border: px2vw(2px) solid #eee;
+		border-radius: px2vw(10px);
+		font-size: px2vw(30px);
+	}
+
+	.hourly-rate-modal-footer {
+		display: flex;
+		gap: px2vw(24px);
+		padding: px2vw(24px) px2vw(32px) px2vw(32px);
+		box-sizing: border-box;
+	}
+
+	.btn-hourly-cancel,
+	.btn-hourly-confirm {
+		flex: 1;
+		height: px2vw(80px);
+		line-height: px2vw(80px);
+		font-size: px2vw(30px);
+		border-radius: px2vw(12px);
+		border: none;
+		margin: 0;
+	}
+
+	.btn-hourly-cancel {
+		background: #f0f0f0;
+		color: #666;
+	}
+
+	.btn-hourly-confirm {
+		background: #5884f1;
+		color: #fff;
+	}
 }
 
 .time-work-modal {

@@ -64,6 +64,9 @@ export const CHANGE_PASSWORD_URL = apiUrl('/api/workflow/hooks/NjkxYTdlNjg5ZDQzN
 /** 记时派工：提交工时、员工、车间等 */
 export const TIME_WORK_DISPATCH_URL = apiUrl('/api/workflow/hooks/NjlhZTZiOTIwZjBkMGFkODBmZDQ3MWEz')
 
+/** 记时派工（jspg）：按单据 rowid 修改时薪；请求体 `{ rowid, hourlyRate }` */
+export const TIME_WORK_UPDATE_HOURLY_URL = apiUrl('/api/workflow/hooks/NjlmZDU3ZjM4MWZiNGY2MDZmOGY4MTU4')
+
 /** 添加工序：订单/产品工序保存 */
 export const ADD_PROCESS_URL = apiUrl('/api/workflow/hooks/NjkxYzU0ODlkMjYxYWY3YTM3ZjA3M2Nm')
 
