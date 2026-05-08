@@ -337,7 +337,9 @@ const loadTimeWorkBills = async () => {
 }
 
 const openAddEmployeeModal = async () => {
-	modalWorkshop.value = workshopForFilter(timeWorkForm.value.workshop)
+	let w = workshopForFilter(timeWorkForm.value.workshop)
+	if (w === '喷涂车间') w = '组装车间'
+	modalWorkshop.value = w
 	await loadEmployeesForAdd()
 	selectedEmployeesForAdd.value = timeWorkEmployeeList.value.map((e) => e.id)
 	showAddEmployeeModal.value = true

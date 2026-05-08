@@ -600,14 +600,12 @@ const closeTransferModal = () => {
 	selectedTransferEmployees.value = []
 }
 
-// 打开选择员工模态框
+// 打开选择转派员工模态框（与派工「添加员工」一致：默认车间为喷涂时按组装拉员工）
 const openSelectEmployeeModal = async () => {
-	if (!modalWorkshop.value) {
-		modalWorkshop.value = workshop.value
-	}
-	if (allEmployeesOptions.value.length === 0) {
-		await loadEmployees()
-	}
+	let w = modalWorkshop.value || workshop.value
+	if (w === '喷涂车间') w = '组装车间'
+	modalWorkshop.value = w
+	await loadEmployees()
 	selectedTransferEmployees.value = []
 	showSelectEmployeeModal.value = true
 }

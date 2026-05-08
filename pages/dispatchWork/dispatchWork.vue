@@ -654,6 +654,19 @@
         >{{ dispatchMode === 'product' ? '产品派工' : '订单派工' }}</text>
       </view>
     </view>
+
+    <!-- 登录权限为喷涂车间时：显示车间选择入口，可切换派工页当前车间 -->
+    <view
+      v-if="showDispatchWorkshopSelector"
+      class="workshop-select-bar"
+      @click="openWorkshopSelectModal"
+    >
+      <text class="workshop-select-label">当前车间</text>
+      <view class="workshop-select-main">
+        <text class="workshop-select-value">{{ workshop }}</text>
+        <text class="workshop-select-chevron">›</text>
+      </view>
+    </view>
     
     <!-- 功能按钮栏（排产类型由选择订单/选择产品传入，不再提供顶部切换） -->
     <view class="btn-list" v-show="false">
@@ -894,6 +907,22 @@ const modalWorkshopIndex = computed(() => {
   const index = workshopOptions.value.indexOf(modalWorkshop.value)
   return index >= 0 ? index : 0
 })
+
+/** loginLimits 为喷涂车间时展示顶部车间选择条，允许切换到其它车间 */
+const showDispatchWorkshopSelector = computed(() => {
+  return (userStore.loginLimits || '').trim() === '喷涂车间'
+})
+
+const openWorkshopSelectModal = () => {
+  showWorkshopModal.value = true
+}
+
+/** 仅打开「添加员工」弹窗时：默认选用车间为喷涂则改为组装（仅影响弹窗内拉员工列表，不改页面 workshop） */
+const applyWorkshopWhenOpeningAddEmployeeModal = () => {
+  let w = modalWorkshop.value || workshop.value
+  if (w === '喷涂车间') w = '组装车间'
+  modalWorkshop.value = w
+}
 
 /** 工序列表支持多选：组装/抛光/喷涂（喷涂与组装一致，含多对多派工） */
 const isMultiSelectProcessWorkshop = computed(() => {
@@ -2520,9 +2549,7 @@ const onOneToManyEmployeeRadioChange = (e) => {
 }
 
 const addOneToManyEmployee = async () => {
-  if (!modalWorkshop.value) {
-    modalWorkshop.value = workshop.value
-  }
+  applyWorkshopWhenOpeningAddEmployeeModal()
   await loadMultiEmployeesForAdd()
   selectedEmployeesForAdd.value = []
   showAddEmployeeModal.value = true
@@ -2625,11 +2652,7 @@ const confirmOneToManyDispatch = async () => {
 
 // 多对多派工添加员工
 const addMultiEmployee = async () => {
-  // 如果模态框车间值还没有设置，使用当前页面车间值
-  if (!modalWorkshop.value) {
-    modalWorkshop.value = workshop.value
-  }
-  
+  applyWorkshopWhenOpeningAddEmployeeModal()
   // 加载所有可选的员工列表（用于添加员工模态框）
   await loadMultiEmployeesForAdd()
   
@@ -3241,11 +3264,7 @@ const loadEmployees = async () => {
 }
 
 const addEmployee = async () => {
-  // 如果模态框车间值还没有设置，使用当前页面车间值
-  if (!modalWorkshop.value) {
-    modalWorkshop.value = workshop.value
-  }
-  
+  applyWorkshopWhenOpeningAddEmployeeModal()
   // 重新加载员工列表，确保使用最新的车间值
   await loadEmployees()
   
@@ -3813,11 +3832,11 @@ onLoad((options) => {
     searchForm.value.orderItem = orderItem
   }
 
-  // 与登录权限 loginLimits 一致，不将喷涂映射为组装
+  // 与登录权限 loginLimits 一致，不将喷涂映射为组装（喷涂权限允许在页面内改车间，不锁）
   const limitsOnLoad = (userStore.loginLimits || '').trim()
   if (limitsOnLoad && workshopOptions.value.includes(limitsOnLoad)) {
     workshop.value = limitsOnLoad
-    isWorkshopLocked.value = true
+    isWorkshopLocked.value = limitsOnLoad !== '喷涂车间'
   }
 
   uni.$on('processAdded', (data) => {
@@ -3836,12 +3855,17 @@ onLoad((options) => {
 onShow(() => {
   const limitsOnShow = (userStore.loginLimits || '').trim()
   if (limitsOnShow && workshopOptions.value.includes(limitsOnShow)) {
-    if (workshop.value !== limitsOnShow) {
-      workshop.value = limitsOnShow
+    if (limitsOnShow === '喷涂车间') {
+      // 喷涂权限用户可在页面切换车间，返回本页时不强制改回喷涂
+      isWorkshopLocked.value = false
+    } else {
+      if (workshop.value !== limitsOnShow) {
+        workshop.value = limitsOnShow
+      }
+      isWorkshopLocked.value = true
     }
-    isWorkshopLocked.value = true
   }
-  
+
   // 页面展示时，根据当前车间与排产类型加载所有符合条件的单据和工序
   setTimeout(() => {
     search()
@@ -3971,6 +3995,50 @@ onUnload(() => {
       overflow: hidden;
       white-space: nowrap;
       text-overflow: ellipsis;
+    }
+  }
+
+  /* 喷涂权限：车间切换条 */
+  .workshop-select-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: calc(100% - #{px2vw(20px)});
+    margin: px2vw(8px) px2vw(10px) px2vw(4px);
+    padding: px2vw(18px) px2vw(22px);
+    box-sizing: border-box;
+    background-color: #fff;
+    border-radius: px2vw(18px);
+    box-shadow: 0 px2vw(2px) px2vw(10px) rgba(0, 0, 0, 0.06);
+
+    .workshop-select-label {
+      font-size: px2vw(26px);
+      color: #666;
+      flex-shrink: 0;
+    }
+
+    .workshop-select-main {
+      display: flex;
+      align-items: center;
+      gap: px2vw(8px);
+      min-width: 0;
+    }
+
+    .workshop-select-value {
+      font-size: px2vw(30px);
+      color: #333;
+      font-weight: 600;
+      max-width: px2vw(360px);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .workshop-select-chevron {
+      font-size: px2vw(36px);
+      color: #5884f1;
+      line-height: 1;
+      flex-shrink: 0;
     }
   }
 
