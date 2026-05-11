@@ -1758,6 +1758,25 @@ const getProcessTypeParam = (billType) => {
   return billType === '返工排产' ? '返工派工' : '正常派工'
 }
 
+/** 设为 true 时在控制台输出产品派工单据调试信息；用完请改回 false */
+const DEBUG_PRODUCT_DISPATCH_LIST = true
+const dbgDispatchProductList = (...args) => {
+  if (!DEBUG_PRODUCT_DISPATCH_LIST) return
+  console.log('[派工-产品列表调试]', ...args)
+}
+
+const billListKeyForUi = (orderCode, productionCode) =>
+  `${orderCode || ''}-${productionCode || ''}`
+
+const findDuplicateBillKeys = (bills) => {
+  const count = new Map()
+  for (const b of bills || []) {
+    const k = billListKeyForUi(b?.orderCode, b?.productionCode)
+    count.set(k, (count.get(k) || 0) + 1)
+  }
+  return [...count.entries()].filter(([, n]) => n > 1)
+}
+
 // 根据当前车间和单据类型获取工序列表（统一获取后在前端按订单匹配）
 const getProcessRaw = async (billTypeValue = '') => {
   const processTypeParam = getProcessTypeParam(billTypeValue || '正常排产')
@@ -1860,6 +1879,11 @@ const loadProcessesForProductBills = async (baseBills, billTypeValue) => {
   for (const { orderCode, productionCode } of pairMap.values()) {
     const res = await getProcessRawForOrderProduct(billTypeValue, orderCode, productionCode)
     const rows = res.data || []
+    dbgDispatchProductList('loadProcessesForProductBills 单次请求', {
+      orderCode,
+      productionCode,
+      本批行数: rows.length
+    })
     for (const row of rows) {
       const rid = row.rowid
       if (rid != null && rowidSeen.has(rid)) continue
@@ -1867,7 +1891,18 @@ const loadProcessesForProductBills = async (baseBills, billTypeValue) => {
       merged.push(row)
     }
   }
+  dbgDispatchProductList('loadProcessesForProductBills 汇总', {
+    去重前单据对数: pairMap.size,
+    合并后工序行数: merged.length
+  })
   return merged
+}
+
+/** 排产原始行 → 与前端一致的订单号+生产单号键（产品派工补拉去重用） */
+const billPairKeyFromPaiChanRow = (row) => {
+  const orderCode = row['655e1cbbbd2094b316347f92']
+  const productionCode = row['698438933b5e707f84cf51fd']
+  return `${orderCode || ''}__${productionCode || ''}`
 }
 
 // 根据当前车间和单据类型获取单据列表
@@ -1916,7 +1951,62 @@ const getBillsListRaw = async () => {
     worksheetId: 'paichanjihua',
     filters
   })
-  return res
+
+  let rows = [...(res.data || [])]
+  const rowidSeen = new Set()
+  for (const r of rows) {
+    if (r?.rowid != null) rowidSeen.add(r.rowid)
+  }
+
+  // 产品派工：列表接口默认只取第 1 页（如 100 条），勾选单据若不在本页会「未命中」。对未出现的订单号+生产单号再精确补拉并合并
+  if (dispatchMode.value === 'product' && selectedProductHeaders.value.length > 0) {
+    const keysInRows = new Set(rows.map(billPairKeyFromPaiChanRow))
+    for (const h of selectedProductHeaders.value) {
+      const oc = String(h?.orderCode ?? '').trim()
+      const pc = String(h?.productionCode ?? '').trim()
+      if (!oc && !pc) continue
+      const needKey = `${oc}__${pc}`
+      if (keysInRows.has(needKey)) continue
+
+      const extraFilters = [
+        ...filters,
+        {
+          controlId: '655e1cbbbd2094b316347f92',
+          dataType: 30,
+          spliceType: 1,
+          filterType: 2,
+          values: [oc]
+        },
+        {
+          controlId: '698438933b5e707f84cf51fd',
+          dataType: 30,
+          spliceType: 1,
+          filterType: 2,
+          values: [pc]
+        }
+      ]
+      const sup = await callWorkflowListAPIPaged({
+        worksheetId: 'paichanjihua',
+        filters: extraFilters,
+        silent: true
+      })
+      const supRows = sup.data || []
+      dbgDispatchProductList('产品派工-补拉排产单(勾选未出现在首页)', {
+        orderCode: oc,
+        productionCode: pc,
+        补到行数: supRows.length
+      })
+      for (const row of supRows) {
+        const rid = row.rowid
+        if (rid != null && rowidSeen.has(rid)) continue
+        if (rid != null) rowidSeen.add(rid)
+        rows.push(row)
+        keysInRows.add(billPairKeyFromPaiChanRow(row))
+      }
+    }
+  }
+
+  return { ...res, data: rows }
 }
 
 // 排产编号非空时参与工序-单据匹配；任一侧为空则仍仅按订单号+生产单号匹配
@@ -1942,14 +2032,25 @@ const search = async () => {
   // 每次刷新都清空多选工序，避免删除/刷新后残留旧 rowid 影响按钮可用性
   selectedMultiProcesses.value = []
 
+  dbgDispatchProductList('search 开始', {
+    dispatchMode: dispatchMode.value,
+    workshop: workshop.value,
+    billTypeFilter: billTypeFilter.value,
+    selectedProductHeadersLen: selectedProductHeaders.value?.length,
+    selectedProductHeaders: JSON.parse(JSON.stringify(selectedProductHeaders.value || []))
+  })
+
   // 获取单据列表（按车间和单据类型从后端筛选）
   const billsRes = await getBillsListRaw()
 
   if (!billsRes.data || billsRes.data.length === 0) {
+    dbgDispatchProductList('单据接口无数据', { hasData: !!billsRes.data, len: billsRes.data?.length })
     billsList.value = []
     processList.value = []
     return
   }
+
+  dbgDispatchProductList('单据接口原始条数', billsRes.data.length)
 
   // 固定过滤：
   // 1. 正常排产：69a8e4563b5e707f84d33c0c（未完成工序数量）需大于 0
@@ -1969,7 +2070,37 @@ const search = async () => {
     return !Number.isNaN(num) && num > 0
   })
 
+  if (dispatchMode.value === 'product') {
+    const dropped = []
+    for (const item of billsRes.data) {
+      let reason = ''
+      if (billTypeFilter.value === '返工排产') {
+        if (isReworkProgressCompleted(item)) reason = '返工进度已完成'
+      } else {
+        const num = Number(item[FIELD_INCOMPLETE_PROCESS_QTY])
+        if (Number.isNaN(num) || num <= 0) {
+          reason = `未完成工序数量无效或≤0 raw=${item[FIELD_INCOMPLETE_PROCESS_QTY]}`
+        }
+      }
+      if (reason) {
+        dropped.push({
+          orderCode: item['655e1cbbbd2094b316347f92'],
+          productionCode: item['698438933b5e707f84cf51fd'],
+          billRowid: item['rowid'],
+          reason
+        })
+      }
+    }
+    dbgDispatchProductList(
+      '固定过滤后条数',
+      filteredBillsData.length,
+      '被过滤掉的行(含原因,仅便于对照)',
+      dropped
+    )
+  }
+
   if (!filteredBillsData.length) {
+    dbgDispatchProductList('固定过滤后无单据，清空列表')
     billsList.value = []
     processList.value = []
     return
@@ -2026,10 +2157,36 @@ const search = async () => {
     const selectedKeys = new Set(
       selectedProductHeaders.value.map(h => `${h.orderCode || ''}__${h.productionCode || ''}`)
     )
+    const baseKeys = baseBills.map((b) => `${b.orderCode || ''}__${b.productionCode || ''}`)
+    dbgDispatchProductList(
+      '产品派工-过滤前 baseBills 条数',
+      baseBills.length,
+      '勾选键 selectedKeys',
+      [...selectedKeys],
+      '接口保留键(去重)',
+      [...new Set(baseKeys)]
+    )
+    for (const h of selectedProductHeaders.value) {
+      const k = `${h.orderCode || ''}__${h.productionCode || ''}`
+      if (!selectedKeys.has(k)) continue
+      const hit = baseBills.filter((b) => `${b.orderCode || ''}__${b.productionCode || ''}` === k)
+      if (hit.length === 0) {
+        dbgDispatchProductList('勾选的组合在接口/过滤结果中未命中任何单据', { orderCode: h.orderCode, productionCode: h.productionCode, key: k })
+      }
+    }
     baseBills = baseBills.filter(b => selectedKeys.has(`${b.orderCode || ''}__${b.productionCode || ''}`))
+    dbgDispatchProductList('产品派工-按勾选过滤后 baseBills 条数', baseBills.length)
+    const dupUi = findDuplicateBillKeys(baseBills)
+    if (dupUi.length) {
+      dbgDispatchProductList(
+        '警告: 多条单据使用相同 orderCode+productionCode，列表 key 重复时界面可能只显示一条',
+        dupUi
+      )
+    }
   }
 
   if (!baseBills.length) {
+    dbgDispatchProductList('baseBills 为空，清空列表(可能勾选键与排产数据对不上)')
     billsList.value = []
     processList.value = []
     return
@@ -2041,12 +2198,14 @@ const search = async () => {
   let processRowsRaw = []
   if (dispatchMode.value === 'product' && baseBills.length > 0) {
     processRowsRaw = await loadProcessesForProductBills(baseBills, billTypeFilter.value)
+    dbgDispatchProductList('产品派工-合并后工序行数 processRowsRaw.length', processRowsRaw.length)
   } else {
     const processRes = await getProcessRaw(billTypeFilter.value)
     processRowsRaw = processRes.data || []
   }
 
   if (!processRowsRaw.length) {
+    dbgDispatchProductList('工序数据为空 processList 将清空')
     processList.value = []
   } else {
     const allProcesses = processRowsRaw.map(item => ({
@@ -2090,6 +2249,27 @@ const search = async () => {
         return seqA - seqB
       })
 
+    if (dispatchMode.value === 'product' && DEBUG_PRODUCT_DISPATCH_LIST) {
+      const cands = allProcesses.filter(
+        (p) => p.processOrder === bill.orderCode && p.productcode === bill.productionCode
+      )
+      const droppedSon = cands.filter((p) => p.sonoutput === '[]').length
+      const droppedSched = cands.filter(
+        (p) =>
+          p.sonoutput !== '[]' &&
+          !scheduleCodesMatchWhenBothSet(bill.scheduleCode, p.scheduleCode)
+      ).length
+      dbgDispatchProductList('单据挂工序', {
+        orderCode: bill.orderCode,
+        productionCode: bill.productionCode,
+        scheduleCode: bill.scheduleCode,
+        matchedProcessCount: processes.length,
+        sameBillCandidateProcessCount: cands.length,
+        droppedBySonoutputEmpty: droppedSon,
+        droppedByScheduleMismatch: droppedSched
+      })
+    }
+
     const completedProcessText =
       processes.length > 0
         ? `${processes.filter(p => p.finishCount === p.needCount).length}/${processes.length}`
@@ -2106,6 +2286,8 @@ const search = async () => {
   await nextTick()
   billsList.value = newBillsList
   listKey.value = Date.now()
+  const dupFinal = findDuplicateBillKeys(newBillsList)
+  dbgDispatchProductList('search 结束 billsList 条数', newBillsList.length, '列表key重复', dupFinal)
   await nextTick()
 }
 
@@ -4058,9 +4240,14 @@ onLoad((options) => {
         selectedProductionCode.value = ''
         searchValue.value = ''
         searchForm.value.salesOrder = ''
+        dbgDispatchProductList('onLoad 解析 selectedProducts', {
+          len: selectedProductHeaders.value.length,
+          headers: JSON.parse(JSON.stringify(selectedProductHeaders.value))
+        })
       }
     } catch (e) {
       selectedProductHeaders.value = []
+      dbgDispatchProductList('onLoad 解析 selectedProducts 失败', e)
     }
   }
 
