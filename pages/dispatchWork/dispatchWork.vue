@@ -11,10 +11,13 @@
       @confirm="handleMachineConfirm" />
     
     <!-- 添加员工模态框 -->
-    <AddWorkerRadiobox v-model="selectedEmployeesForAdd" :options="allEmployeesOptions" title="添加员工" 
+    <AddWorkerRadiobox v-model="selectedEmployeesForAdd" :options="allEmployeesOptions" title="添加员工"
       :visible="showAddEmployeeModal" @update:visible="handleAddEmployeeModalClose" @confirm="handleAddEmployeeConfirm"
       :workshopOptions="workshopOptions" :workshop="modalWorkshop" @update:workshop="onModalWorkshopChange"
-      :maxSelection="addEmployeeMaxSelection" />
+      :maxSelection="addEmployeeMaxSelection"
+      :position-priority-keywords="employeeModalPositionKeywords"
+      :position-fallback-keywords="employeeModalFallbackKeywords"
+      :auto-select-matching="employeeModalAutoSelectMatching" />
     
     <!-- 图片预览模态框（多图轮播） -->
     <view class="image-preview-modal" v-if="showImagePreview" @click="closeImagePreview" :style="{ paddingTop: statusBarHeight + 'px' }">
@@ -385,7 +388,9 @@
           <view class="employee-section">
             <view class="table-header">
               <view class="col selected">选中</view>
+              <view v-if="showSprayEmployeeSequenceColumn" class="col order">顺序</view>
               <view class="col name">姓名</view>
+              <view class="col position">岗位</view>
               <view class="col totalHours">总工时数</view>
               <view class="col unrecordedHours">未派工时</view>
             </view>
@@ -394,7 +399,9 @@
                 <view class="col selected">
                   <checkbox :value="emp.id" :checked="isMultiEmployeeSelected(emp.id)" />
                 </view>
+                <view v-if="showSprayEmployeeSequenceColumn" class="col order">{{ getMultiEmployeeDispatchOrderNo(emp.id) }}</view>
                 <view class="col name">{{ emp.name }}</view>
+                <view class="col position">{{ employeePositionDisplay(emp) }}</view>
                 <view class="col totalHours">{{ emp.totalHours }} 时</view>
                 <view class="col unrecordedHours">{{ emp.unrecordedHours }} 时</view>
               </label>
@@ -609,7 +616,9 @@
           <view class="employee-section">
             <view class="table-header">
               <view class="col selected">选中</view>
+              <view v-if="showSprayEmployeeSequenceColumn" class="col order">顺序</view>
               <view class="col name">姓名</view>
+              <view class="col position">岗位</view>
               <view class="col totalHours">总工时数</view>
               <view class="col unrecordedHours">未派工时</view>
             </view>
@@ -618,7 +627,9 @@
                 <view class="col selected">
                   <checkbox :value="emp.id" :checked="isEmployeeSelected(emp.id)" />
                 </view>
+                <view v-if="showSprayEmployeeSequenceColumn" class="col order">{{ getProcessModalEmployeeOrderNo(emp.id) }}</view>
                 <view class="col name">{{ emp.name }}</view>
+                <view class="col position">{{ employeePositionDisplay(emp) }}</view>
                 <view class="col totalHours">{{ emp.totalHours }} 时</view>
                 <view class="col unrecordedHours">{{ emp.unrecordedHours }} 时</view>
               </label>
@@ -885,6 +896,11 @@ import {
   DELETE_PROCESS_URL,
 } from '../../utils/api'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
+import {
+  getPositionKeywordsForDispatch,
+  POLISH_FALLBACK_POSITION_KEYWORDS,
+  reorderEmployeesBySprayProcessSequence
+} from '../../utils/employeePositionMatch'
 import { useUserStore } from '../../store/user.store'
 import { useStatusBar } from '../../composables/useStatusBar'
 import Radiobox from "../../component/radiobox/radiobox.vue"
@@ -929,6 +945,9 @@ const isMultiSelectProcessWorkshop = computed(() => {
   const w = workshop.value
   return w === '组装车间' || w === '抛光车间' || w === '喷涂车间'
 })
+
+/** 仅喷涂车间在多对多/工序派工员工表展示「顺序」列 */
+const showSprayEmployeeSequenceColumn = computed(() => workshop.value === '喷涂车间')
 
 // 获取当前日期（格式：YYYY-MM-DD）
 const getCurrentDate = () => {
@@ -1016,7 +1035,10 @@ const buildMultiDispatchModalListPayload = (targets, productMode, orderModeQty) 
           ? formatReworkFieldQtyDisplay(b.reworkFieldQty)
           : String(getBillProductionQtyForDispatch(b)),
       dispatchQuantity: q,
-      processRowids: (t.processes || []).map((p) => p.process?.rowid).filter(Boolean)
+      processRowids: [...(t.processes || [])]
+        .sort((a, b) => (Number(a.process?.sequence) || 0) - (Number(b.process?.sequence) || 0))
+        .map((p) => p.process?.rowid)
+        .filter(Boolean)
     }
   })
 }
@@ -1357,6 +1379,82 @@ const currentOneToManyItem = ref(null)
 
 // 一对多派工打开「添加员工」时限制为单选
 const addEmployeeMaxSelection = computed(() => (showOneToManyModal.value ? 1 : 0))
+
+/** 添加员工弹窗：当前派工上下文涉及的工序名称 */
+const selectedProcessNamesForEmployeeModal = computed(() => {
+  if (showOneToManyModal.value) {
+    return (oneToManyProcessRows.value || []).map((r) => r.processName).filter(Boolean)
+  }
+  if (showMultiDispatchModal.value) {
+    return selectedMultiProcesses.value.map((p) => p?.process?.processName).filter(Boolean)
+  }
+  if (showProcessModal.value && selectedProcessData.value?.process?.processName) {
+    return [selectedProcessData.value.process.processName]
+  }
+  return []
+})
+
+/** 与工序对应的岗位关键字（组装车间等），用于列表分组排序与自动勾选。喷涂/拉伸：弹窗车间可能与页面不一致时仍以页面车间推导关键字 */
+const employeeModalPositionKeywords = computed(() => {
+  const pageW = workshop.value
+  const workshopForKeywords =
+    pageW === '喷涂车间' || pageW === '拉伸车间' || pageW === '抛光车间'
+      ? pageW
+      : (modalWorkshop.value || pageW)
+  return getPositionKeywordsForDispatch(
+    workshopForKeywords,
+    selectedProcessNamesForEmployeeModal.value
+  )
+})
+
+/** 抛光车间：主匹配未覆盖时，「机抛」「抛光」岗位次优先 */
+const employeeModalFallbackKeywords = computed(() =>
+  workshop.value === '抛光车间' ? [...POLISH_FALLBACK_POSITION_KEYWORDS] : []
+)
+
+/** 喷涂：所选工序任一含「高温过炉」时为 true（仅按岗位「喷涂」优先，不自动勾选） */
+const employeeModalSprayHighTemp = computed(() => {
+  if (workshop.value !== '喷涂车间') return false
+  return selectedProcessNamesForEmployeeModal.value.some((n) =>
+    String(n || '').includes('高温过炉')
+  )
+})
+
+/** 喷涂且非高温：派工模态框员工表按岗位对齐工序时使用的工序名顺序（与箭头一致：当前单据 sequence 升序） */
+const sprayDispatchOrderedProcessNamesForModal = computed(() => {
+  if (workshop.value !== '喷涂车间') return []
+  if (employeeModalSprayHighTemp.value) return []
+
+  if (showMultiDispatchModal.value && currentMultiDispatchItem.value) {
+    const anchor = currentMultiDispatchItem.value
+    const ordered = selectedMultiProcesses.value
+      .filter((p) => isSameBillAs(p.item, anchor))
+      .sort((a, b) => (Number(a.process?.sequence) || 0) - (Number(b.process?.sequence) || 0))
+      .map((p) => p?.process?.processName)
+      .filter(Boolean)
+    if (ordered.some((n) => String(n).includes('高温过炉'))) return []
+    return ordered
+  }
+  if (showProcessModal.value && selectedProcessData.value?.process?.processName) {
+    const n = selectedProcessData.value.process.processName
+    if (String(n).includes('高温过炉')) return []
+    return [String(n).trim()].filter(Boolean)
+  }
+  return []
+})
+
+/** 组装车间「组装 / 包装」仅泛化「组装」时不自动勾选；拉伸/抛光：不自动勾选；喷涂：仅非高温过炉时自动勾选 */
+const employeeModalAutoSelectMatching = computed(() => {
+  if (workshop.value === '拉伸车间' || workshop.value === '抛光车间') return false
+  if (workshop.value === '喷涂车间') {
+    return !employeeModalSprayHighTemp.value
+  }
+  const kws = employeeModalPositionKeywords.value
+  if (!kws.length) return false
+  const unique = [...new Set(kws.map((k) => String(k || '').trim()).filter(Boolean))]
+  if (unique.length === 1 && unique[0] === '组装') return false
+  return true
+})
 
 /** 相同 body 并发时合并为一次 uni.request（防止极端双击）；地址见 utils/api DISPATCH_PROCESS_URL */
 const processDispatchPostInflight = new Map()
@@ -2210,6 +2308,89 @@ const collectProductDispatchSyncedPairs = (key) => {
   return pairs
 }
 
+/**
+ * 工序大类（喷涂/组装车间多选同步用）：
+ * - 半角/全角「-」前为一大类（「组装-」除外另判）
+ * - 组装-xxx：不按大类整批，按「整道工序名」跨单同步
+ * - 凡以「去油」开头：同一大类
+ * - 工序名含「超声波」：同一大类（兼容「超声波洗」「超声波清洗」等前缀）
+ * - 无连字符且不符合以上：无大类，不按批（由上层只选当前格）
+ */
+const getProcessBulkCategoryKey = (processName) => {
+  const s = String(processName || '').trim()
+  if (!s) return { mode: 'single', name: s }
+
+  if (s.startsWith('去油')) {
+    return { mode: 'degrease' }
+  }
+
+  if (s.includes('超声波')) {
+    return { mode: 'ultrasonic' }
+  }
+
+  const m = /^([^-－]+)[-－]/.exec(s)
+  if (m) {
+    const cat = m[1]
+    if (cat === '组装') {
+      return { mode: 'assembly' }
+    }
+    return { mode: 'hyphen', category: cat }
+  }
+
+  return { mode: 'single', name: s }
+}
+
+/**
+ * 仅喷涂、组装：按大类勾选；无大类且无「去油」「超声波」等时只返回当前点击的一道工序
+ */
+const collectMultiProcessSyncedPairsByCategory = (item, process) => {
+  const keyInfo = getProcessBulkCategoryKey(process?.processName || '')
+  if (keyInfo.mode === 'assembly') {
+    return collectProductDispatchSyncedPairs(buildProductDispatchSyncKey(process))
+  }
+  if (keyInfo.mode === 'single') {
+    return item && process ? [{ item, process }] : []
+  }
+  if (keyInfo.mode === 'degrease') {
+    const pairs = []
+    for (const bill of billsList.value) {
+      for (const pr of bill.processes || []) {
+        const pn = String(pr.processName || '')
+        if (pn.startsWith('去油')) {
+          pairs.push({ item: bill, process: pr })
+        }
+      }
+    }
+    return pairs
+  }
+  if (keyInfo.mode === 'ultrasonic') {
+    const pairs = []
+    for (const bill of billsList.value) {
+      for (const pr of bill.processes || []) {
+        const pn = String(pr.processName || '')
+        if (pn.includes('超声波')) {
+          pairs.push({ item: bill, process: pr })
+        }
+      }
+    }
+    return pairs
+  }
+  if (keyInfo.mode === 'hyphen') {
+    const cat = keyInfo.category
+    const pairs = []
+    for (const bill of billsList.value) {
+      for (const pr of bill.processes || []) {
+        const ki = getProcessBulkCategoryKey(pr.processName || '')
+        if (ki.mode === 'hyphen' && ki.category === cat) {
+          pairs.push({ item: bill, process: pr })
+        }
+      }
+    }
+    return pairs
+  }
+  return []
+}
+
 /** 是否为同一单据（订单号 + 生产单号） */
 const isSameBillAs = (bill, anchor) => {
   if (!bill || !anchor) return false
@@ -2226,10 +2407,15 @@ const billKeyForMultiDispatch = (item) => {
   return `${item?.orderCode || ''}__${item?.productionCode || ''}`
 }
 
-/** 组装/抛光/喷涂：勾选一道工序时，所有单据上同名工序一并勾选或取消（键为工序名） */
+/** 组装/抛光/喷涂多选：抛光仅同名跨单；喷涂/组装按大类（无大类且无「去油」前缀、无「超声波」等时只勾当前格） */
 const toggleMultiProcessSyncedGroup = (item, process) => {
-  const key = buildProductDispatchSyncKey(process)
-  const pairs = collectProductDispatchSyncedPairs(key)
+  const w = workshop.value
+  const pairs =
+    w === '抛光车间'
+      ? collectProductDispatchSyncedPairs(buildProductDispatchSyncKey(process))
+      : w === '喷涂车间' || w === '组装车间'
+        ? collectMultiProcessSyncedPairsByCategory(item, process)
+        : collectProductDispatchSyncedPairs(buildProductDispatchSyncKey(process))
   if (!pairs.length) return
   const pairIncluded = (pair) =>
     selectedMultiProcesses.value.some(
@@ -2693,6 +2879,7 @@ const loadMultiEmployeesForAdd = async () => {
         return {
           id: item['6943bd902161a0fc58bad5ab'] || '',
           name: item['6938db8bda0981f67b352af3'] || '',
+          position: item['6943bf332161a0fc58bad7a4'] || '',
           totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
           unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
           dispatchWorkDate: dispatchWorkDate
@@ -2704,6 +2891,7 @@ const loadMultiEmployeesForAdd = async () => {
       allEmployeesOptions.value = mappedEmployees.map(emp => ({
         label: emp.name,
         value: emp.id,
+        position: emp.position || '',
         totalHours: emp.totalHours || 0,
         unrecordedHours: emp.unrecordedHours || 0
       }))
@@ -2726,15 +2914,48 @@ const loadMultiEmployeesForAdd = async () => {
 // 多对多派工：员工 id 统一成字符串；派工列表顺序以 multiEmployeeList 为准（与添加员工弹窗点选顺序一致），接口按该列表自上而下
 const normalizeEmployeeId = (id) => String(id)
 
+/** 模态框员工表展示岗位（行上无 position 时尽量从员工缓存补全） */
+const employeePositionDisplay = (emp) => {
+  const raw = emp?.position ?? allEmployeesMap.value[emp?.id]?.position
+  const s = raw != null ? String(raw).trim() : ''
+  return s !== '' ? s : '-'
+}
+
+/** 喷涂（非高温）：按工序生产顺序与岗位匹配重排模态框员工列表 */
+const applySprayDispatchModalEmployeeTableOrder = () => {
+  const names = sprayDispatchOrderedProcessNamesForModal.value
+  if (!names.length) return
+  if (showMultiDispatchModal.value && multiEmployeeList.value.length) {
+    multiEmployeeList.value = reorderEmployeesBySprayProcessSequence(multiEmployeeList.value, names)
+  }
+  if (showProcessModal.value && employeeList.value.length) {
+    employeeList.value = reorderEmployeesBySprayProcessSequence(employeeList.value, names)
+  }
+}
+
 // 多对多派工员工选择变化（仅表示勾选集合，顺序以 multiEmployeeList 为准）
 const onMultiEmployeeCheckboxChange = (e) => {
   selectedMultiEmployees.value = (e.detail.value || []).map(normalizeEmployeeId)
+  applySprayDispatchModalEmployeeTableOrder()
 }
 
 // 判断员工是否被选中（多对多派工）
 const isMultiEmployeeSelected = (employeeId) => {
   const id = normalizeEmployeeId(employeeId)
   return selectedMultiEmployees.value.some((x) => normalizeEmployeeId(x) === id)
+}
+
+/** 多对多派工：该行在提交 employees 数组中的序号（喷涂车间列表自上而下），未选中不显示 */
+const getMultiEmployeeDispatchOrderNo = (employeeId) => {
+  if (!isMultiEmployeeSelected(employeeId)) return ''
+  const target = normalizeEmployeeId(employeeId)
+  let k = 0
+  for (const emp of multiEmployeeList.value) {
+    if (!isMultiEmployeeSelected(emp.id)) continue
+    k++
+    if (normalizeEmployeeId(emp.id) === target) return String(k)
+  }
+  return ''
 }
 
 // 判断是否可以多对多派工（产品派工：每单数量>0；订单派工：单一派工数量>0）
@@ -2788,7 +3009,7 @@ const confirmMultiDispatch = async () => {
     return
   }
   
-  // 按派工模态框员工列表自上而下（= 添加员工弹窗点选顺序），仅包含当前勾选
+  // 按派工模态框员工列表自上而下（= 添加顺序），仅包含当前勾选
   const selectedEmployees = multiEmployeeList.value.filter((emp) =>
     selectedMultiEmployees.value.some((x) => normalizeEmployeeId(x) === normalizeEmployeeId(emp.id))
   )
@@ -2847,13 +3068,16 @@ const confirmMultiDispatch = async () => {
             dispatchMode.value === 'product'
               ? Number(multiDispatchQtyByBillKey.value[billKeyForMultiDispatch(billItem)]) || 0
               : orderModeQty
+          const processesOrdered = [...t.processes].sort(
+            (a, b) => (Number(a.process?.sequence) || 0) - (Number(b.process?.sequence) || 0)
+          )
           const dispatchParams = {
             productionCount: getBillProductionQtyForDispatch(billItem),
             billRowid: billItem?.billRowid || '',
             orderCode: billItem?.orderCode || '',
             dispatchMode: dispatchMode.value || 'order',
             workshop: workshop.value || '',
-            processes: t.processes.map(p => ({
+            processes: processesOrdered.map((p) => ({
               rowid: p.process.rowid
             })),
             quantity: rowQty,
@@ -3234,6 +3458,7 @@ const loadEmployees = async () => {
         return {
           id: item['6943bd902161a0fc58bad5ab'] || '',
           name: item['6938db8bda0981f67b352af3'] || '',
+          position: item['6943bf332161a0fc58bad7a4'] || '',
           totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
           unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
           dispatchWorkDate: dispatchWorkDate
@@ -3244,6 +3469,7 @@ const loadEmployees = async () => {
       allEmployeesOptions.value = mappedEmployees.map(emp => ({
         label: emp.name,
         value: emp.id,
+        position: emp.position || '',
         totalHours: emp.totalHours || 0,
         unrecordedHours: emp.unrecordedHours || 0
       }))
@@ -3339,6 +3565,7 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
           multiEmployeeList.value.push({
             id: fullEmployee.id,
             name: fullEmployee.name,
+            position: fullEmployee.position || '',
             totalHours: fullEmployee.totalHours || 0,
             unrecordedHours: fullEmployee.unrecordedHours || 0
           })
@@ -3349,6 +3576,7 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
             multiEmployeeList.value.push({
               id: option.value,
               name: option.label,
+              position: option.position || '',
               totalHours: option.totalHours || 0,
               unrecordedHours: option.unrecordedHours || 0
             })
@@ -3367,6 +3595,8 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
         selectedMultiEmployees.value.push(id)
       }
     })
+
+    applySprayDispatchModalEmployeeTableOrder()
 
     if (addedCount > 0) {
       uni.showToast({ title: `已添加 ${addedCount} 名员工`, icon: 'success' })
@@ -3389,6 +3619,7 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
           employeeList.value.push({
             id: fullEmployee.id,
             name: fullEmployee.name,
+            position: fullEmployee.position || '',
             totalHours: fullEmployee.totalHours || 0,
             unrecordedHours: fullEmployee.unrecordedHours || 0
           })
@@ -3399,6 +3630,7 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
             employeeList.value.push({
               id: option.value,
               name: option.label,
+              position: option.position || '',
               totalHours: 0,
               unrecordedHours: 0
             })
@@ -3416,6 +3648,8 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
       }
     })
 
+    applySprayDispatchModalEmployeeTableOrder()
+
     if (addedCount > 0) {
       uni.showToast({ title: `已添加 ${addedCount} 名员工`, icon: 'success' })
     } else {
@@ -3428,8 +3662,22 @@ const isEmployeeSelected = (employeeId) => {
   return selectedEmployee.value.includes(employeeId)
 }
 
+/** 工序派工弹窗：该行在提交 employees 数组中的序号（喷涂车间列表自上而下选中顺序） */
+const getProcessModalEmployeeOrderNo = (employeeId) => {
+  const sid = String(employeeId)
+  if (!selectedEmployee.value.some((x) => String(x) === sid)) return ''
+  let k = 0
+  for (const emp of employeeList.value) {
+    if (!selectedEmployee.value.some((x) => String(x) === String(emp.id))) continue
+    k++
+    if (String(emp.id) === sid) return String(k)
+  }
+  return ''
+}
+
 const onEmployeeCheckboxChange = (e) => {
   selectedEmployee.value = e.detail.value || []
+  applySprayDispatchModalEmployeeTableOrder()
 }
 
 // ---------- 页面跳转方法 ----------
@@ -5760,9 +6008,32 @@ onUnload(() => {
         padding: 0 px2vw(12px);
       }
 
+      &.order {
+        flex: 0 0 auto;
+        min-width: px2vw(96px);
+        width: px2vw(96px);
+        box-sizing: border-box;
+        padding: 0 px2vw(10px);
+        text-align: center;
+        color: #5884f1;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
       &.name {
+        flex: 1.4;
+        min-width: 0;
+        padding-left: px2vw(16px);
+      }
+
+      &.position {
         flex: 2;
-        padding-left: px2vw(20px);
+        min-width: 0;
+        padding-left: px2vw(16px);
+        font-size: px2vw(26px);
+        color: #555;
+        line-height: 1.35;
+        word-break: break-all;
       }
 
       &.totalHours {
@@ -5812,9 +6083,35 @@ onUnload(() => {
           padding: 0 px2vw(12px);
         }
 
+        &.order {
+          flex: 0 0 auto;
+          min-width: px2vw(96px);
+          width: px2vw(96px);
+          box-sizing: border-box;
+          padding: 0 px2vw(10px);
+          justify-content: center;
+          text-align: center;
+          color: #5884f1;
+          font-weight: 600;
+          white-space: nowrap;
+        }
+
         &.name {
+          flex: 1.4;
+          min-width: 0;
+          padding-left: px2vw(16px);
+        }
+
+        &.position {
           flex: 2;
-          padding-left: px2vw(20px);
+          min-width: 0;
+          padding-left: px2vw(16px);
+          font-size: px2vw(26px);
+          color: #555;
+          line-height: 1.35;
+          word-break: break-all;
+          align-items: flex-start;
+          padding-top: px2vw(2px);
         }
 
         &.totalHours {

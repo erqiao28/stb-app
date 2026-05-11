@@ -280,6 +280,7 @@ const loadEmployeesForAdd = async () => {
 				return {
 					id: item['6943bd902161a0fc58bad5ab'] || '',
 					name: item['6938db8bda0981f67b352af3'] || '',
+					position: item['6943bf332161a0fc58bad7a4'] || '',
 					totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
 					unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
 					dispatchWorkDate
@@ -288,6 +289,7 @@ const loadEmployeesForAdd = async () => {
 			allEmployeesOptions.value = mapped.map(emp => ({
 				label: emp.name,
 				value: emp.id,
+				position: emp.position || '',
 				totalHours: emp.totalHours || 0,
 				unrecordedHours: emp.unrecordedHours || 0
 			}))
