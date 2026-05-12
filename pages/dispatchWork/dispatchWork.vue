@@ -884,9 +884,22 @@
       </view>
     </view>
 
-    <!-- 右下角固定刷新按钮 -->
-    <view class="fab-refresh" @click="onManualRefresh">
-      <text class="fab-refresh-text">⟳</text>
+    <!-- 右下角：喷涂/组装车间工序大类联动开关 + 刷新 -->
+    <view class="fab-stack">
+      <view
+        v-if="showProcessBulkLinkSwitch"
+        class="fab-bulk-link"
+        @click.stop
+      >
+        <switch
+          :checked="processBulkLinkEnabled"
+          color="#5884f1"
+          @change="onProcessBulkLinkChange"
+        />
+      </view>
+      <view class="fab-refresh" @click="onManualRefresh">
+        <text class="fab-refresh-text">⟳</text>
+      </view>
     </view>
   </view>
 </template>
@@ -964,6 +977,38 @@ const isMultiSelectProcessWorkshop = computed(() => {
   const w = workshop.value
   return w === '组装车间' || w === '抛光车间' || w === '喷涂车间'
 })
+
+/** 仅喷涂、组装：展示工序大类联动开关（控制勾选时是否按大类批量联动） */
+const showProcessBulkLinkSwitch = computed(() => {
+  const w = workshop.value
+  return w === '喷涂车间' || w === '组装车间'
+})
+
+const PROCESS_BULK_LINK_STORAGE_KEY = 'dispatchWork_processBulkLinkEnabled'
+
+const readStoredProcessBulkLink = () => {
+  try {
+    const v = uni.getStorageSync(PROCESS_BULK_LINK_STORAGE_KEY)
+    if (v === '' || v === undefined || v === null) return true
+    if (v === false || v === 'false' || v === 0 || v === '0') return false
+    return true
+  } catch {
+    return true
+  }
+}
+
+/** 开启时：喷涂/组装选工序按大类一起勾选；关闭时仅勾选当前格（与抛光「仅当前」不同逻辑） */
+const processBulkLinkEnabled = ref(readStoredProcessBulkLink())
+
+const onProcessBulkLinkChange = (e) => {
+  const on = !!e.detail?.value
+  processBulkLinkEnabled.value = on
+  try {
+    uni.setStorageSync(PROCESS_BULK_LINK_STORAGE_KEY, on)
+  } catch (_) {
+    /* 忽略存储失败 */
+  }
+}
 
 /** 仅喷涂车间在多对多/工序派工员工表展示「顺序」列 */
 const showSprayEmployeeSequenceColumn = computed(() => workshop.value === '喷涂车间')
@@ -1180,6 +1225,10 @@ const isReworkMergeProcessBtn = (item) => {
 }
 
 // ---------- 合并工序模态（按车间拉工序字典，同添加工序页 getProcessList） ----------
+/** 与 addProcess 页一致：拉伸/喷涂仅名称含「新」字的工序 */
+const MERGE_PROCESS_LIST_NEW_CHAR = '新'
+const mergeProcessListLimitToNewChar = (ws) => ws === '拉伸车间' || ws === '喷涂车间'
+
 const showReworkStartModal = ref(false)
 const reworkStartItem = ref(null)
 const mergeProcessTableData = ref([])
@@ -1198,19 +1247,29 @@ const fetchMergeProcessList = async (pageNum, isRefresh = false) => {
     return
   }
   mergeProcessLoading.value = true
+  const limitNewChar = mergeProcessListLimitToNewChar(ws)
   const baseFilters = [
     { controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
     { controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
     { controlId: '691e8522d50c894e2e798d03', dataType: 30, spliceType: 1, filterType: 2, values: [ws] }
   ]
   let filters = [...baseFilters]
-  if (mergeProcessSearchValue.value.trim()) {
+  const nameSearch = mergeProcessSearchValue.value.trim()
+  if (nameSearch) {
     filters.push({
       controlId: '6614b6721103c1d5d3a08122',
       dataType: 30,
       spliceType: 1,
       filterType: 1,
-      values: [mergeProcessSearchValue.value.trim()]
+      values: [nameSearch]
+    })
+  } else if (limitNewChar) {
+    filters.push({
+      controlId: '6614b6721103c1d5d3a08122',
+      dataType: 30,
+      spliceType: 1,
+      filterType: 1,
+      values: [MERGE_PROCESS_LIST_NEW_CHAR]
     })
   }
   const params = {
@@ -1220,10 +1279,15 @@ const fetchMergeProcessList = async (pageNum, isRefresh = false) => {
   }
   try {
     const res = await callWorkflowListAPIPaged(params, mergeProcessPageSize.value, pageNum)
-    const mapped = (res.data || []).map((item) => ({
+    let mapped = (res.data || []).map((item) => ({
       processName: item['Name'],
       rowid: item['rowid'] || ''
     }))
+    if (limitNewChar) {
+      mapped = mapped.filter((row) =>
+        String(row.processName || '').includes(MERGE_PROCESS_LIST_NEW_CHAR)
+      )
+    }
     if (isRefresh) {
       mergeProcessTableData.value = mapped
     } else {
@@ -2675,14 +2739,18 @@ const billKeyForMultiDispatch = (item) => {
   return `${item?.orderCode || ''}__${item?.productionCode || ''}`
 }
 
-/** 组装/抛光/喷涂多选：抛光仅同名跨单；喷涂/组装按大类（无大类且无「去油」前缀、无「超声波」等时只勾当前格） */
+/** 组装/抛光/喷涂多选：抛光仅同名跨单；喷涂/组装在大类联动开启时按大类，否则只勾当前格 */
 const toggleMultiProcessSyncedGroup = (item, process) => {
   const w = workshop.value
   const pairs =
     w === '抛光车间'
       ? collectProductDispatchSyncedPairs(buildProductDispatchSyncKey(process))
       : w === '喷涂车间' || w === '组装车间'
-        ? collectMultiProcessSyncedPairsByCategory(item, process)
+        ? processBulkLinkEnabled.value
+          ? collectMultiProcessSyncedPairsByCategory(item, process)
+          : item && process
+            ? [{ item, process }]
+            : []
         : collectProductDispatchSyncedPairs(buildProductDispatchSyncKey(process))
   if (!pairs.length) return
   const pairIncluded = (pair) =>
@@ -5122,11 +5190,30 @@ onUnload(() => {
   }
 }
 
-/* 右下角刷新按钮 */
-.fab-refresh {
+/* 右下角：工序大类联动开关 + 刷新 */
+.fab-stack {
   position: fixed;
   right: px2vw(40px);
   bottom: px2vw(40px);
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: px2vw(14px);
+}
+
+.fab-bulk-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: px2vw(8px) px2vw(12px);
+  background: #fff;
+  border-radius: px2vw(40px);
+  box-shadow: 0 px2vw(2px) px2vw(10px) rgba(0, 0, 0, 0.12);
+  border: px2vw(1px) solid #eee;
+}
+
+.fab-refresh {
   width: px2vw(90px);
   height: px2vw(90px);
   border-radius: 50%;
@@ -5135,7 +5222,6 @@ onUnload(() => {
   align-items: center;
   justify-content: center;
   box-shadow: 0 px2vw(4px) px2vw(10px) rgba(0, 0, 0, 0.15);
-  z-index: 150;
 }
 
 .fab-refresh-text {
