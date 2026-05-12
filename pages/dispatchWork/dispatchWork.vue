@@ -416,6 +416,25 @@
         </view>
       </view>
     </view>
+
+    <!-- 多对多：超过排产数量提示（须盖在多对多弹窗 z-index:100 之上，避免原生 showModal 被挡住） -->
+    <view
+      v-if="showMultiDispatchQtyOverModal"
+      class="multi-dispatch-qty-over-modal"
+      @click.self="closeMultiDispatchQtyOverModal"
+    >
+      <view class="multi-dispatch-qty-over-content" @click.stop>
+        <view class="multi-dispatch-qty-over-header">
+          <text class="multi-dispatch-qty-over-title">{{ multiDispatchQtyOverTitle }}</text>
+        </view>
+        <view class="multi-dispatch-qty-over-body">
+          <text class="multi-dispatch-qty-over-text">{{ multiDispatchQtyOverBody }}</text>
+        </view>
+        <view class="multi-dispatch-qty-over-footer">
+          <button class="btn-confirm" @click="closeMultiDispatchQtyOverModal">确定</button>
+        </view>
+      </view>
+    </view>
     
     <!-- 工序派工模态框 -->
     <view class="process-modal" v-if="showProcessModal" @click.self="closeProcessModal">
@@ -1017,30 +1036,84 @@ const buildProductProcessModalDispatchList = (rows) => {
   })
 }
 
-/** 多对多派工：弹窗汇总列表整表快照，经额外字段 dispatchList 传给接口 */
+/**
+ * 多对多派工：弹窗汇总整表快照，经额外字段传给接口。
+ * 返回统一为对象：{ dispatchList }
+ *
+ * - 订单派工 dispatchList：每张单据一行快照（含 billKey、processRowids 等）。
+ * - 产品派工 dispatchList：按产品顺序遍历，**每张匹配单据**一项 `{ rows }`；
+ *   同一 rows 内先连续若干 `{ rowid }`（该单所选工序），末尾再各出现一次
+ *   `{ orderCode }`、`{ productionCode }`、`{ dispatchQuantity }`（该单的订单/生产单/派工数量，不跟在每个 rowid 后面重复）。
+ */
 const buildMultiDispatchModalListPayload = (targets, productMode, orderModeQty) => {
-  return (targets || []).map((t) => {
-    const b = t.item
-    const bk = billKeyForMultiDispatch(b)
-    const q = productMode ? Number(multiDispatchQtyByBillKey.value[bk]) || 0 : orderModeQty
+  const list = targets || []
+  if (!productMode) {
     return {
-      billKey: bk,
-      billRowid: b?.billRowid || '',
-      orderCode: b?.orderCode || '',
-      productionCode: b?.productionCode || '',
-      billType: b?.billType || '',
-      productionCount: getBillProductionQtyForDispatch(b),
-      productionQtyDisplay:
-        b?.billType === '返工排产'
-          ? formatReworkFieldQtyDisplay(b.reworkFieldQty)
-          : String(getBillProductionQtyForDispatch(b)),
-      dispatchQuantity: q,
-      processRowids: [...(t.processes || [])]
-        .sort((a, b) => (Number(a.process?.sequence) || 0) - (Number(b.process?.sequence) || 0))
-        .map((p) => p.process?.rowid)
-        .filter(Boolean)
+      dispatchList: list.map((t) => {
+        const b = t.item
+        const bk = billKeyForMultiDispatch(b)
+        const q = orderModeQty
+        return {
+          billKey: bk,
+          billRowid: b?.billRowid || '',
+          orderCode: b?.orderCode || '',
+          productionCode: b?.productionCode || '',
+          billType: b?.billType || '',
+          productionCount: getBillProductionQtyForDispatch(b),
+          productionQtyDisplay:
+            b?.billType === '返工排产'
+              ? formatReworkFieldQtyDisplay(b.reworkFieldQty)
+              : String(getBillProductionQtyForDispatch(b)),
+          dispatchQuantity: q,
+          processRowids: [...(t.processes || [])]
+            .sort((a, b) => (Number(a.process?.sequence) || 0) - (Number(b.process?.sequence) || 0))
+            .map((p) => p.process?.rowid)
+            .filter(Boolean)
+        }
+      })
     }
-  })
+  }
+
+  const orderedProductKeys = []
+  const productKeyToTargets = new Map()
+  for (const t of list) {
+    const b = t.item
+    const rawPc = b?.productCode
+    const pcKey =
+      rawPc == null || String(rawPc).trim() === ''
+        ? '__product_unknown__'
+        : String(rawPc).trim()
+    if (!productKeyToTargets.has(pcKey)) {
+      productKeyToTargets.set(pcKey, [])
+      orderedProductKeys.push(pcKey)
+    }
+    productKeyToTargets.get(pcKey).push(t)
+  }
+
+  const dispatchList = []
+  for (const pk of orderedProductKeys) {
+    const group = productKeyToTargets.get(pk) || []
+    for (const t of group) {
+      const b = t.item
+      const bk = billKeyForMultiDispatch(b)
+      const q = Number(multiDispatchQtyByBillKey.value[bk]) || 0
+      const rows = []
+      const processesOrdered = [...(t.processes || [])].sort(
+        (a, b) => (Number(a.process?.sequence) || 0) - (Number(b.process?.sequence) || 0)
+      )
+      for (const p of processesOrdered) {
+        const rid = p.process?.rowid
+        if (!rid) continue
+        rows.push({ rowid: rid })
+      }
+      rows.push({ orderCode: b?.orderCode || '' })
+      rows.push({ productionCode: b?.productionCode || '' })
+      rows.push({ dispatchQuantity: q })
+      dispatchList.push({ rows })
+    }
+  }
+
+  return { dispatchList }
 }
 
 // ---------- 图片预览相关 ----------
@@ -1367,6 +1440,19 @@ const selectedMultiEmployees = ref([])
 const currentMultiDispatchItem = ref(null) // 当前多对多派工的单据
 /** 多对多：与当前锚点工序组合一致的全部单据 [{ item, processes }] */
 const multiDispatchTargets = ref([])
+
+/** 多对多：派工数量超过排产数量时的页内提示（高于 .process-modal） */
+const showMultiDispatchQtyOverModal = ref(false)
+const multiDispatchQtyOverTitle = ref('派工数量超限')
+const multiDispatchQtyOverBody = ref('')
+const openMultiDispatchQtyOverModal = (title, body) => {
+  multiDispatchQtyOverTitle.value = title || '派工数量超限'
+  multiDispatchQtyOverBody.value = body || ''
+  showMultiDispatchQtyOverModal.value = true
+}
+const closeMultiDispatchQtyOverModal = () => {
+  showMultiDispatchQtyOverModal.value = false
+}
 
 // ---------- 一对多派工相关（多工序，每工序独立派工数量，同一批员工） ----------
 const showOneToManyModal = ref(false)
@@ -2848,6 +2934,7 @@ const closeMultiDispatchModal = () => {
   currentMultiDispatchItem.value = null
   multiDispatchTargets.value = []
   modalWorkshop.value = ''
+  showMultiDispatchQtyOverModal.value = false
 }
 
 // ---------- 一对多派工（仅抛光车间） ----------
@@ -3140,7 +3227,7 @@ const getMultiEmployeeDispatchOrderNo = (employeeId) => {
   return ''
 }
 
-// 判断是否可以多对多派工（产品派工：每单数量>0；订单派工：单一派工数量>0）
+// 判断是否可以多对多派工（仅校验 >0；是否超过排产在确认时弹层提示，避免上限导致按钮禁用从而永远进不了校验）
 const canMultiDispatch = computed(() => {
   if (!multiDispatchTargets.value.length || selectedMultiEmployees.value.length === 0) return false
   if (selectedMultiProcesses.value.length === 0) return false
@@ -3168,10 +3255,38 @@ const confirmMultiDispatch = async () => {
       uni.showToast({ title: '请为每张单据填写有效的派工数量 (>0)', icon: 'none' })
       return
     }
+    const overProd = targetsCheck.find((t) => {
+      const n = Number(mapCheck[billKeyForMultiDispatch(t.item)])
+      const maxQty = getBillProductionQtyForDispatch(t.item)
+      return Number.isFinite(n) && n > maxQty
+    })
+    if (overProd) {
+      const oc = overProd.item?.orderCode || ''
+      const maxQty = getBillProductionQtyForDispatch(overProd.item)
+      openMultiDispatchQtyOverModal(
+        '派工数量超限',
+        `派工数量不能大于排产数量（上限 ${maxQty}）。\n订单：${oc}`
+      )
+      return
+    }
   } else {
     const q = Number(multiDispatchData.value.quantity)
     if (!Number.isFinite(q) || q <= 0) {
       uni.showToast({ title: '请填写有效的派工数量 (>0)', icon: 'none' })
+      return
+    }
+    const targetsCheckOrder = multiDispatchTargets.value
+    const overOrder = targetsCheckOrder.find((t) => {
+      const maxQty = getBillProductionQtyForDispatch(t.item)
+      return q > maxQty
+    })
+    if (overOrder) {
+      const oc = overOrder.item?.orderCode || ''
+      const maxQty = getBillProductionQtyForDispatch(overOrder.item)
+      openMultiDispatchQtyOverModal(
+        '派工数量超限',
+        `派工数量不能大于排产数量（上限 ${maxQty}）。\n订单：${oc}`
+      )
       return
     }
   }
@@ -3239,20 +3354,13 @@ const confirmMultiDispatch = async () => {
     ],
     async () => {
       try {
-        const dispatchList = buildMultiDispatchModalListPayload(
+        const { dispatchList } = buildMultiDispatchModalListPayload(
           targets,
           dispatchMode.value === 'product',
           orderModeQty
         )
-        for (const t of targets) {
-          const billItem = t.item
-          const rowQty =
-            dispatchMode.value === 'product'
-              ? Number(multiDispatchQtyByBillKey.value[billKeyForMultiDispatch(billItem)]) || 0
-              : orderModeQty
-          const processesOrdered = [...t.processes].sort(
-            (a, b) => (Number(a.process?.sequence) || 0) - (Number(b.process?.sequence) || 0)
-          )
+
+        const postMultiDispatchOnce = async (billItem, rowQty, processesOrdered) => {
           const dispatchParams = {
             productionCount: getBillProductionQtyForDispatch(billItem),
             billRowid: billItem?.billRowid || '',
@@ -3266,18 +3374,45 @@ const confirmMultiDispatch = async () => {
             date: multiDispatchData.value.date || '',
             isLast: multiDispatchData.value.isLast === '是' ? 1 : 0,
             salaryMethod: multiDispatchData.value.salaryMethod || '计件',
-            employees: selectedEmployees.map(emp => ({
+            employees: selectedEmployees.map((emp) => ({
               id: emp.id
             })),
             dispatchList
           }
-          const resp = await http.post(DISPATCH_MULTI_URL, dispatchParams)
+          return http.post(DISPATCH_MULTI_URL, dispatchParams)
+        }
+
+        if (dispatchMode.value === 'product') {
+          // 与单对单产品派工一致：只触发一次接口；锚点为打开多对多弹窗的单据，数量用合计，明细在 dispatchList
+          const anchorItem = currentMultiDispatchItem.value || targets[0].item
+          const anchorTarget =
+            targets.find((t) => isSameBillAs(t.item, anchorItem)) || targets[0]
+          const billItem = anchorTarget.item
+          const processesOrdered = [...anchorTarget.processes].sort(
+            (a, b) => (Number(a.process?.sequence) || 0) - (Number(b.process?.sequence) || 0)
+          )
+          const resp = await postMultiDispatchOnce(billItem, quantityTotal, processesOrdered)
           if (resp.status === 1) {
             uni.showToast({
-              title: resp.message || `单据 ${billItem?.orderCode || ''} 派工失败`,
+              title: resp.message || '派工失败',
               icon: 'none'
             })
             return
+          }
+        } else {
+          for (const t of targets) {
+            const billItem = t.item
+            const processesOrdered = [...t.processes].sort(
+              (a, b) => (Number(a.process?.sequence) || 0) - (Number(b.process?.sequence) || 0)
+            )
+            const resp = await postMultiDispatchOnce(billItem, orderModeQty, processesOrdered)
+            if (resp.status === 1) {
+              uni.showToast({
+                title: resp.message || `单据 ${billItem?.orderCode || ''} 派工失败`,
+                icon: 'none'
+              })
+              return
+            }
           }
         }
 
@@ -5849,6 +5984,66 @@ onUnload(() => {
       .footer-total {
         color: #2e7d32;
       }
+    }
+  }
+}
+
+/* 多对多：超排产提示（盖在 .process-modal z-index:100 及删除确认 250 之上） */
+.multi-dispatch-qty-over-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.45);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 12000;
+  box-sizing: border-box;
+  padding: px2vw(24px);
+
+  .multi-dispatch-qty-over-content {
+    background: #fff;
+    border-radius: px2vw(18px);
+    width: 90%;
+    max-width: px2vw(720px);
+    box-shadow: 0 px2vw(8px) px2vw(24px) rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+  }
+
+  .multi-dispatch-qty-over-header {
+    padding: px2vw(28px) px2vw(28px) px2vw(12px);
+  }
+
+  .multi-dispatch-qty-over-title {
+    font-size: px2vw(34px);
+    font-weight: 700;
+    color: #333;
+  }
+
+  .multi-dispatch-qty-over-body {
+    padding: 0 px2vw(28px) px2vw(24px);
+  }
+
+  .multi-dispatch-qty-over-text {
+    font-size: px2vw(28px);
+    color: #555;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .multi-dispatch-qty-over-footer {
+    padding: px2vw(16px) px2vw(28px) px2vw(24px);
+    display: flex;
+    justify-content: center;
+    border-top: px2vw(1px) solid #eee;
+
+    .btn-confirm {
+      min-width: px2vw(200px);
+      height: px2vw(72px);
+      font-size: px2vw(30px);
     }
   }
 }
