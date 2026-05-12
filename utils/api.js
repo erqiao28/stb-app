@@ -79,6 +79,9 @@ export const DISPATCH_INQUIRY_MORE_DELETE_URL = apiUrl('/api/workflow/hooks/Njli
 /** 派工查询 / 派工查询更多：员工转派（两页共用） */
 export const DISPATCH_TRANSFER_URL = apiUrl('/api/workflow/hooks/Njk1Y2E1ZDIwODY3ZmI3ZDc1Njc2ZDUx')
 
+/** 派工查询 / 多对多派工查询：修改派工数量（需原因） */
+export const DISPATCH_QTY_UPDATE_URL = apiUrl('/api/workflow/hooks/NmEwMmU1Mzg4MWZiNGY2MDZmYzhhODJi')
+
 // ---------- 派工页 dispatchWork ----------
 
 /** 抛光车间一对多派工（多工序、单员工 batch） */

@@ -78,6 +78,50 @@
 				</view>
 			</view>
 		</view>
+
+		<!-- 修改派工数量模态框 -->
+		<view class="transfer-modal" v-if="showEditQtyModal" @click.self="closeEditQtyModal">
+			<view class="transfer-content edit-qty-modal" @click.stop>
+				<view class="modal-header">
+					<text class="modal-title">修改派工数量</text>
+					<view class="modal-close" @click="closeEditQtyModal">×</view>
+				</view>
+				<scroll-view scroll-y class="modal-scroll-content">
+					<view class="modal-body">
+						<view class="row-group">
+							<view class="form-group">
+								<text class="label">当前派工数量：</text>
+								<text class="value-readonly">{{ editQtyForm.currentQtyDisplay }}</text>
+							</view>
+						</view>
+						<view class="row-group">
+							<view class="form-group">
+								<text class="label">修改后：</text>
+								<input
+									v-model="editQtyForm.newQty"
+									type="number"
+									class="qty-input-inline"
+								/>
+							</view>
+						</view>
+						<view class="row-group">
+							<view class="form-group full">
+								<text class="label">修改原因：</text>
+								<textarea
+									v-model="editQtyForm.reason"
+									class="remark-textarea"
+									maxlength="500"
+								/>
+							</view>
+						</view>
+					</view>
+				</scroll-view>
+				<view class="modal-footer">
+					<button class="btn-cancel" @click="closeEditQtyModal">取消</button>
+					<button class="btn-confirm" @click="confirmEditQty">提交</button>
+				</view>
+			</view>
+		</view>
 		
 		<!-- 选择转派员工模态框 -->
 		<AddWorkerRadiobox 
@@ -152,6 +196,10 @@
 			<view class="dispatchInquiry-item" v-for="item in dispatchInquiryList" :key="item.rowid || item.id">
 				<view class="action-buttons">
 					<button
+						class="btn-transfer btn-edit-qty"
+						@click="openEditQtyModal(item)"
+					>修改数量</button>
+					<button
 						class="btn-transfer btn-delete-dispatch"
 						@click="handleDeleteDispatch(item)"
 					>删除</button>
@@ -225,6 +273,7 @@ import http from '../../utils/request'
 import {
 	DISPATCH_INQUIRY_MORE_DELETE_URL,
 	DISPATCH_TRANSFER_URL,
+	DISPATCH_QTY_UPDATE_URL,
 } from '../../utils/api'
 import { useStatusBar } from '../../composables/useStatusBar'
 const userStore = useUserStore()
@@ -455,6 +504,100 @@ const transferData = ref({
 	rowid: '',
 	loginCode: ''
 })
+
+/** 修改派工数量（多对多派工查询） */
+const showEditQtyModal = ref(false)
+const editQtyRowid = ref('')
+const editQtyForm = ref({
+	currentQtyDisplay: '',
+	/** 提交接口用的原派工数量（可解析时为数字，否则为 null） */
+	originalDispatchQuantity: null,
+	newQty: '',
+	reason: ''
+})
+
+const openEditQtyModal = (item) => {
+	if (!item?.rowid) {
+		uni.showToast({ title: '缺少单据标识', icon: 'none' })
+		return
+	}
+	editQtyRowid.value = item.rowid
+	const cur = item.dispatchCount
+	const disp =
+		cur === undefined || cur === null || cur === ''
+			? '-'
+			: String(cur)
+	const origParsed = parseFloat(String(cur).replace(/,/g, ''))
+	const originalDispatchQuantity =
+		cur === undefined || cur === null || cur === '' || !Number.isFinite(origParsed)
+			? null
+			: origParsed
+	editQtyForm.value = {
+		currentQtyDisplay: disp,
+		originalDispatchQuantity,
+		newQty: '',
+		reason: ''
+	}
+	showEditQtyModal.value = true
+}
+
+const closeEditQtyModal = () => {
+	showEditQtyModal.value = false
+	editQtyRowid.value = ''
+	editQtyForm.value = {
+		currentQtyDisplay: '',
+		originalDispatchQuantity: null,
+		newQty: '',
+		reason: ''
+	}
+}
+
+const confirmEditQty = async () => {
+	const reason = (editQtyForm.value.reason || '').trim()
+	const rawNew = editQtyForm.value.newQty
+	const newStr = rawNew === null || rawNew === undefined ? '' : String(rawNew).trim()
+	if (newStr === '') {
+		uni.showToast({ title: '请填写修改后的派工数量', icon: 'none' })
+		return
+	}
+	if (reason === '') {
+		uni.showToast({ title: '请填写修改原因', icon: 'none' })
+		return
+	}
+	const n = parseFloat(newStr.replace(/,/g, ''))
+	if (!Number.isFinite(n) || n < 0) {
+		uni.showToast({ title: '修改后的派工数量无效', icon: 'none' })
+		return
+	}
+	if (!editQtyRowid.value) {
+		uni.showToast({ title: '缺少单据标识', icon: 'none' })
+		return
+	}
+	try {
+		const result = await http.post(DISPATCH_QTY_UPDATE_URL, {
+			dispatchBillType: '多对多派工',
+			rowid: editQtyRowid.value,
+			originalDispatchQuantity: editQtyForm.value.originalDispatchQuantity,
+			newDispatchQuantity: n,
+			reason,
+			loginCode: userStore.loginCode || ''
+		})
+		if (result && result.status === 1) {
+			uni.showToast({ title: result.msg || result.message || '修改失败', icon: 'none' })
+			return
+		}
+		closeEditQtyModal()
+		try {
+			await getDispatchInquiryList()
+		} catch (e) {
+			console.error('修改数量后刷新列表失败:', e)
+		}
+		uni.showToast({ title: result?.msg || result?.message || '提交成功', icon: 'success' })
+	} catch (error) {
+		console.error('修改派工数量失败:', error)
+		uni.showToast({ title: '修改失败：' + (error.message || '未知错误'), icon: 'none' })
+	}
+}
 
 // 获取当前日期（格式：YYYY-MM-DD）
 const getCurrentDate = () => {
@@ -975,6 +1118,16 @@ const quit = () => {
 				color: #5884f1;
 			}
 
+			.btn-edit-qty {
+				width: auto;
+				min-width: unset;
+				padding: 0 px2vw(12px);
+				white-space: nowrap;
+				flex-shrink: 0;
+				border-color: #2e7d32;
+				color: #2e7d32;
+			}
+
 			.dispatchInquiry-item-info {
 				width: 100%;
 				display: flex;
@@ -988,7 +1141,7 @@ const quit = () => {
 					font-size: px2vw(25px);
 					font-weight: bold;
 					align-items: center;
-					padding-right: px2vw(140px);
+					padding-right: px2vw(165px);
 
 					.orderCode {
 						font-size: px2vw(25px);
@@ -1116,6 +1269,73 @@ const quit = () => {
 			display: flex;
 			flex-direction: column;
 			overflow: hidden;
+
+			&.edit-qty-modal {
+				width: 82%;
+				max-width: px2vw(640px);
+				max-height: 62vh;
+
+				.modal-header {
+					padding: px2vw(18px) px2vw(22px);
+
+					.modal-title {
+						font-size: px2vw(32px);
+					}
+
+					.modal-close {
+						font-size: px2vw(44px);
+					}
+				}
+
+				.modal-body {
+					padding: px2vw(12px) px2vw(16px) px2vw(8px);
+					gap: px2vw(8px);
+				}
+
+				.row-group {
+					flex-direction: column;
+					gap: 0;
+				}
+
+				.form-group {
+					flex-direction: column;
+					align-items: stretch;
+					justify-content: flex-start;
+					flex: none;
+					width: 100%;
+					gap: px2vw(6px);
+
+					&.full {
+						width: 100%;
+					}
+
+					.label {
+						width: auto;
+						white-space: normal;
+					}
+
+					.value-readonly,
+					.qty-input-inline,
+					.remark-textarea {
+						width: 100%;
+					}
+
+					.remark-textarea {
+						min-height: px2vw(100px);
+					}
+				}
+
+				.modal-footer {
+					padding: px2vw(16px) px2vw(22px);
+
+					.btn-cancel,
+					.btn-confirm {
+						width: px2vw(160px);
+						height: px2vw(62px);
+						font-size: px2vw(28px);
+					}
+				}
+			}
 			
 			.modal-header {
 				display: flex;
@@ -1233,6 +1453,18 @@ const quit = () => {
 					color: #333;
 					box-sizing: border-box;
 					resize: none;
+				}
+
+				.qty-input-inline {
+					width: px2vw(400px);
+					font-size: px2vw(30px);
+					color: #333;
+					padding: px2vw(8px) px2vw(12px);
+					border: px2vw(1px) solid #eee;
+					border-radius: px2vw(5px);
+					background: #fff;
+					min-height: px2vw(50px);
+					box-sizing: border-box;
 				}
 			}
 			
