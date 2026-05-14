@@ -90,6 +90,12 @@
 					<view class="modal-body">
 						<view class="row-group">
 							<view class="form-group">
+								<text class="label">生产数量：</text>
+								<text class="value-readonly">{{ editQtyForm.productionQtyDisplay }}</text>
+							</view>
+						</view>
+						<view class="row-group">
+							<view class="form-group">
 								<text class="label">当前派工数量：</text>
 								<text class="value-readonly">{{ editQtyForm.currentQtyDisplay }}</text>
 							</view>
@@ -464,7 +470,24 @@ const getDispatchInquiryList = async () => {
 	status: item['697b11b33b5e707f84cd938e'],
 	isRedeploy: item['695b7efca820885c2979af50'],
 	isredeploy: item['695b7efca820885c2979af4f'],
+	/** 生产数量（修改数量弹窗展示与上限校验，不在列表展示） */
+	productionQty: item['697b0ff43b5e707f84cd922e'],
   }))
+}
+
+/** 解析生产数量上限；无效则返回 null（不做客户端上限） */
+const parseProductionQtyCap = (v) => {
+	if (v === undefined || v === null || v === '') return null
+	const n = parseFloat(String(v).replace(/,/g, '').trim())
+	return Number.isFinite(n) ? n : null
+}
+
+/** 弹窗内展示用：可解析为数字则用数字文案，否则尽量展示原始值 */
+const formatProductionQtyDisplay = (raw) => {
+	const cap = parseProductionQtyCap(raw)
+	if (Number.isFinite(cap)) return String(cap)
+	if (raw !== undefined && raw !== null && String(raw).trim() !== '') return String(raw).trim()
+	return '-'
 }
 
 onLoad((options) => {
@@ -512,6 +535,10 @@ const editQtyForm = ref({
 	currentQtyDisplay: '',
 	/** 提交接口用的原派工数量（可解析时为数字，否则为 null） */
 	originalDispatchQuantity: null,
+	/** 生产数量上限；可解析时修改后数量不可超过该值 */
+	maxProductionQty: null,
+	/** 生产数量（仅弹窗展示） */
+	productionQtyDisplay: '-',
 	newQty: '',
 	reason: ''
 })
@@ -535,6 +562,8 @@ const openEditQtyModal = (item) => {
 	editQtyForm.value = {
 		currentQtyDisplay: disp,
 		originalDispatchQuantity,
+		maxProductionQty: parseProductionQtyCap(item.productionQty),
+		productionQtyDisplay: formatProductionQtyDisplay(item.productionQty),
 		newQty: '',
 		reason: ''
 	}
@@ -547,6 +576,8 @@ const closeEditQtyModal = () => {
 	editQtyForm.value = {
 		currentQtyDisplay: '',
 		originalDispatchQuantity: null,
+		maxProductionQty: null,
+		productionQtyDisplay: '-',
 		newQty: '',
 		reason: ''
 	}
@@ -567,6 +598,14 @@ const confirmEditQty = async () => {
 	const n = parseFloat(newStr.replace(/,/g, ''))
 	if (!Number.isFinite(n) || n < 0) {
 		uni.showToast({ title: '修改后的派工数量无效', icon: 'none' })
+		return
+	}
+	const cap = editQtyForm.value.maxProductionQty
+	if (Number.isFinite(cap) && n > cap) {
+		uni.showToast({
+			title: `修改后数量不能超过生产数量（${cap}）`,
+			icon: 'none'
+		})
 		return
 	}
 	if (!editQtyRowid.value) {

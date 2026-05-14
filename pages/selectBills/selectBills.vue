@@ -195,7 +195,7 @@ const buildQueryPayload = (extra = {}) => ({
 			dataType: 30,
 			spliceType: 1,
 			filterType: 2,
-			values: ['已排产']
+			values: ['已排产', '部分排产']
 		},
 		{
 			controlId: '69db0017665ab27f3913c455',

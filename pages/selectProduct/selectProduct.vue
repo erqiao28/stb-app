@@ -372,6 +372,13 @@ const getBillsListRaw = async (pageNum = 1, silent = false) => {
       values: [billTypeFilter.value]
     },
     {
+      controlId: '655b875ffc44a9469a3aa225',
+      dataType: 30,
+      spliceType: 1,
+      filterType: 2,
+      values: ['已排产', '部分排产']
+    },
+    {
       controlId: '69db0017665ab27f3913c455',
       dataType: 30,
       spliceType: 1,

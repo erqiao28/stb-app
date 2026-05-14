@@ -1751,8 +1751,8 @@ const getSelectedProcessCount = (item) => {
     // 组装/抛光/喷涂：统计当前单据上的多选工序数量
     return selectedMultiProcesses.value.filter(p => isSameBillAs(p.item, item)).length
   } else {
-    // 其他车间（包括喷涂）：检查是否有单选工序
-    return selectedProcess.value && selectedProcess.value.item.orderCode === item.orderCode ? 1 : 0
+    // 其他车间（包括喷涂）：检查是否有单选工序（须含生产单号，避免同订单多产品串单）
+    return selectedProcess.value && isSameBillAs(selectedProcess.value.item, item) ? 1 : 0
   }
 }
 
@@ -2739,7 +2739,12 @@ const billKeyForMultiDispatch = (item) => {
   return `${item?.orderCode || ''}__${item?.productionCode || ''}`
 }
 
-/** 组装/抛光/喷涂多选：抛光仅同名跨单；喷涂/组装在大类联动开启时按大类，否则只勾当前格 */
+/**
+ * 组装/抛光/喷涂多选：
+ * - 抛光：始终按工序名跨单。
+ * - 喷涂/组装：大类联动开 → 按大类批量；关 → 订单派工只勾当前格；产品派工仍按工序名跨单（与抛光一致，避免与「关大类」互斥导致无法多品选同名工序）。
+ * - 其余车间：按工序名跨单。
+ */
 const toggleMultiProcessSyncedGroup = (item, process) => {
   const w = workshop.value
   const pairs =
@@ -2748,9 +2753,11 @@ const toggleMultiProcessSyncedGroup = (item, process) => {
       : w === '喷涂车间' || w === '组装车间'
         ? processBulkLinkEnabled.value
           ? collectMultiProcessSyncedPairsByCategory(item, process)
-          : item && process
-            ? [{ item, process }]
-            : []
+          : dispatchMode.value === 'product'
+            ? collectProductDispatchSyncedPairs(buildProductDispatchSyncKey(process))
+            : item && process
+              ? [{ item, process }]
+              : []
         : collectProductDispatchSyncedPairs(buildProductDispatchSyncKey(process))
   if (!pairs.length) return
   const pairIncluded = (pair) =>
@@ -2812,14 +2819,14 @@ const isProcessSelected = (item, process) => {
     return kn !== '' && (process?.processName || '') === kn
   }
   if (!selectedProcess.value) return false
-  return selectedProcess.value.item.orderCode === item.orderCode &&
+  return isSameBillAs(selectedProcess.value.item, item) &&
          selectedProcess.value.process.rowid === process.rowid
 }
 
 // 多选工序相关方法（以订单编码 + 工序 rowid 为基准）
 const toggleMultiProcess = (item, process) => {
   const index = selectedMultiProcesses.value.findIndex(p =>
-    p.item.orderCode === item.orderCode && p.process.rowid === process.rowid
+    isSameBillAs(p.item, item) && p.process.rowid === process.rowid
   )
   
   if (index >= 0) {
@@ -2842,17 +2849,20 @@ const isMultiProcessSelected = (item, process) => {
     return kn !== '' && (process?.processName || '') === kn
   }
   return selectedMultiProcesses.value.some(p =>
-    p.item.orderCode === item.orderCode && p.process.rowid === process.rowid
+    isSameBillAs(p.item, item) && p.process.rowid === process.rowid
   )
 }
 
 const multiDispatchProcessPickKey = (proc) =>
   `${proc?.processName || ''}\t${String(proc?.sequence ?? '')}`
 
-const countKeysFromMultiEntries = (entries) => {
+/** 产品派工多对多：跨单按工序名称对齐（不同产品同名工序 sequence 常不一致，用 name+seq 会漏单） */
+const productMultiDispatchProcessPickKey = (proc) => String(proc?.processName || '').trim()
+
+const countKeysFromMultiEntries = (entries, pickKeyFn = multiDispatchProcessPickKey) => {
   const m = new Map()
   for (const p of entries) {
-    const k = multiDispatchProcessPickKey(p.process)
+    const k = pickKeyFn(p.process)
     m.set(k, (m.get(k) || 0) + 1)
   }
   return m
@@ -2866,11 +2876,13 @@ const multiDispatchKeyMapsEqual = (a, b) => {
   return true
 }
 
-/** 与锚点单据已选工序（工序名+序号 多重集）一致的全部单据，用于跨单多对多 */
+/** 与锚点单据已选工序多重集一致的全部单据：订单派工按工序名+序号；产品派工按工序名（跨产品 sequence 可能不同） */
 const buildMultiDispatchTargets = (anchorItem) => {
   const listForBill = selectedMultiProcesses.value.filter(p => isSameBillAs(p.item, anchorItem))
   if (listForBill.length < 2) return []
-  const anchorCounts = countKeysFromMultiEntries(listForBill)
+  const pickKeyFn =
+    dispatchMode.value === 'product' ? productMultiDispatchProcessPickKey : multiDispatchProcessPickKey
+  const anchorCounts = countKeysFromMultiEntries(listForBill, pickKeyFn)
   const byBill = new Map()
   for (const p of selectedMultiProcesses.value) {
     const bk = billKeyForMultiDispatch(p.item)
@@ -2879,7 +2891,7 @@ const buildMultiDispatchTargets = (anchorItem) => {
   }
   const targets = []
   for (const entries of byBill.values()) {
-    if (multiDispatchKeyMapsEqual(countKeysFromMultiEntries(entries), anchorCounts)) {
+    if (multiDispatchKeyMapsEqual(countKeysFromMultiEntries(entries, pickKeyFn), anchorCounts)) {
       targets.push({ item: entries[0].item, processes: entries.slice() })
     }
   }
@@ -4130,7 +4142,7 @@ const addProcess = async (item) => {
 
   if (isMultiSelectProcessWorkshop.value) {
     // 组装/抛光/喷涂：使用多选工序列表
-    const selected = selectedMultiProcesses.value.find(p => p.item.orderCode === item.orderCode)
+    const selected = selectedMultiProcesses.value.find(p => isSameBillAs(p.item, item))
     if (!selected) {
       uni.showToast({ title: '请先选择一个工序', icon: 'none' })
       return
@@ -4145,7 +4157,7 @@ const addProcess = async (item) => {
         return
       }
       baseProcess = proc
-    } else if (!selectedProcess.value || selectedProcess.value.item.orderCode !== item.orderCode) {
+    } else if (!selectedProcess.value || !isSameBillAs(selectedProcess.value.item, item)) {
       uni.showToast({ title: '请先选择一个工序', icon: 'none' })
       return
     } else {
@@ -4208,8 +4220,8 @@ const dispatchWork = (item) => {
     }
     
     // 检查选中的工序是否属于当前订单
-    if (selectedProcess.value.item.orderCode !== item.orderCode) {
-      uni.showToast({ title: '请选择当前订单的工序', icon: 'none' })
+    if (!isSameBillAs(selectedProcess.value.item, item)) {
+      uni.showToast({ title: '请选择当前单据的工序', icon: 'none' })
       return
     }
     
