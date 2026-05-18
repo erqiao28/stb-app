@@ -13,14 +13,16 @@
 		<view v-else>
 		<!-- 用户列表 -->
 		<view class="user-list" v-if="isUserlist">
-			<view class="user-item" v-for="item in userStore.userlist">
-				<view class="user-name" @click="selectWorker(item)">
-					{{ item.username }}
+			<view class="user-item" v-for="item in userStore.userlist" :key="item.rowid">
+				<view class="user-item-main" @click="selectWorker(item)">
+					<view class="user-name">{{ item.username }}</view>
 				</view>
-				<view class="user-number" @click="selectWorker(item)">
-					{{ item.code }}
-				</view>
-				<!-- <image src="/static/rubish.svg" @click="del(item.rowid)"></image> -->
+				<image
+					class="user-del-btn"
+					src="/static/rubish.svg"
+					mode="aspectFit"
+					@tap.stop="del(item.rowid)"
+				/>
 			</view>
 		</view>
 		<view class="login-box">
@@ -364,9 +366,10 @@ const selectWorker = (item) => {
 	loginform.value.password = item.password
 }
 
-// 删除
+// 删除登录账号
 const del = (rowid) => {
 	const index = userStore.userlist.findIndex(item => item.rowid === rowid)
+	if (index === -1) return
 	userStore.userlist.splice(index, 1)
 }
 
@@ -498,13 +501,28 @@ const goFieldTypes = async () => {
 			align-items: center;
 			justify-content: space-between;
 			padding: px2vw(25px);
-			cursor: pointer;
 			font-size: px2vw(50px);
+			box-sizing: border-box;
 
-			/* 删除图标 */
-			image {
+			.user-item-main {
+				flex: 1;
+				min-width: 0;
+				display: flex;
+				align-items: center;
+			}
+
+			.user-name {
+				overflow: hidden;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+
+			.user-del-btn {
+				flex-shrink: 0;
 				height: px2vw(50px);
 				width: px2vw(50px);
+				margin-left: px2vw(16px);
+				padding: px2vw(8px);
 			}
 		}
 	}
