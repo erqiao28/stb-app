@@ -14,9 +14,11 @@
       </view>
     </view>
 
-    <!-- 搜索区域：订单编号 / 产品名称均为多关键词标签筛选（任一词命中即可，OR）；路由 orderCode 会预填一条订单标签 -->
+    <!-- 搜索区域：首行订单编号+产品名称与确定/展开对齐；锅口/工艺/抛光可展开 -->
     <view class="search-box">
-      <view class="search-filters-row">
+      <view class="search-box-inner">
+        <view class="search-main-row">
+          <view class="search-filters-row">
         <view class="filter-row filter-row--order">
           <text class="filter-label">订单编号</text>
           <view class="product-name-stack">
@@ -86,9 +88,118 @@
             </view>
           </view>
         </view>
-      </view>
+          </view>
 
-      <view class="btn-item confirm-btn" v-if="dispatchMode === 'product'" @click="confirmSelectedProducts">确定</view>
+          <view class="search-actions">
+            <view class="spec-expand-btn" @tap="toggleSpecFiltersExpanded">
+              <text class="spec-expand-arrow">{{ specFiltersExpanded ? '▲' : '▼' }}</text>
+            </view>
+            <view
+              class="btn-item confirm-btn"
+              v-if="dispatchMode === 'product'"
+              @click="confirmSelectedProducts"
+            >确定</view>
+          </view>
+        </view>
+
+      <view v-if="specFiltersExpanded" class="search-filters-row search-filters-row--spec">
+        <view class="filter-row filter-row--spec">
+          <text class="filter-label">锅口</text>
+          <view class="product-name-stack">
+            <view class="suggest-field">
+              <view class="suggest-input-box suggest-input-box--chips suggest-input-box--compact">
+                <view v-if="guokouFilterTags.length" class="filter-tags-inline">
+                  <view
+                    v-for="(tag, tIdx) in guokouFilterTags"
+                    :key="'gk-' + tIdx + '-' + tag"
+                    class="filter-tag"
+                    @tap.stop="removeGuokouTag(tIdx)"
+                  >
+                    <text class="filter-tag-text">{{ tag }}</text>
+                    <text class="filter-tag-close">×</text>
+                  </view>
+                </view>
+                <input
+                  v-model="guokouSuggestInput"
+                  type="text"
+                  placeholder="输入关键词，点下方加入"
+                  confirm-type="search"
+                />
+              </view>
+              <view v-if="guokouInputTrimmed" class="suggest-dropdown suggest-dropdown--single">
+                <view class="suggest-item" @tap.stop="pickGuokouSuggestion(guokouInputTrimmed)">
+                  <text>{{ guokouInputTrimmed }}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <view class="filter-row filter-row--spec">
+          <text class="filter-label">工艺</text>
+          <view class="product-name-stack">
+            <view class="suggest-field">
+              <view class="suggest-input-box suggest-input-box--chips suggest-input-box--compact">
+                <view v-if="craftFilterTags.length" class="filter-tags-inline">
+                  <view
+                    v-for="(tag, tIdx) in craftFilterTags"
+                    :key="'cf-' + tIdx + '-' + tag"
+                    class="filter-tag"
+                    @tap.stop="removeCraftTag(tIdx)"
+                  >
+                    <text class="filter-tag-text">{{ tag }}</text>
+                    <text class="filter-tag-close">×</text>
+                  </view>
+                </view>
+                <input
+                  v-model="craftSuggestInput"
+                  type="text"
+                  placeholder="输入关键词，点下方加入"
+                  confirm-type="search"
+                />
+              </view>
+              <view v-if="craftInputTrimmed" class="suggest-dropdown suggest-dropdown--single">
+                <view class="suggest-item" @tap.stop="pickCraftSuggestion(craftInputTrimmed)">
+                  <text>{{ craftInputTrimmed }}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <view class="filter-row filter-row--spec">
+          <text class="filter-label">抛光</text>
+          <view class="product-name-stack">
+            <view class="suggest-field">
+              <view class="suggest-input-box suggest-input-box--chips suggest-input-box--compact">
+                <view v-if="polishFilterTags.length" class="filter-tags-inline">
+                  <view
+                    v-for="(tag, tIdx) in polishFilterTags"
+                    :key="'pl-' + tIdx + '-' + tag"
+                    class="filter-tag"
+                    @tap.stop="removePolishTag(tIdx)"
+                  >
+                    <text class="filter-tag-text">{{ tag }}</text>
+                    <text class="filter-tag-close">×</text>
+                  </view>
+                </view>
+                <input
+                  v-model="polishSuggestInput"
+                  type="text"
+                  placeholder="输入关键词，点下方加入"
+                  confirm-type="search"
+                />
+              </view>
+              <view v-if="polishInputTrimmed" class="suggest-dropdown suggest-dropdown--single">
+                <view class="suggest-item" @tap.stop="pickPolishSuggestion(polishInputTrimmed)">
+                  <text>{{ polishInputTrimmed }}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+      </view>
     </view>
 
     <!-- 单据列表：在选择订单基础上，展示订单编号 + 客户名称 + 产品名称 + 规格型号 -->
@@ -162,6 +273,7 @@ import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { defaultWorkshopFromLoginLimits } from '../../utils/workshop'
+import { extractSpecFromModels } from '../../utils/extractSpecFromModels'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -174,6 +286,12 @@ const billTypeFilter = ref('正常排产')
 const billTypeIndex = ref(0)
 const isBillTypeReadonly = ref(false)
 const dispatchMode = ref('order')
+/** 是否展开锅口 / 工艺 / 抛光筛选行 */
+const specFiltersExpanded = ref(false)
+
+const toggleSpecFiltersExpanded = () => {
+  specFiltersExpanded.value = !specFiltersExpanded.value
+}
 
 /** 订单编号筛选标签（与产品名称相同：本地 OR 匹配 orderCode 包含任一关键词） */
 const orderFilterTags = ref([])
@@ -193,6 +311,21 @@ const selectedProductKeys = ref([])
 const productNameFilterTags = ref([])
 /** 输入框内容（trim 后点下方选项加入 productNameFilterTags，不做数据联想） */
 const productNameSuggestInput = ref('')
+
+/** 从规格型号解析的锅口 / 工艺 / 抛光（仅用于筛选，不在列表展示） */
+const guokouFilterTags = ref([])
+const guokouSuggestInput = ref('')
+const craftFilterTags = ref([])
+const craftSuggestInput = ref('')
+const polishFilterTags = ref([])
+const polishSuggestInput = ref('')
+
+const specFilterConfig = {
+  guokou: { field: 'specGuokou', tags: guokouFilterTags },
+  craft: { field: 'specCraft', tags: craftFilterTags },
+  polish: { field: 'specPolish', tags: polishFilterTags }
+}
+
 /** 接口已加载并映射后的全集（不含销售订单、不含产品名标签筛选） */
 const baseListUnfiltered = ref([])
 
@@ -210,25 +343,34 @@ const productNameInputTrimmed = computed(() =>
 
 const orderInputTrimmed = computed(() => (orderSuggestInput.value || '').trim())
 
+const guokouInputTrimmed = computed(() => (guokouSuggestInput.value || '').trim())
+const craftInputTrimmed = computed(() => (craftSuggestInput.value || '').trim())
+const polishInputTrimmed = computed(() => (polishSuggestInput.value || '').trim())
+
+const normalizeTagsLower = (tags) =>
+  (tags || []).map((t) => String(t).trim().toLowerCase()).filter(Boolean)
+
+const filterListByTagsOr = (list, tags, getFieldStr) => {
+  const tagsLower = normalizeTagsLower(tags)
+  if (!tagsLower.length) return list
+  return list.filter((item) => {
+    const fieldStr = getFieldStr(item).toLowerCase()
+    return tagsLower.some((tag) => fieldStr.includes(tag))
+  })
+}
+
 const rebuildBillsList = () => {
   let list = [...baseListUnfiltered.value]
-  if (orderFilterTags.value.length) {
-    const tagsLower = orderFilterTags.value
-      .map((t) => String(t).trim().toLowerCase())
-      .filter(Boolean)
-    list = list.filter((item) => {
-      const orderCodeStr = (item.orderCode || '').toString().toLowerCase()
-      return tagsLower.some((tag) => orderCodeStr.includes(tag))
-    })
-  }
-  if (productNameFilterTags.value.length) {
-    const tagsLower = productNameFilterTags.value
-      .map((t) => String(t).trim().toLowerCase())
-      .filter(Boolean)
-    list = list.filter((item) => {
-      const nameStr = (item.name || '').toString().toLowerCase()
-      return tagsLower.some((tag) => nameStr.includes(tag))
-    })
+  list = filterListByTagsOr(list, orderFilterTags.value, (item) =>
+    (item.orderCode || '').toString()
+  )
+  list = filterListByTagsOr(list, productNameFilterTags.value, (item) =>
+    (item.name || '').toString()
+  )
+  for (const cfg of Object.values(specFilterConfig)) {
+    list = filterListByTagsOr(list, cfg.tags.value, (item) =>
+      (item[cfg.field] || '').toString()
+    )
   }
   billsList.value = list
   nextTick(() => {
@@ -278,6 +420,41 @@ const removeProductNameTag = (idx) => {
   if (idx < 0 || idx >= productNameFilterTags.value.length) return
   productNameFilterTags.value.splice(idx, 1)
   rebuildBillsList()
+}
+
+const pickSpecTag = (tagsRef, inputRef, raw) => {
+  const n = (raw || '').toString().trim()
+  if (!n) return
+  const lower = n.toLowerCase()
+  if (tagsRef.value.some((t) => String(t).trim().toLowerCase() === lower)) {
+    inputRef.value = ''
+    return
+  }
+  tagsRef.value.push(n)
+  inputRef.value = ''
+  rebuildBillsList()
+}
+
+const removeSpecTag = (tagsRef, idx) => {
+  if (idx < 0 || idx >= tagsRef.value.length) return
+  tagsRef.value.splice(idx, 1)
+  rebuildBillsList()
+}
+
+const pickGuokouSuggestion = (raw) => pickSpecTag(guokouFilterTags, guokouSuggestInput, raw)
+const removeGuokouTag = (idx) => removeSpecTag(guokouFilterTags, idx)
+const pickCraftSuggestion = (raw) => pickSpecTag(craftFilterTags, craftSuggestInput, raw)
+const removeCraftTag = (idx) => removeSpecTag(craftFilterTags, idx)
+const pickPolishSuggestion = (raw) => pickSpecTag(polishFilterTags, polishSuggestInput, raw)
+const removePolishTag = (idx) => removeSpecTag(polishFilterTags, idx)
+
+const clearSpecFilterTags = () => {
+  guokouFilterTags.value = []
+  guokouSuggestInput.value = ''
+  craftFilterTags.value = []
+  craftSuggestInput.value = ''
+  polishFilterTags.value = []
+  polishSuggestInput.value = ''
 }
 
 const isProductChecked = (item) => {
@@ -445,6 +622,9 @@ const mapRowsBaseOnly = (rows) => {
       customerName,
       name,
       models,
+      specGuokou: extractSpecFromModels(models, '锅口'),
+      specCraft: extractSpecFromModels(models, '工艺'),
+      specPolish: extractSpecFromModels(models, '抛光'),
       orderCount,
       reworkQtyDisplay,
       productionCode: item['698438933b5e707f84cf51fd'] || '',
@@ -501,6 +681,7 @@ const search = async () => {
   baseListUnfiltered.value = []
   productNameFilterTags.value = []
   productNameSuggestInput.value = ''
+  clearSpecFilterTags()
   // 保留 orderFilterTags / orderSuggestInput（含路由预填的订单），避免进入页 search 冲掉 onLoad 已设标签
   await loadPage(1, false)
 }
@@ -632,8 +813,6 @@ const confirmSelectedProducts = () => {
   }
 
   .search-box {
-    display: flex;
-    align-items: center;
     width: 100%;
     background-color: #fff;
     min-height: px2vw(100px);
@@ -641,9 +820,50 @@ const confirmSelectedProducts = () => {
     margin: px2vw(10px);
     border-radius: px2vw(18px);
     box-sizing: border-box;
-    gap: px2vw(12px);
     position: relative;
     z-index: 5;
+
+    .search-box-inner {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: px2vw(12px);
+    }
+
+    .search-main-row {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-end;
+      gap: px2vw(12px);
+      min-width: 0;
+    }
+
+    .search-actions {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: px2vw(10px);
+      padding-bottom: px2vw(2px);
+    }
+
+    .spec-expand-btn {
+      width: px2vw(76px);
+      height: px2vw(76px);
+      border-radius: px2vw(14px);
+      border: px2vw(3px) solid #5884f1;
+      background-color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+    }
+
+    .spec-expand-arrow {
+      font-size: px2vw(32px);
+      color: #5884f1;
+      line-height: 1;
+    }
 
     .search-filters-row {
       flex: 1;
@@ -652,6 +872,18 @@ const confirmSelectedProducts = () => {
       flex-direction: row;
       align-items: flex-start;
       gap: px2vw(16px);
+    }
+
+    .search-filters-row--spec {
+      flex-wrap: wrap;
+      margin-top: px2vw(2px);
+
+      .filter-row--spec {
+        flex: 1 1 30%;
+        min-width: px2vw(200px);
+        position: relative;
+        z-index: 4;
+      }
     }
 
     .filter-row {
@@ -828,10 +1060,7 @@ const confirmSelectedProducts = () => {
 
     .confirm-btn {
       flex-shrink: 0;
-      align-self: center;
-      margin-left: 0;
-      margin-right: 0;
-      margin-top: 0;
+      margin: 0;
       width: auto;
       min-width: px2vw(148px);
       height: px2vw(76px);
