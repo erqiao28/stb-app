@@ -675,14 +675,15 @@
       <!-- 左侧返回箭头保留 -->
       <image src="/static/left-arrow.svg" @click="quit"></image>
       <view class="title">
-        派工( {{ userStore?.loginName || '' }} )
+        {{ craftProductMode ? '产品' : `派工( ${userStore?.loginName || ''} )` }}
       </view>
-      <view class="header-tag-wrap">
+      <view class="header-tag-wrap" v-if="!craftProductMode">
         <text
           class="dispatch-mode-tag"
           :class="dispatchMode === 'product' ? 'is-product' : 'is-order'"
         >{{ dispatchMode === 'product' ? '产品派工' : '订单派工' }}</text>
       </view>
+      <view v-else class="header-tag-wrap"></view>
     </view>
 
     <!-- 登录权限为喷涂车间时：显示车间选择入口，可切换派工页当前车间 -->
@@ -956,10 +957,8 @@ const modalWorkshopIndex = computed(() => {
   return index >= 0 ? index : 0
 })
 
-/** loginLimits 为喷涂车间时展示顶部车间选择条，允许切换到其它车间 */
-const showDispatchWorkshopSelector = computed(() => {
-  return (userStore.loginLimits || '').trim() === '喷涂车间'
-})
+/** 顶部车间选择条已隐藏（不再展示「当前车间」筛选入口） */
+const showDispatchWorkshopSelector = computed(() => false)
 
 const openWorkshopSelectModal = () => {
   showWorkshopModal.value = true
@@ -1040,6 +1039,8 @@ const selectedOrderCode = ref('')
 const selectedProductionCode = ref('')
 const selectedProductHeaders = ref([])
 const dispatchMode = ref('order')
+/** 工艺产品页跳入：仅按传入生产编号（及订单号）拉取单条生产单与对应工序 */
+const craftProductMode = ref(false)
 const billTypeFilter = ref('正常排产')  // 单据类型过滤参数：正常排产、返工排产（用于获取单据）
 // 排产类型下拉选项
 const billTypeOptions = ref(['正常排产', '返工排产'])
@@ -1929,6 +1930,15 @@ const findDuplicateBillKeys = (bills) => {
 
 // 根据当前车间和单据类型获取工序列表（统一获取后在前端按订单匹配）
 const getProcessRaw = async (billTypeValue = '') => {
+  if (craftProductMode.value) {
+    return getProcessRawForOrderProduct(
+      billTypeValue || billTypeFilter.value,
+      selectedOrderCode.value,
+      selectedProductionCode.value,
+      true
+    )
+  }
+
   const processTypeParam = getProcessTypeParam(billTypeValue || '正常排产')
 
   const filters = [{
@@ -1975,21 +1985,30 @@ const getProcessRaw = async (billTypeValue = '') => {
 }
 
 /** 按指定订单号 + 生产单号拉取工序（产品派工多单据时逐单请求，避免全表只取第一页导致其它单据无工序） */
-const getProcessRawForOrderProduct = async (billTypeValue, orderCode, productionCode) => {
+const getProcessRawForOrderProduct = async (
+  billTypeValue,
+  orderCode,
+  productionCode,
+  skipWorkshopFilter = false
+) => {
   const processTypeParam = getProcessTypeParam(billTypeValue || '正常排产')
-  const filters = [{
-    controlId: '669a6cae2503723eec1b49bb',
-    dataType: 30,
-    spliceType: 1,
-    filterType: 2,
-    values: [workshop.value]
-  }, {
+  const filters = []
+  if (!skipWorkshopFilter) {
+    filters.push({
+      controlId: '669a6cae2503723eec1b49bb',
+      dataType: 30,
+      spliceType: 1,
+      filterType: 2,
+      values: [workshop.value]
+    })
+  }
+  filters.push({
     controlId: '6954ad997a59e0522d85df35',
     dataType: 30,
     spliceType: 1,
     filterType: 2,
     values: [processTypeParam]
-  }]
+  })
   if (orderCode) {
     filters.push({
       controlId: '6593b07ae97eb866a50eeba1',
@@ -2057,13 +2076,19 @@ const billPairKeyFromPaiChanRow = (row) => {
 
 // 根据当前车间和单据类型获取单据列表
 const getBillsListRaw = async () => {
-  const filters = [{
-    controlId: '67de26c9c5377d50a523c735',
-    dataType: 30,
-    spliceType: 1,
-    filterType: 2,
-    values: [workshop.value]
-  }, {
+  const filters = []
+
+  if (!craftProductMode.value) {
+    filters.push({
+      controlId: '67de26c9c5377d50a523c735',
+      dataType: 30,
+      spliceType: 1,
+      filterType: 2,
+      values: [workshop.value]
+    })
+  }
+
+  filters.push({
     controlId: '694a3954687045435008a7c3',
     dataType: 30,
     spliceType: 1,
@@ -2074,9 +2099,9 @@ const getBillsListRaw = async () => {
     dataType: 30,
     spliceType: 1,
     filterType: 8
-  }]
+  })
 
-  // 订单派工时：接口层按订单号 + 生产单号过滤；产品派工改为前端按 selectedProducts 过滤
+  // 订单派工 / 工艺产品：接口层按订单号 + 生产单号过滤；产品派工改为前端按 selectedProducts 过滤
   if (dispatchMode.value !== 'product' && selectedOrderCode.value) {
     filters.push({
       controlId: '655e1cbbbd2094b316347f92', // 单据中的订单号字段
@@ -4347,8 +4372,16 @@ const confirmDeleteProcess = async () => {
   }
 }
 
-// 左箭头固定返回到选择产品页面
+// 返回：工艺产品 → 工艺产品列表；否则 → 选择产品页
 const quit = () => {
+  if (craftProductMode.value) {
+    uni.navigateBack({
+      fail: () => {
+        uni.redirectTo({ url: '/pages/carftProduct/carftProduct' })
+      }
+    })
+    return
+  }
   const bt = billTypeFilter.value || '正常排产'
   const readonlyPart = isBillTypeReadonly.value ? '&billTypeReadonly=1' : ''
   const modePart = `&dispatchMode=${dispatchMode.value || 'order'}`
@@ -4440,6 +4473,29 @@ onLoad((options) => {
   isBillTypeReadonly.value = readonlyFlag === '1' || readonlyFlag.toLowerCase() === 'true'
   const mode = String(options?.dispatchMode || '').trim()
   dispatchMode.value = mode === 'product' ? 'product' : 'order'
+
+  const craftFlag = String(options?.craftProduct || options?.fromCraftProduct || '')
+  if (craftFlag === '1' || craftFlag.toLowerCase() === 'true') {
+    craftProductMode.value = true
+    dispatchMode.value = 'order'
+    selectedProductHeaders.value = []
+    billTypeFilter.value = '正常排产'
+    billTypeIndex.value = 0
+    isBillTypeReadonly.value = true
+    if (options.productionCode) {
+      selectedProductionCode.value = decodeURIComponent(String(options.productionCode)).trim()
+    }
+    if (options.orderCode) {
+      const oc = decodeURIComponent(String(options.orderCode)).trim()
+      selectedOrderCode.value = oc
+      searchValue.value = oc
+      searchForm.value.salesOrder = oc
+    }
+    if (options.orderItem) {
+      searchForm.value.orderItem = decodeURIComponent(String(options.orderItem)).trim()
+    }
+  }
+
   if (options && options.selectedProducts) {
     try {
       const parsed = JSON.parse(decodeURIComponent(options.selectedProducts))
@@ -4484,7 +4540,11 @@ onLoad((options) => {
 
   // 与登录权限 loginLimits 一致，不将喷涂映射为组装（喷涂权限允许在页面内改车间，不锁）
   const limitsOnLoad = (userStore.loginLimits || '').trim()
-  if (limitsOnLoad && workshopOptions.value.includes(limitsOnLoad)) {
+  if (
+    !craftProductMode.value &&
+    limitsOnLoad &&
+    workshopOptions.value.includes(limitsOnLoad)
+  ) {
     workshop.value = limitsOnLoad
     isWorkshopLocked.value = limitsOnLoad !== '喷涂车间'
   }
@@ -4504,7 +4564,11 @@ onLoad((options) => {
 
 onShow(() => {
   const limitsOnShow = (userStore.loginLimits || '').trim()
-  if (limitsOnShow && workshopOptions.value.includes(limitsOnShow)) {
+  if (
+    !craftProductMode.value &&
+    limitsOnShow &&
+    workshopOptions.value.includes(limitsOnShow)
+  ) {
     if (limitsOnShow === '喷涂车间') {
       // 喷涂权限用户可在页面切换车间，返回本页时不强制改回喷涂
       isWorkshopLocked.value = false

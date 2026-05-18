@@ -10,10 +10,16 @@
 			</view>
 		</view>
 
-		<!-- 搜索区域 -->
-		<view class="search-box">
-			<input type="text" placeholder="请输入工序名称" v-model="searchValue" @input="handleSearch" />
-			<image src="/static/scan.svg"></image>
+		<!-- 搜索和车间筛选区域 -->
+		<view class="filter-bar">
+			<view class="search-box">
+				<input type="text" placeholder="请输入工序名称" v-model="searchValue" @input="handleSearch" />
+			</view>
+			<view class="workshop-picker">
+				<picker mode="selector" :range="workshopOptions" :value="selectedWorkshopIndex" @change="onWorkshopChange">
+					<view class="picker-value">{{ workshopOptions[selectedWorkshopIndex] }}</view>
+				</picker>
+			</view>
 		</view>
 
 		<!-- 主要内容区域：左侧表格，右侧输入框和按钮 -->
@@ -94,7 +100,17 @@ import http from '../../utils/request.js'
 import { showToast } from '../../utils/request.js'
 import { ADD_PROCESS_URL } from '../../utils/api'
 import { useStatusBar } from '../../composables/useStatusBar'
+import { useUserStore } from '../../store/user.store'
 const { statusBarHeight } = useStatusBar()
+const userStore = useUserStore()
+
+/** 登录权限是否为「工序」 */
+const isGongxuLimits = ref(false)
+
+/** 车间选项 */
+const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
+const selectedWorkshopIndex = ref(0)
+
 const orderData = ref({
 	ordercode: '',
 	productcode: '',
@@ -174,8 +190,25 @@ onLoad((options) => {
 	const day = String(today.getDate()).padStart(2, '0')
 	const todayStr = `${year}-${month}-${day}`
 	plannedProductionDate.value = todayStr
+	// 判断权限是否为「工序」（从 store 或本地存储读取）
+	const lim = (userStore.loginLimits || '').trim()
+	isGongxuLimits.value = lim === '工序'
+	// 权限为「工序」时：初始化车间选择器为传入的车间
+	if (isGongxuLimits.value && orderData.value.workshop) {
+		const idx = workshopOptions.value.indexOf(orderData.value.workshop)
+		if (idx >= 0) selectedWorkshopIndex.value = idx
+	}
 	getProcessList(1, true)  // 初次加载全部
 })
+
+const onWorkshopChange = (e) => {
+	selectedWorkshopIndex.value = Number(e.detail.value) || 0
+	const newWorkshop = workshopOptions.value[selectedWorkshopIndex.value]
+	orderData.value.workshop = newWorkshop
+	// 切换车间后重新加载工序列表
+	searchValue.value = ''
+	getProcessList(1, true)
+}
 
 onPullDownRefresh(() => {
 	getProcessList(1, true)
@@ -380,27 +413,58 @@ const quit = () => {
 
 }
 
-.search-box {
+.filter-bar {
 	display: flex;
 	align-items: center;
-	margin: px2vw(15px);
-	background-color: #fff;
-	border-radius: px2vw(18px);
-	padding: 0 px2vw(15px);
-	height: px2vw(80px);
+	gap: px2vw(15px);
+	margin: px2vw(10px) px2vw(15px);
 	flex-shrink: 0;
 
-	input {
-		width: 100%;
+	.search-box {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		background-color: #fff;
+		border-radius: px2vw(18px);
+		padding: 0 px2vw(20px);
 		height: px2vw(80px);
-		border: none;
-		outline: none;
-		font-size: px2vw(30px);
+		min-width: 0;
+
+		input {
+			width: 100%;
+			height: px2vw(80px);
+			border: none;
+			outline: none;
+			font-size: px2vw(28px);
+			background: transparent;
+		}
 	}
 
-	image {
-		width: px2vw(80px);
+	.workshop-picker {
+		flex: 1;
+		min-width: 0;
 		height: px2vw(80px);
+		background-color: #5884f1;
+		border-radius: px2vw(12px);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0 px2vw(20px);
+		box-sizing: border-box;
+
+		picker {
+			width: 100%;
+		}
+
+		.picker-value {
+			font-size: px2vw(28px);
+			color: white;
+			text-align: center;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			font-weight: bold;
+		}
 	}
 }
 

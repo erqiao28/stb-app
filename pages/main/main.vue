@@ -6,15 +6,16 @@
 			<view></view>
 		</view>
 		<view class="btn-box">
-			<button @click="goSelectBills">订单派工</button>
-			<button @click="goSelectProductDispatch">产品派工</button>
-			<button @click="goReworkDispatch">返工派工</button>
+			<button v-if="showDispatchEntryButtons" @click="goSelectBills">订单派工</button>
+			<button v-if="showDispatchEntryButtons" @click="goSelectProductDispatch">产品派工</button>
+			<button v-if="showDispatchEntryButtons" @click="goReworkDispatch">返工派工</button>
 			<button @click="goTimeWork">记时派工</button>
 			<button @click="goDispatchInquiry">派工查询</button>
 			<button
 				v-if="showDispatchInquiryMore"
 				@click="goDispatchInquiryMore"
 			>多对多派工查询</button>
+			<button v-if="isGongyiLimits" @click="goCraftProduct">工艺产品</button>
 			<button @click="goWorkload">员工工作量查询</button>
 		</view>
 	</view>
@@ -28,10 +29,17 @@ import { defaultWorkshopFromLoginLimits } from '../../utils/workshop'
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
 
-/** 组装/喷涂车间显示「多对多派工查询」（与派工页一致） */
+const loginLimitsTrim = computed(() => (userStore.loginLimits || '').trim())
+
+/** 工艺权限：仅多对多派工查询等，不展示订单/产品/返工派工入口 */
+const isGongyiLimits = computed(() => loginLimitsTrim.value === '工艺')
+
+const showDispatchEntryButtons = computed(() => !isGongyiLimits.value)
+
+/** 组装/喷涂/工艺权限显示「多对多派工查询」 */
 const showDispatchInquiryMore = computed(() => {
-	const w = userStore.loginLimits && userStore.loginLimits.trim()
-	return w === '组装车间' || w === '喷涂车间'
+	const w = loginLimitsTrim.value
+	return w === '组装车间' || w === '喷涂车间' || w === '工艺'
 })
 
 const goBackToIndex = () => {
@@ -76,6 +84,12 @@ const goDispatchInquiryMore = () => {
 	// 不带车间参数：由多对多派工查询页根据登录权限 loginLimits 默认选中车间
 	uni.navigateTo({
 		url: '/pages/dispatchInquiryMore/dispatchInquiryMore'
+	})
+}
+
+const goCraftProduct = () => {
+	uni.navigateTo({
+		url: '/pages/carftProduct/carftProduct'
 	})
 }
 
