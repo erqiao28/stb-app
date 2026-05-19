@@ -239,6 +239,7 @@ import { useStatusBar } from '../../composables/useStatusBar'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { extractSpecFromModels } from '../../utils/extractSpecFromModels'
 
+
 const { statusBarHeight } = useStatusBar()
 
 /** 产品生产进度单 scd */
@@ -396,11 +397,89 @@ const isExcludedProductionStatus = (raw) => {
   return EXCLUDED_PRODUCTION_STATUS.includes(status)
 }
 
+/** 构建接口filters：生产状态排除 + 订单编号/产品名称/规格模糊搜索 */
+const buildFilters = () => {
+  const filters = []
+  // 生产状态：排除指定状态（Ne=不等于）
+  EXCLUDED_PRODUCTION_STATUS.forEach((status) => {
+    filters.push({
+      controlId: FIELD_PRODUCTION_STATUS,
+      dataType: 30,
+      spliceType: 1,
+      filterType: 6, // Ne - 不等于
+      values: [status]
+    })
+  })
+  // 订单编号：模糊搜索（Like=包含）
+  if (orderFilterTags.value.length) {
+    orderFilterTags.value.forEach((tag) => {
+      const val = String(tag || '').trim()
+      if (val) {
+        filters.push({
+          controlId: FIELD_ORDER_CODE,
+          dataType: 30,
+          spliceType: 1,
+          filterType: 1, // Like - 包含
+          values: [val]
+        })
+      }
+    })
+  }
+  // 产品名称：模糊搜索
+  if (productNameFilterTags.value.length) {
+    productNameFilterTags.value.forEach((tag) => {
+      const val = String(tag || '').trim()
+      if (val) {
+        filters.push({
+          controlId: FIELD_NAME,
+          dataType: 30,
+          spliceType: 1,
+          filterType: 1, // Like - 包含
+          values: [val]
+        })
+      }
+    })
+  }
+  // 规格型号：锅口/工艺/抛光 模糊搜索
+  const specTags = []
+  if (guokouFilterTags.value.length) {
+    guokouFilterTags.value.forEach((tag) => {
+      const val = String(tag || '').trim()
+      if (val) specTags.push({ keyword: `锅口:${val}`, type: 'guokou' })
+    })
+  }
+  if (craftFilterTags.value.length) {
+    craftFilterTags.value.forEach((tag) => {
+      const val = String(tag || '').trim()
+      if (val) specTags.push({ keyword: `工艺:${val}`, type: 'craft' })
+    })
+  }
+  if (polishFilterTags.value.length) {
+    polishFilterTags.value.forEach((tag) => {
+      const val = String(tag || '').trim()
+      if (val) specTags.push({ keyword: `抛光:${val}`, type: 'polish' })
+    })
+  }
+  // 规格型号搜索：在规格型号字段中模糊匹配（因为规格型号是组合文本）
+  if (specTags.length) {
+    specTags.forEach((st) => {
+      filters.push({
+        controlId: FIELD_MODELS,
+        dataType: 30,
+        spliceType: 1,
+        filterType: 1, // Like - 包含
+        values: [st.keyword]
+      })
+    })
+  }
+  return filters
+}
+
 const getBillsListRaw = async (pageNum = 1, silent = false) => {
   return callWorkflowListAPIPaged(
     {
       worksheetId: WORKSHEET_SCD,
-      filters: [],
+      filters: buildFilters(),
       silent
     },
     pageSize,
@@ -411,23 +490,21 @@ const getBillsListRaw = async (pageNum = 1, silent = false) => {
 const mapRowsBaseOnly = (rows) => {
   if (!rows || !rows.length) return []
 
-  return rows
-    .filter((item) => !isExcludedProductionStatus(item[FIELD_PRODUCTION_STATUS]))
-    .map((item) => {
-      const models = item[FIELD_MODELS] || ''
-      return {
-        rowid: item.rowid || '',
-        orderCode: item[FIELD_ORDER_CODE] || '',
-        productionCode: item[FIELD_PRODUCTION_CODE] || '',
-        name: item[FIELD_NAME] || '',
-        orderCount: item[FIELD_ORDER_COUNT],
-        productionStatus: item[FIELD_PRODUCTION_STATUS] || '',
-        models,
-        specGuokou: extractSpecFromModels(models, '锅口'),
-        specCraft: extractSpecFromModels(models, '工艺'),
-        specPolish: extractSpecFromModels(models, '抛光')
-      }
-    })
+  return rows.map((item) => {
+    const models = item[FIELD_MODELS] || ''
+    return {
+      rowid: item.rowid || '',
+      orderCode: item[FIELD_ORDER_CODE] || '',
+      productionCode: item[FIELD_PRODUCTION_CODE] || '',
+      name: item[FIELD_NAME] || '',
+      orderCount: item[FIELD_ORDER_COUNT],
+      productionStatus: item[FIELD_PRODUCTION_STATUS] || '',
+      models,
+      specGuokou: extractSpecFromModels(models, '锅口'),
+      specCraft: extractSpecFromModels(models, '工艺'),
+      specPolish: extractSpecFromModels(models, '抛光')
+    }
+  })
 }
 
 const loadPage = async (pageNum = 1, append = false) => {
@@ -450,11 +527,20 @@ const loadPage = async (pageNum = 1, append = false) => {
   }
 }
 
+const MIN_LIST_SIZE = 50
 const MAX_AUTO_PREFETCH_PAGES = 40
 
 const prefetchUntilListNonEmptyIfNeeded = async () => {
   let steps = 0
   while (steps < MAX_AUTO_PREFETCH_PAGES && billsList.value.length === 0 && hasMore.value) {
+    steps++
+    await loadPage(currentPage.value + 1, true)
+  }
+}
+
+const prefetchUntilMinSizeIfNeeded = async () => {
+  let steps = 0
+  while (steps < MAX_AUTO_PREFETCH_PAGES && billsList.value.length < MIN_LIST_SIZE && hasMore.value) {
     steps++
     await loadPage(currentPage.value + 1, true)
   }
@@ -472,6 +558,8 @@ const search = async () => {
   productNameSuggestInput.value = ''
   clearSpecFilterTags()
   await loadPage(1, false)
+  // 自动预取：筛选后不足50条且还有下一页时，继续获取
+  await prefetchUntilMinSizeIfNeeded()
 }
 
 const onListScroll = (e) => {
@@ -510,9 +598,16 @@ const quit = () => {
   })
 }
 
-onLoad(() => {
+const routeOrderCode = ref('')
+
+onLoad((options) => {
   orderFilterTags.value = []
   orderSuggestInput.value = ''
+  const oc = (options?.orderCode || '').toString().trim()
+  if (oc) {
+    routeOrderCode.value = oc
+    orderFilterTags.value = [oc]
+  }
   search()
 })
 </script>

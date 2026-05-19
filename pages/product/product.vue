@@ -25,9 +25,6 @@
             <text class="status-text">已终止</text>
           </view>
         </view>
-        <view class="bill-actions">
-          <button class="btn-add-process" @click="addProcess">添加工序</button>
-        </view>
       </view>
 
       <!-- 订单详细信息 -->
@@ -97,6 +94,7 @@
                 </view>
               </view>
               <text class="process-name">{{ process.processName }}</text>
+              <text class="process-extra" v-if="getProcessExtraInfo(process)">{{ getProcessExtraInfo(process) }}</text>
             </view>
             <view v-if="index < processList.length - 1" class="connector"></view>
           </view>
@@ -105,9 +103,87 @@
       <view v-else class="no-process-tip">暂无工序</view>
     </view>
 
-    <!-- 右下角刷新按钮 -->
+    <!-- 右下角浮动按钮 -->
     <view class="fab-refresh" @click="onManualRefresh">
-      <text class="fab-refresh-text">⟳</text>
+      <text class="fab-refresh-text">&#x27F3;</text>
+    </view>
+    <view class="fab-action" :class="{ 'fab-action--disabled': !selectedProcess }" @click="openActionModal">
+      <text class="fab-action-text">&#x2699;</text>
+    </view>
+
+    <!-- 操作工序模态框 -->
+    <view class="action-modal" v-if="showActionModal" @click.self="closeActionModal">
+      <view class="action-modal-content" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">操作工序</text>
+          <view class="modal-close" @click="closeActionModal">&times;</view>
+        </view>
+
+        <view class="modal-body">
+          <!-- 当前选中工序信息 -->
+          <view class="selected-process-info" v-if="selectedProcess">
+            <text class="selected-process-name">{{ selectedProcess.processName || '-' }}</text>
+          </view>
+
+          <!-- 搜索和车间筛选 -->
+          <view class="filter-bar">
+            <view class="search-box">
+              <input type="text" placeholder="请输入工序名称" v-model="modalSearchValue" @input="handleModalSearch" />
+            </view>
+            <view class="workshop-picker">
+              <picker mode="selector" :range="workshopOptions" :value="modalWorkshopIndex" @change="onModalWorkshopChange">
+                <view class="picker-value">{{ workshopOptions[modalWorkshopIndex] }}</view>
+              </picker>
+            </view>
+          </view>
+
+          <!-- 主要内容区域 -->
+          <view class="main-content">
+            <!-- 左侧：工序列表 -->
+            <view class="table-section">
+              <scroll-view scroll-y class="table-content" @scrolltolower="loadModalMore" lower-threshold="50">
+                <view class="table">
+                  <view class="table-header-row">
+                    <view class="table-header-cell">工序名称</view>
+                  </view>
+                  <view v-for="item in modalTableData" :key="item.rowid" class="table-body-row" :class="{ selected: modalSelectedProcess?.rowid === item.rowid }" @click="selectModalProcess(item)">
+                    <view class="uni-table-td">{{ item.processName }}</view>
+                  </view>
+                  <view v-if="modalLoading && modalTableData.length > 0" class="loading-row">
+                    <view class="loading-text">加载中...</view>
+                  </view>
+                  <view v-if="!modalHasMore && modalTableData.length > 0" class="no-more-row">
+                    <view class="loading-text">没有更多数据了</view>
+                  </view>
+                </view>
+              </scroll-view>
+            </view>
+
+            <!-- 右侧：输入框 -->
+            <view class="input-section">
+              <view class="input-group">
+                <view class="input-label">生产顺序</view>
+                <input type="number" class="process-input" placeholder="请输入生产顺序" v-model="modalProductionSequence" step="0.01" disabled />
+              </view>
+              <view class="input-group">
+                <view class="input-label">修改方式</view>
+                <picker mode="selector" :range="modifyModeOptions" :value="modalModifyModeIndex" @change="onModalModifyModeChange" class="picker-wrapper">
+                  <view class="process-input date-picker">{{ modifyModeOptions[modalModifyModeIndex] }}</view>
+                </picker>
+              </view>
+
+            </view>
+          </view>
+        </view>
+
+        <view class="modal-footer">
+          <button class="btn-delete" @click="deleteSelectedProcess">删除</button>
+          <view class="modal-footer-right">
+            <button class="btn-cancel" @click="closeActionModal">取消</button>
+            <button class="btn-confirm" @click="confirmAction">确定</button>
+          </view>
+        </view>
+      </view>
     </view>
   </view>
 </template>
@@ -117,6 +193,9 @@ import { onLoad } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
+import http from '../../utils/request.js'
+import { showToast } from '../../utils/request.js'
+import { OPERATE_PROCESS_URL, DELETE_PROCESS_URL } from '../../utils/api'
 
 const { statusBarHeight } = useStatusBar()
 
@@ -136,7 +215,7 @@ const productionCode = ref('')
 const orderCode = ref('')
 const productInfo = ref(null)
 const processList = ref([])
-const selectedProcess = ref(null) // 当前选中的工序
+const selectedProcess = ref(null)
 
 onLoad((options) => {
   const pc = options?.productionCode
@@ -260,7 +339,11 @@ const loadProcessList = async () => {
     rowid: item['rowid'] || '',
     isOver: item['6940f719c81c746aae8ede5d'],
     price: item['657b282cd13eaaec2c6606b5'] || 0,
-    mold: item['695222a27a59e0522d853edf'] || ''
+    mold: item['695222a27a59e0522d853edf'] || '',
+    perMinute: item['6a0bfcccc03685667d6787bf'] || '',
+    timeMachine: item['6a0bfcccc03685667d6787c0'] || '',
+    timeHuman: item['6a0bfcccc03685667d6787c1'] || '',
+    timeMinute: item['6a0bfcccc03685667d6787c2'] || ''
   })).sort((a, b) => {
     const seqA = parseFloat(a.sequence) || 0
     const seqB = parseFloat(b.sequence) || 0
@@ -276,32 +359,23 @@ const selectProcess = (process) => {
   }
 }
 
-const addProcess = () => {
-  if (!productInfo.value) {
-    uni.showToast({ title: '产品信息未加载', icon: 'none' })
-    return
+const getProcessExtraInfo = (process) => {
+  const perMinute = String(process.perMinute || '').trim()
+  const timeMachine = String(process.timeMachine || '').trim()
+  const timeHuman = String(process.timeHuman || '').trim()
+  const timeMinute = String(process.timeMinute || '').trim()
+  const dailyOutput = String(process.dailyoutput || '').trim()
+
+  if (perMinute) {
+    return `(${perMinute})`
+  } else if (timeMachine && timeHuman) {
+    return `(${timeMachine}+${timeHuman})`
+  } else if (timeMinute) {
+    return `(${timeMinute})`
+  } else if (dailyOutput) {
+    return `(${dailyOutput})`
   }
-
-  const info = productInfo.value
-  let selectedSequence = 1
-  let processRowid = ''
-
-  if (selectedProcess.value) {
-    // 有选中工序：在选中工序后添加
-    const currentSequence = parseFloat(selectedProcess.value.sequence || 0)
-    selectedSequence = parseFloat((currentSequence + 0.01).toFixed(2))
-    processRowid = selectedProcess.value.rowid || ''
-  } else if (processList.value.length > 0) {
-    // 无选中工序：在最后一个工序后添加
-    const lastProcess = processList.value[processList.value.length - 1]
-    const currentSequence = parseFloat(lastProcess.sequence || 0)
-    selectedSequence = parseFloat((currentSequence + 0.01).toFixed(2))
-    processRowid = lastProcess.rowid || ''
-  }
-
-  uni.navigateTo({
-    url: `/pages/addProcess/addProcess?orderCode=${encodeURIComponent(info.orderCode || '')}&productCode=${encodeURIComponent(info.productionCode || '')}&workshop=拉伸车间&selectedSequence=${selectedSequence}&billRowid=${encodeURIComponent(info.rowid || '')}&processRowid=${encodeURIComponent(processRowid)}&billType=${encodeURIComponent('正常排产')}`
-  })
+  return ''
 }
 
 const onManualRefresh = () => {
@@ -312,6 +386,227 @@ const quit = () => {
   uni.navigateBack({
     fail: () => {
       uni.redirectTo({ url: '/pages/carftProduct/carftProduct' })
+    }
+  })
+}
+
+// ==================== 操作工序模态框 ====================
+const showActionModal = ref(false)
+const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
+const modalWorkshopIndex = ref(0)
+const modalSearchValue = ref('')
+const modalTableData = ref([])
+const modalCurrentPage = ref(1)
+const modalPageSize = ref(10)
+const modalHasMore = ref(true)
+const modalLoading = ref(false)
+const modalSelectedProcess = ref(null)
+const modalProductionSequence = ref('')
+const modifyModeOptions = ref(['添加', '替换'])
+const modalModifyModeIndex = ref(0)
+
+const NEW_PROCESS_NAME_CHAR = '新'
+
+const shouldLimitToNewChar = (workshop) =>
+  workshop === '拉伸车间' || workshop === '喷涂车间'
+
+const openActionModal = () => {
+  // 必须选中一个工序才能打开模态框
+  if (!selectedProcess.value) {
+    uni.showToast({ title: '请先选择一个工序', icon: 'none' })
+    return
+  }
+  showActionModal.value = true
+  // 初始化默认值
+  modalWorkshopIndex.value = 0
+  modalSearchValue.value = ''
+  modalSelectedProcess.value = null
+  modalModifyModeIndex.value = 0
+  // 计算生产顺序：在选中的工序后添加
+  const currentSequence = parseFloat(selectedProcess.value.sequence || 0)
+  const selectedSequence = parseFloat((currentSequence + 0.01).toFixed(2))
+  modalProductionSequence.value = selectedSequence.toFixed(2)
+  // 加载工序列表
+  loadModalProcessList(1, true)
+}
+
+const closeActionModal = () => {
+  showActionModal.value = false
+}
+
+const onModalWorkshopChange = (e) => {
+  modalWorkshopIndex.value = Number(e.detail.value) || 0
+  modalSearchValue.value = ''
+  loadModalProcessList(1, true)
+}
+
+const handleModalSearch = () => {
+  loadModalProcessList(1, true)
+}
+
+const loadModalMore = () => {
+  if (!modalHasMore.value || modalLoading.value) return
+  loadModalProcessList(modalCurrentPage.value + 1, false)
+}
+
+const loadModalProcessList = async (pageNum, isRefresh = false) => {
+  if (modalLoading.value) return
+  modalLoading.value = true
+  const workshop = workshopOptions.value[modalWorkshopIndex.value]
+  const limitNewChar = shouldLimitToNewChar(workshop)
+
+  const baseFilters = [
+    { controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
+    { controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
+    { controlId: '691e8522d50c894e2e798d03', dataType: 30, spliceType: 1, filterType: 2, values: [workshop] }
+  ]
+
+  let filters = [...baseFilters]
+  const nameSearch = modalSearchValue.value.trim()
+  if (nameSearch) {
+    filters.push({
+      controlId: '6614b6721103c1d5d3a08122',
+      dataType: 30,
+      spliceType: 1,
+      filterType: 1,
+      values: [nameSearch]
+    })
+  } else if (limitNewChar) {
+    filters.push({
+      controlId: '6614b6721103c1d5d3a08122',
+      dataType: 30,
+      spliceType: 1,
+      filterType: 1,
+      values: [NEW_PROCESS_NAME_CHAR]
+    })
+  }
+
+  try {
+    const res = await callWorkflowListAPIPaged({
+      worksheetId: 'shujuzidian',
+      filters
+    }, modalPageSize.value, pageNum)
+
+    let mappedData = (res.data || []).map(item => ({
+      processName: item['Name'],
+      rowid: item['rowid'] || ''
+    }))
+
+    if (limitNewChar) {
+      mappedData = mappedData.filter((row) =>
+        String(row.processName || '').includes(NEW_PROCESS_NAME_CHAR)
+      )
+    }
+
+    if (isRefresh) {
+      modalTableData.value = mappedData
+    } else {
+      modalTableData.value.push(...mappedData)
+    }
+
+    modalCurrentPage.value = pageNum
+    modalHasMore.value = mappedData.length === modalPageSize.value && (res.total || 0) > modalTableData.value.length
+  } finally {
+    modalLoading.value = false
+  }
+}
+
+const selectModalProcess = (item) => {
+  modalSelectedProcess.value = item
+}
+
+const onModalModifyModeChange = (e) => {
+  modalModifyModeIndex.value = Number(e.detail.value) || 0
+}
+
+const confirmAction = async () => {
+  // 必须选中模态框中的一个工序
+  if (!modalSelectedProcess.value) {
+    uni.showToast({ title: '请选择一个工序', icon: 'none' })
+    return
+  }
+
+  const params = {
+    processName: modalSelectedProcess.value.processName || '',
+    sequence: parseFloat(modalProductionSequence.value) || 0,
+    modifyMode: modifyModeOptions.value[modalModifyModeIndex.value] || '添加',
+    selectedProcessId: selectedProcess.value?.rowid || '',
+    productionCode: productionCode.value || '',
+    workshop: workshopOptions.value[modalWorkshopIndex.value] || ''
+  }
+
+  console.log('【操作工序】请求参数:', JSON.stringify(params))
+  console.log('【操作工序】请求URL:', OPERATE_PROCESS_URL)
+
+  uni.showLoading({ title: '提交中...', mask: true })
+  try {
+    const res = await http.post(OPERATE_PROCESS_URL, params)
+    console.log('【操作工序】响应结果:', JSON.stringify(res))
+
+    // 检查接口返回的业务状态
+    if (res && (res.status === 0 || res.success === true || res.code === 200 || res.data)) {
+      uni.showToast({ title: '操作成功', icon: 'success' })
+      closeActionModal()
+      // 清空选中状态并刷新
+      selectedProcess.value = null
+      setTimeout(() => {
+        loadData()
+      }, 1000)
+    } else if (res && res.message) {
+      uni.showToast({ title: res.message, icon: 'none' })
+    } else if (res && res.msg) {
+      uni.showToast({ title: res.msg, icon: 'none' })
+    } else {
+      uni.showToast({ title: '操作失败', icon: 'none' })
+    }
+  } catch (error) {
+    console.error('【操作工序】请求异常:', error)
+    uni.showToast({ title: '网络错误:' + (error.message || ''), icon: 'none' })
+  } finally {
+    uni.hideLoading()
+  }
+}
+
+// 删除选中的工序
+const deleteSelectedProcess = async () => {
+  const processRowid = selectedProcess.value?.rowid || ''
+  if (!processRowid) {
+    uni.showToast({ title: '工序ID不存在', icon: 'none' })
+    return
+  }
+
+  uni.showModal({
+    title: '确认删除',
+    content: `确定要删除工序「${selectedProcess.value?.processName || ''}」吗？删除后无法恢复。`,
+    confirmText: '删除',
+    cancelText: '取消',
+    success: async (modalRes) => {
+      if (modalRes.confirm) {
+        uni.showLoading({ title: '删除中...' })
+        try {
+          const result = await http.post(DELETE_PROCESS_URL, {
+            rowid: processRowid
+          })
+          uni.hideLoading()
+
+          if (result.status === 1) {
+            uni.showToast({ title: result.msg || '删除失败', icon: 'none' })
+            return
+          }
+
+          uni.showToast({ title: '删除成功' })
+          closeActionModal()
+          // 清空选中状态
+          selectedProcess.value = null
+          setTimeout(() => {
+            loadData()
+          }, 1000)
+        } catch (error) {
+          uni.hideLoading()
+          console.error('删除工序失败:', error)
+          uni.showToast({ title: '删除失败：' + (error.message || '未知错误'), icon: 'none' })
+        }
+      }
     }
   })
 }
@@ -417,20 +712,6 @@ const quit = () => {
             font-size: px2vw(20px);
             color: #666;
           }
-        }
-      }
-
-      .bill-actions {
-        .btn-add-process {
-          margin: 0;
-          padding: px2vw(16px) px2vw(36px);
-          background-color: #28a745;
-          color: #fff;
-          font-size: px2vw(28px);
-          border-radius: px2vw(10px);
-          border: none;
-          line-height: 1.4;
-          font-weight: bold;
         }
       }
     }
@@ -629,6 +910,15 @@ const quit = () => {
       word-break: break-word;
     }
 
+    .process-extra {
+      margin-top: px2vw(5px);
+      font-size: px2vw(24px);
+      color: #5884f1;
+      text-align: center;
+      max-width: px2vw(150px);
+      word-break: break-word;
+    }
+
     .connector {
       width: px2vw(30px);
       height: px2vw(3px);
@@ -649,7 +939,7 @@ const quit = () => {
   .fab-refresh {
     position: fixed;
     right: px2vw(30px);
-    bottom: px2vw(30px);
+    bottom: px2vw(140px);
     width: px2vw(90px);
     height: px2vw(90px);
     border-radius: 50%;
@@ -663,6 +953,328 @@ const quit = () => {
     .fab-refresh-text {
       font-size: px2vw(40px);
       color: white;
+    }
+  }
+
+  .fab-action {
+    position: fixed;
+    right: px2vw(30px);
+    bottom: px2vw(30px);
+    width: px2vw(90px);
+    height: px2vw(90px);
+    border-radius: 50%;
+    background-color: #28a745;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 px2vw(4px) px2vw(12px) rgba(0, 0, 0, 0.3);
+    z-index: 100;
+
+    .fab-action-text {
+      font-size: px2vw(40px);
+      color: white;
+    }
+  }
+
+  // 操作工序模态框
+  .action-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    padding: px2vw(30px);
+
+    .action-modal-content {
+      width: 100%;
+      max-width: px2vw(1400px);
+      height: 85vh;
+      background-color: #fff;
+      border-radius: px2vw(18px);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .modal-header {
+      height: px2vw(100px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 px2vw(30px);
+      background-color: #5884f1;
+      flex-shrink: 0;
+
+      .modal-title {
+        font-size: px2vw(35px);
+        color: white;
+        font-weight: bold;
+      }
+
+      .modal-close {
+        font-size: px2vw(50px);
+        color: white;
+        line-height: 1;
+        padding: px2vw(10px);
+      }
+    }
+
+    .modal-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: px2vw(20px);
+
+      .selected-process-info {
+        display: flex;
+        align-items: center;
+        gap: px2vw(10px);
+        padding: px2vw(12px) px2vw(16px);
+        background-color: #e8f4fc;
+        border: px2vw(2px) solid #b3d9f7;
+        border-radius: px2vw(10px);
+        margin-bottom: px2vw(15px);
+        flex-shrink: 0;
+        flex-wrap: wrap;
+
+        .selected-process-name {
+          font-size: px2vw(28px);
+          color: #2755f1;
+          font-weight: bold;
+        }
+      }
+    }
+
+    .modal-footer {
+      height: px2vw(120px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: px2vw(20px);
+      padding: 0 px2vw(30px);
+      border-top: px2vw(2px) solid #e0e0e0;
+      flex-shrink: 0;
+
+      .btn-delete {
+        height: px2vw(80px);
+        padding: 0 px2vw(50px);
+        border-radius: px2vw(12px);
+        font-size: px2vw(28px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        background-color: #f44336;
+        color: white;
+      }
+
+      .modal-footer-right {
+        display: flex;
+        align-items: center;
+        gap: px2vw(20px);
+      }
+
+      .btn-cancel,
+      .btn-confirm {
+        height: px2vw(80px);
+        padding: 0 px2vw(50px);
+        border-radius: px2vw(12px);
+        font-size: px2vw(28px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+      }
+
+      .btn-cancel {
+        background-color: #e0e0e0;
+        color: #333;
+      }
+
+      .btn-confirm {
+        background-color: #5884f1;
+        color: white;
+      }
+    }
+  }
+
+  // 模态框内样式（模仿添加工序页面）
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: px2vw(15px);
+    margin-bottom: px2vw(15px);
+    flex-shrink: 0;
+
+    .search-box {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      background-color: #fff;
+      border: px2vw(2px) solid #e0e0e0;
+      border-radius: px2vw(12px);
+      padding: 0 px2vw(20px);
+      height: px2vw(80px);
+      min-width: 0;
+
+      input {
+        width: 100%;
+        height: px2vw(80px);
+        border: none;
+        outline: none;
+        font-size: px2vw(28px);
+        background: transparent;
+      }
+    }
+
+    .workshop-picker {
+      flex: 0 0 px2vw(400px);
+      height: px2vw(80px);
+      background-color: #5884f1;
+      border-radius: px2vw(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 px2vw(20px);
+      box-sizing: border-box;
+
+      picker {
+        width: 100%;
+      }
+
+      .picker-value {
+        font-size: px2vw(28px);
+        color: white;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-weight: bold;
+      }
+    }
+  }
+
+  .main-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    gap: px2vw(15px);
+  }
+
+  .table-section {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: px2vw(2px) solid #e0e0e0;
+    border-radius: px2vw(12px);
+
+    .table-content {
+      height: 100%;
+    }
+
+    .table {
+      width: 100%;
+    }
+
+    .table-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: px2vw(80px);
+      background-color: #b0b0b0;
+      font-weight: bold;
+      font-size: px2vw(28px);
+    }
+
+    .table-body-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: px2vw(80px);
+      font-size: px2vw(26px);
+      border-bottom: px2vw(1px) solid #e0e0e0;
+
+      &:nth-of-type(odd) {
+        background-color: #f5f5f5;
+      }
+
+      &:nth-of-type(even) {
+        background-color: white;
+      }
+
+      &.selected {
+        background-color: #007AFF !important;
+        color: white !important;
+      }
+    }
+
+    .loading-row,
+    .no-more-row {
+      min-height: px2vw(60px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .loading-text {
+      font-size: px2vw(24px);
+      color: #999;
+    }
+  }
+
+  .input-section {
+    flex: 0 0 px2vw(400px);
+    display: flex;
+    flex-direction: column;
+    gap: px2vw(15px);
+    padding: px2vw(20px);
+    background-color: #f5f5f5;
+    border-radius: px2vw(12px);
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: px2vw(8px);
+
+      .input-label {
+        font-size: px2vw(26px);
+        font-weight: bold;
+        color: #333;
+      }
+
+      .process-input {
+        height: px2vw(70px);
+        padding: 0 px2vw(20px);
+        border: px2vw(2px) solid #e0e0e0;
+        border-radius: px2vw(10px);
+        font-size: px2vw(26px);
+        background-color: #fff;
+        box-sizing: border-box;
+
+        &:disabled {
+          background-color: #f0f0f0;
+          color: #999;
+        }
+      }
+
+      .date-picker {
+        display: flex;
+        align-items: center;
+        color: #333;
+      }
+
+      .picker-wrapper {
+        width: 100%;
+      }
     }
   }
 }

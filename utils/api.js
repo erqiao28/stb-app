@@ -110,3 +110,6 @@ export const USE_NORMAL_PROCESS_URL = apiUrl('/api/workflow/hooks/Njk3MWMwODkwZj
 
 /** 删除工序 */
 export const DELETE_PROCESS_URL = apiUrl('/api/workflow/hooks/Njk3MWNkY2UwZjBkMGFkODBmMmE3NGM3')
+
+/** 操作工序（产品详情页模态框） */
+export const OPERATE_PROCESS_URL = apiUrl('/api/workflow/hooks/NmEwYmQyNmI4MWZiNGY2MDZmMWQxMzY4')

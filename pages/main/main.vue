@@ -1,6 +1,6 @@
 <template>
-	<view class="main-container" :style="{ paddingTop: statusBarHeight + 'px' }">
-		<view class="header">
+	<view class="main-container" :class="{ 'gongyi-bg': isGongyiLimits }">
+		<view class="header" :style="isGongyiLimits ? { paddingTop: statusBarHeight + 'px' } : { paddingTop: statusBarHeight + 'px' }">
 			<image src="/static/left-arrow.svg" @click="goBackToIndex"></image>
 			<view class="title">主页面</view>
 			<view></view>
@@ -15,7 +15,7 @@
 				v-if="showDispatchInquiryMore"
 				@click="goDispatchInquiryMore"
 			>多对多派工查询</button>
-			<button v-if="isGongyiLimits" @click="goCraftProduct">工艺产品</button>
+			<button v-if="isGongyiLimits" @click="goCraftOrder">工艺订单</button>
 			<button @click="goWorkload">员工工作量查询</button>
 		</view>
 	</view>
@@ -87,9 +87,9 @@ const goDispatchInquiryMore = () => {
 	})
 }
 
-const goCraftProduct = () => {
+const goCraftOrder = () => {
 	uni.navigateTo({
-		url: '/pages/carftProduct/carftProduct'
+		url: '/pages/carftOrder/carftOrder'
 	})
 }
 
@@ -107,6 +107,26 @@ const goWorkload = () => {
 	background-color: #3556e3;
 	display: flex;
 	flex-direction: column;
+	position: relative;
+	overflow: hidden;
+
+	&.gongyi-bg {
+		background-color: transparent;
+	}
+
+	&.gongyi-bg::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		background-image: url('/static/bz.jpg');
+		background-size: cover;
+		background-position: center;
+		background-repeat: no-repeat;
+		z-index: 0;
+	}
 
 	.header {
 		height: px2vw(120px);
@@ -116,6 +136,9 @@ const goWorkload = () => {
 		align-items: center;
 		background-color: #5884f1;
 		flex-shrink: 0;
+		transition: background-color 0.3s;
+		position: relative;
+		z-index: 1;
 
 		image {
 			margin-left: px2vw(20px);
@@ -130,7 +153,14 @@ const goWorkload = () => {
 		}
 	}
 
+	&.gongyi-bg .header {
+		background-color: transparent;
+	}
+
 	.btn-box {
+		position: relative;
+		z-index: 1;
+
 		width: 100%;
 		flex: 1;
 		display: flex;
@@ -150,6 +180,28 @@ const goWorkload = () => {
 			display: flex;
 			justify-content: center;
 			align-items: center;
+		}
+	}
+
+	&.gongyi-bg .btn-box {
+		padding: px2vw(100px) px2vw(40px) px2vw(60px);
+		align-content: flex-start;
+
+		button {
+			width: calc((100% - #{px2vw(25px)}) / 2);
+			height: px2vw(140px);
+			background-color: rgba(255, 255, 255, 0.6);
+			color: #5884f1;
+			font-size: px2vw(36px);
+			font-weight: 500;
+			border: px2vw(3px) solid rgba(255, 255, 255, 0.3);
+			box-shadow: 0 px2vw(10px) px2vw(30px) rgba(0, 0, 0, 0.15);
+			transition: all 0.3s ease;
+
+			&:active {
+				transform: scale(0.96);
+				background-color: rgba(255, 255, 255, 0.8);
+			}
 		}
 	}
 }

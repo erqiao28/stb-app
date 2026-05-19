@@ -68,6 +68,8 @@ const userStore = useUserStore()
 const { statusBarHeight } = useStatusBar()
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { defaultWorkshopFromLoginLimits } from '../../utils/workshop'
+import { DataTypeEnum } from '../../utils/dataTypeEnum'
+import { FilterTypeEnum } from '../../utils/filterTypeEnum'
 
 // 获取当前日期（格式：YYYY-MM-DD）
 const getCurrentDate = () => {
@@ -136,36 +138,39 @@ const getWorkloadList = async (pageNum, isRefresh = false) => {
 	if (loading.value) return;
 	loading.value = true;
 	
-	// 每次请求时获取当前日期
+	// 获取当前日期（格式：YYYY-MM-DD）
 	const currentDate = getCurrentDate()
 	console.log('员工工作量查询页面 - 获取员工列表 - 当前日期:', currentDate)
 	
+	// 先获取所有数据（仅按车间过滤），然后在前端过滤日期
 	const res = await callWorkflowListAPIPaged({
 		worksheetId: 'yggs',
-		filters: [{
-        "controlId": "696075d19223cfe3a0c169dc",
-        "dataType": 30,
-        "spliceType": 1,
-        "filterType": 2,
-        "values": [selectedWorkshop.value]
-      }]
+		filters: [
+			{
+				"controlId": "696075d19223cfe3a0c169dc",
+				"dataType": DataTypeEnum.EXTERNAL_FIELD,
+				"spliceType": 1,
+				"filterType": FilterTypeEnum.Eq,
+				"values": [selectedWorkshop.value]
+			}
+		]
 	}, pageSize.value, pageNum)
 
-	// 打印员工工作量查询获取的数据
-	console.log('[员工工作量查询] 获取数据', { total: res?.total, dataLength: res?.data?.length, data: res?.data })
+	console.log('[员工工作量查询] 获取数据', { total: res?.total, dataLength: res?.data?.length })
 
 	const mappedData = res.data.map(item => ({
 		staff: item['6938db8bda0981f67b352af3'],
 		allWorktime: item['693bcaa5f15635c61ac3507a'],
 		recordedWorktime: item['693bcaa5f15635c61ac3507b'],
-		unrecordedWorktime: item['693bc9b7f15635c61ac35050'],
+		unrecordedWorktime: item['693bc9b7f15635c61ac3507c'],
 		remainWorktime: item['693bcaa5f15635c61ac3507c'],
 		estimatedSalary: item['69a652043b5e707f84d2a269'] ?? '',
 		dispatchWorkDate: item['69524e7b7a59e0522d855df6'] || ''
 	}))
+	// 前端过滤日期
 	.filter(item => item.dispatchWorkDate === currentDate)
 
-	console.log('[员工工作量查询] 映射并过滤后(当前日期)', { currentDate, mappedCount: mappedData.length, mappedData })
+	console.log('[员工工作量查询] 前端过滤后数据', { currentDate, mappedCount: mappedData.length })
 
 	if (isRefresh) {
 		tableData.value = mappedData
@@ -176,7 +181,6 @@ const getWorkloadList = async (pageNum, isRefresh = false) => {
 		tableData.value.push(...mappedData)
 	}
 	
-	// 判断是否还有更多数据：按接口分页判断，不按过滤后条数（过滤后可能不足一页导致误判为无更多）
 	hasMore.value = res.data.length >= pageSize.value && pageNum * pageSize.value < (res.total || 0)
 	loading.value = false
 }
