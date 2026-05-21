@@ -111,5 +111,8 @@ export const USE_NORMAL_PROCESS_URL = apiUrl('/api/workflow/hooks/Njk3MWMwODkwZj
 /** 删除工序 */
 export const DELETE_PROCESS_URL = apiUrl('/api/workflow/hooks/Njk3MWNkY2UwZjBkMGFkODBmMmE3NGM3')
 
+/** 批量派工 */
+export const BATCH_DISPATCH_URL = apiUrl('/api/workflow/hooks/NmEwZWM2YmU4MWZiNGY2MDZmM2M1ZmZh')
+
 /** 操作工序（产品详情页模态框） */
 export const OPERATE_PROCESS_URL = apiUrl('/api/workflow/hooks/NmEwYmQyNmI4MWZiNGY2MDZmMWQxMzY4')

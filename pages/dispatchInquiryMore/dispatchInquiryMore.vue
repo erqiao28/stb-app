@@ -922,6 +922,7 @@ const quit = () => {
 			margin-left: 0;
 			font-size: px2vw(35px);
 			color: white;
+			font-weight: bold;
 		}
 	}
 
@@ -1280,7 +1281,7 @@ const quit = () => {
 				white-space: nowrap;
 				z-index: 100;
 				box-shadow: 0 px2vw(2px) px2vw(8px) rgba(0, 0, 0, 0.2);
-				background-color: #5884f1;
+				background-color: rgba(88, 132, 241, 0.6);
 				pointer-events: none;
 			}
 		}

@@ -409,6 +409,7 @@ const quit = () => {
 	.title {
 		font-size: px2vw(35px);
 		color: white;
+		font-weight: bold;
 	}
 
 }

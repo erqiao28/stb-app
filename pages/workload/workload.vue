@@ -218,6 +218,7 @@ const quit = () => {
 			margin-left: 0;
 			font-size: px2vw(35px);
 			color: white;
+			font-weight: bold;
 		}
 	}
 

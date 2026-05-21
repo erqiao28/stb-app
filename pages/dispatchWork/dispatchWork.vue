@@ -284,6 +284,7 @@
             <view class="multi-dispatch-summary-header">
               <text class="col order">订单编号</text>
               <text class="col prod">{{ multiDispatchSummaryProdColTitle }}</text>
+              <text class="col need">需完成数量</text>
               <text class="col qty-head">派工数量</text>
             </view>
             <view
@@ -293,9 +294,11 @@
             >
               <text class="col order">{{ row.orderCode }}</text>
               <text class="col prod">{{ row.productionQtyDisplay }}</text>
+              <text class="col need">{{ row.avgNeedCount }}</text>
               <view class="col qty-col">
                 <input
-                  v-model.number="multiDispatchQtyByBillKey[row.billKey]"
+                  :value="multiDispatchQtyByBillKey[row.billKey]"
+                  @input="(e) => onMultiProductQtyInput(e, row.billKey, row.avgNeedCount)"
                   type="number"
                   placeholder="请输入"
                   min="0"
@@ -306,6 +309,7 @@
             <view class="multi-dispatch-summary-total-row">
               <text class="col order">总派工数量</text>
               <text class="col prod"></text>
+              <text class="col need"></text>
               <text class="col qty-col total-qty">{{ multiDispatchTotalQty }}</text>
             </view>
           </view>
@@ -323,30 +327,37 @@
                 </picker>
               </view>
               <view class="form-group">
-                <text class="label">计薪方式：</text>
-                <picker mode="selector" :range="salaryMethodOptions" :value="multiSalaryMethodIndex" @change="onMultiSalaryMethodChange">
-                  <view class="value">
-                    {{ multiDispatchData.salaryMethod || '计件' }}
-                  </view>
-                </picker>
+                <text class="label">每小时产量：</text>
+                <text class="value-readonly">{{ multiDispatchSelectedProcessesForModal[0]?.process?.hourlyoutput || 0 }}</text>
               </view>
             </view>
 
-            <!-- 订单派工：仅排产数量、派工数量、派工日期、计薪方式（无订单数量） -->
+            <!-- 订单派工：排产数量、需完成数量、派工数量、派工日期、每小时产量 -->
             <view class="row-group" v-if="dispatchMode !== 'product'">
               <view class="form-group">
                 <text class="label">{{ multiDispatchSummaryProdColTitle }}：</text>
                 <text class="value-readonly">{{ multiDispatchOrderModeProductionDisplay }}</text>
               </view>
               <view class="form-group">
+                <text class="label">需完成数量：</text>
+                <text class="value-readonly">{{ multiDispatchAvgNeedCount }}</text>
+              </view>
+            </view>
+            <view class="row-group" v-if="dispatchMode !== 'product'">
+              <view class="form-group">
                 <text class="label">派工数量：</text>
                 <input
-                  v-model.number="multiDispatchData.quantity"
+                  :value="multiDispatchData.quantity"
+                  @input="onMultiQuantityInput"
                   type="number"
                   placeholder="请输入"
                   min="0"
                   class="input-field"
                 />
+              </view>
+              <view class="form-group">
+                <text class="label">每小时产量：</text>
+                <text class="value-readonly">{{ multiDispatchSelectedProcessesForModal[0]?.process?.hourlyoutput || 0 }}</text>
               </view>
             </view>
             <view class="row-group" v-if="dispatchMode !== 'product'">
@@ -359,12 +370,8 @@
                 </picker>
               </view>
               <view class="form-group">
-                <text class="label">计薪方式：</text>
-                <picker mode="selector" :range="salaryMethodOptions" :value="multiSalaryMethodIndex" @change="onMultiSalaryMethodChange">
-                  <view class="value">
-                    {{ multiDispatchData.salaryMethod || '计件' }}
-                  </view>
-                </picker>
+                <text class="label"></text>
+                <text class="value-readonly"></text>
               </view>
             </view>
             
@@ -535,10 +542,8 @@
                   </picker>
                 </view>
                 <view class="modal-grid-cell">
-                  <text class="modal-grid-label">计薪方式：</text>
-                  <picker mode="selector" :range="salaryMethodOptions" :value="salaryMethodIndex" @change="onSalaryMethodChange" class="modal-grid-picker">
-                    <view class="modal-grid-value modal-grid-value--tap">{{ processDispatchData.salaryMethod || '请选择计薪方式' }}</view>
-                  </picker>
+                  <text class="modal-grid-label">每小时产量：</text>
+                  <view class="modal-grid-value modal-grid-value--readonly">{{ selectedProcessData?.process?.hourlyoutput || 0 }}</view>
                 </view>
               </view>
             </template>
@@ -570,10 +575,10 @@
               <!-- 本次派工数量与派工工时 -->
               <view class="row-group" v-if="dispatchMode !== 'product'">
                 <view class="form-group">
-                  <text class="label">派工数量：</text>
-                  <input v-model.number="processDispatchData.quantity" type="number" placeholder="请输入数量"
-                    :max="maxQuantity" min="0" class="input-field" />
-                </view>
+                <text class="label">派工数量：</text>
+                <input :value="processDispatchData.quantity" @input="onQuantityInput" type="number" placeholder="请输入数量"
+                  :max="maxQuantity" min="0" class="input-field" />
+              </view>
                 <view class="form-group">
                   <text class="label">派工工时：</text>
                   <input v-model.number="processDispatchData.time" type="number" placeholder="自动计算"
@@ -613,15 +618,11 @@
                 </view>
               </view>
 
-              <!-- 计薪方式和工价 -->
+              <!-- 每小时产量和工价 -->
               <view class="row-group">
                 <view class="form-group">
-                  <text class="label">计薪方式：</text>
-                  <picker mode="selector" :range="salaryMethodOptions" :value="salaryMethodIndex" @change="onSalaryMethodChange">
-                    <view class="value">
-                      {{ processDispatchData.salaryMethod || '请选择计薪方式' }}
-                    </view>
-                  </picker>
+                  <text class="label">每小时产量：</text>
+                  <text class="value-readonly">{{ selectedProcessData?.process?.hourlyoutput || 0 }}</text>
                 </view>
                 <view class="form-group" v-if="dispatchMode !== 'product'">
                   <text class="label">工价：</text>
@@ -885,6 +886,88 @@
       </view>
     </view>
 
+    <!-- 批量派工模态框 -->
+    <view class="process-modal" v-if="showBatchDispatchModal" @click.self="closeBatchDispatchModal">
+      <view class="process-content batch-dispatch-content" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">批量派工</text>
+          <view class="modal-close" @click="closeBatchDispatchModal">×</view>
+        </view>
+        <view class="batch-dispatch-body">
+          <!-- 左侧：工序表格 -->
+          <scroll-view scroll-y class="batch-dispatch-left">
+            <view class="batch-dispatch-table">
+              <view class="batch-dispatch-header">
+                <text class="col process">工序</text>
+                <text class="col production">生产数量</text>
+                <text class="col need">需完成数量</text>
+                <text class="col dispatch">派工数量</text>
+                <text class="col hours">工时</text>
+                <text class="col employee">员工</text>
+              </view>
+              <view
+                class="batch-dispatch-row"
+                :class="{ active: batchDispatchActiveRowIndex === idx }"
+                v-for="(row, idx) in batchDispatchRows"
+                :key="idx"
+                @click="batchDispatchActiveRowIndex = idx"
+              >
+                <text class="col process">{{ row.processName || '-' }}</text>
+                <text class="col production">{{ row.productionCount }}</text>
+                <text class="col need">{{ row.needCount }}</text>
+                <view class="col dispatch">
+                  <input
+                    v-model.number="row.dispatchQty"
+                    type="number"
+                    placeholder="请输入"
+                    min="0"
+                    :max="row.needCount"
+                    class="batch-dispatch-input"
+                    @input="onBatchDispatchQtyInput(row)"
+                  />
+                </view>
+                <text class="col hours">{{ row.workHours }}</text>
+                <view class="col employee">
+                  <view class="batch-dispatch-employee-display">
+                    {{ getBatchEmployeeName(row.employeeId) || '点击右侧选择' }}
+                  </view>
+                </view>
+              </view>
+            </view>
+          </scroll-view>
+          <!-- 右侧：员工列表 -->
+          <view class="batch-dispatch-right">
+            <scroll-view scroll-y class="batch-dispatch-employee-list">
+              <view
+                class="batch-dispatch-employee-item"
+                :class="{ active: isBatchEmployeeSelected(emp.id) }"
+                v-for="emp in sortedBatchDispatchEmployees"
+                :key="emp.id"
+                @click="onBatchEmployeeItemClick(emp)"
+              >
+                <text class="batch-dispatch-employee-name">{{ emp.name }}</text>
+                <text class="batch-dispatch-employee-hours">{{ emp.unrecordedHours }}h</text>
+              </view>
+            </scroll-view>
+          </view>
+        </view>
+        <view class="modal-footer batch-dispatch-footer">
+          <view class="batch-dispatch-date-group">
+            <text class="batch-dispatch-date-label">派工日期：</text>
+            <picker mode="date" :value="batchDispatchDate" @change="(e) => batchDispatchDate = e.detail.value">
+              <view class="batch-dispatch-date-value">
+                {{ batchDispatchDate || '请选择日期' }}
+              </view>
+            </picker>
+          </view>
+          <view class="batch-dispatch-footer-btns">
+            <button class="btn-cancel" @click="closeBatchDispatchModal">取消</button>
+            <button class="btn-confirm" @click="confirmBatchDispatch" :disabled="!canBatchDispatchSubmit">确认派工</button>
+          </view>
+        </view>
+      </view>
+    </view>
+
     <!-- 右下角：喷涂/组装车间工序大类联动开关 + 刷新 -->
     <view class="fab-stack">
       <view
@@ -897,6 +980,14 @@
           color="#5884f1"
           @change="onProcessBulkLinkChange"
         />
+      </view>
+      <view
+        v-if="workshop === '抛光车间'"
+        class="fab-batch"
+        @click="openBatchDispatchModal"
+        :class="{ disabled: !canBatchDispatch }"
+      >
+        <text class="fab-batch-text">批</text>
       </view>
       <view class="fab-refresh" @click="onManualRefresh">
         <text class="fab-refresh-text">⟳</text>
@@ -927,6 +1018,7 @@ import {
   DISPATCH_MULTI_URL,
   USE_NORMAL_PROCESS_URL,
   DELETE_PROCESS_URL,
+  BATCH_DISPATCH_URL,
 } from '../../utils/api'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import {
@@ -1519,6 +1611,14 @@ const closeMultiDispatchQtyOverModal = () => {
   showMultiDispatchQtyOverModal.value = false
 }
 
+// ---------- 批量派工相关 ----------
+const showBatchDispatchModal = ref(false)
+const batchDispatchRows = ref([]) // { processName, productionCount, needCount, dispatchQty, workHours, employeeId }
+const batchDispatchEmployees = ref([])
+const selectedBatchEmployeeId = ref('')
+const batchDispatchActiveRowIndex = ref(0)
+const batchDispatchDate = ref('')
+
 // ---------- 一对多派工相关（多工序，每工序独立派工数量，同一批员工） ----------
 const showOneToManyModal = ref(false)
 const oneToManyProcessRows = ref([]) // { processName, productionCountDisplay, needCountDisplay, maxQuantity, quantity, processRowid }
@@ -1771,6 +1871,8 @@ const canClickMultiDispatch = (item) => {
   const count = getSelectedProcessCount(item)
   return count >= 2
 }
+
+const canBatchDispatch = computed(() => selectedMultiProcesses.value.length > 0)
 
 // 判断是否可以点击一对多派工（仅抛光车间；至少两个工序）
 const canClickOneToManyDispatch = (item) => {
@@ -2941,16 +3043,32 @@ const multiDispatchSummaryProdColTitle = computed(() => {
   return currentMultiDispatchItem.value.billType === '返工排产' ? '返工数量' : '排产数量'
 })
 
+/** 计算一组工序的需完成数量平均值 */
+const calcAvgNeedCountForProcesses = (processEntries) => {
+  if (!processEntries || processEntries.length === 0) return 0
+  let sum = 0
+  let count = 0
+  for (const entry of processEntries) {
+    const nc = toFiniteNum(entry.process?.needCount, 0)
+    if (nc > 0) {
+      sum += nc
+      count++
+    }
+  }
+  return count > 0 ? Math.round(sum / count) : 0
+}
+
 /** 多对多弹窗：汇总表（每张匹配到的单据一行，含多订单） */
 const multiDispatchModalSummaryRows = computed(() => {
   if (!showMultiDispatchModal.value || !multiDispatchTargets.value.length) return []
-  return multiDispatchTargets.value.map(({ item: b }) => ({
+  return multiDispatchTargets.value.map(({ item: b, processes }) => ({
     billKey: billKeyForMultiDispatch(b),
     orderCode: b.orderCode || '-',
     productionQtyDisplay:
       b.billType === '返工排产'
         ? formatReworkFieldQtyDisplay(b.reworkFieldQty)
-        : String(getBillProductionQtyForDispatch(b))
+        : String(getBillProductionQtyForDispatch(b)),
+    avgNeedCount: calcAvgNeedCountForProcesses(processes)
   }))
 })
 
@@ -2973,6 +3091,22 @@ const multiDispatchOrderModeProductionDisplay = computed(() => {
   if (item.billType === '返工排产') return formatReworkFieldQtyDisplay(item.reworkFieldQty)
   const n = item.productionCount
   return n === 0 || n ? String(n) : '-'
+})
+
+/** 多对多弹窗：当前选中工序的需完成数量平均值（用于限制派工数量） */
+const multiDispatchAvgNeedCount = computed(() => {
+  const processes = multiDispatchSelectedProcessesForModal.value
+  if (!processes || processes.length === 0) return 0
+  let sum = 0
+  let count = 0
+  for (const p of processes) {
+    const nc = toFiniteNum(p.process?.needCount, 0)
+    if (nc > 0) {
+      sum += nc
+      count++
+    }
+  }
+  return count > 0 ? Math.round(sum / count) : 0
 })
 
 // 打开多对多派工模态框
@@ -3040,6 +3174,243 @@ const closeMultiDispatchModal = () => {
   multiDispatchTargets.value = []
   modalWorkshop.value = ''
   showMultiDispatchQtyOverModal.value = false
+}
+
+// ---------- 批量派工 ----------
+const openBatchDispatchModal = () => {
+  if (!canBatchDispatch.value) {
+    uni.showToast({ title: '请先选择至少一个工序', icon: 'none' })
+    return
+  }
+  const list = selectedMultiProcesses.value
+  batchDispatchRows.value = list.map((p) => {
+    const process = p.process || {}
+    const son = parseFloat(process.sonoutput)
+    const productionCount = Number.isFinite(son) && son > 0
+      ? son
+      : (p.item.billType === '返工排产'
+        ? getBillProductionQtyForDispatch(p.item)
+        : (p.item.productionCount ?? p.item.orderCount ?? 0))
+    const needMax = parseFloat(process.needCount)
+    const maxNeed = Number.isFinite(needMax) ? needMax : 0
+    const hourlyOutput = toFiniteNum(process.hourlyoutput, 0)
+    return {
+      processName: process.processName || '',
+      productionCount: String(productionCount),
+      needCount: String(maxNeed),
+      dispatchQty: 0,
+      workHours: 0,
+      employeeId: '',
+      processRowid: process.rowid,
+      hourlyoutput: hourlyOutput,
+      item: p.item,
+    }
+  })
+  batchDispatchEmployees.value = []
+  selectedBatchEmployeeId.value = ''
+  batchDispatchDate.value = getCurrentDate()
+  modalWorkshop.value = workshop.value
+  showBatchDispatchModal.value = true
+  loadBatchEmployees()
+}
+
+const closeBatchDispatchModal = () => {
+  showBatchDispatchModal.value = false
+  batchDispatchRows.value = []
+  batchDispatchEmployees.value = []
+  selectedBatchEmployeeId.value = ''
+  batchDispatchActiveRowIndex.value = 0
+  batchDispatchDate.value = ''
+}
+
+const loadBatchEmployees = async () => {
+  try {
+    const currentDate = getCurrentDate()
+    const selectedWorkshop = modalWorkshop.value || workshop.value
+    const res = await callWorkflowListAPIPaged({
+      worksheetId: 'yggs',
+      filters: [{
+        "controlId": "696075d19223cfe3a0c169dc",
+        "dataType": 30,
+        "spliceType": 1,
+        "filterType": 2,
+        "values": [selectedWorkshop]
+      }, {
+        "controlId": "6943bd902161a0fc58bad5ab",
+        "dataType": 30,
+        "spliceType": 1,
+        "filterType": 8
+      }],
+      pageSize: 100,
+      pageNum: 1
+    })
+    if (res.data && res.data.length > 0) {
+      batchDispatchEmployees.value = res.data.map(item => {
+        const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
+        const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
+        const dispatchWorkDate = item['69524e7b7a59e0522d855df6'] || ''
+        return {
+          id: item['6943bd902161a0fc58bad5ab'] || '',
+          name: item['6938db8bda0981f67b352af3'] || '',
+          position: item['6943bf332161a0fc58bad7a4'] || '',
+          totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
+          unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
+          dispatchWorkDate: dispatchWorkDate
+        }
+      }).filter(emp => emp.dispatchWorkDate === currentDate)
+    } else {
+      batchDispatchEmployees.value = []
+    }
+  } catch (error) {
+    console.error('加载员工失败:', error)
+    batchDispatchEmployees.value = []
+  }
+}
+
+const getBatchEmployeeName = (employeeId) => {
+  if (!employeeId) return ''
+  const emp = batchDispatchEmployees.value.find(e => String(e.id) === String(employeeId))
+  return emp ? emp.name : ''
+}
+
+/** 批量派工：按岗位关键字优先级排序员工列表 */
+const sortedBatchDispatchEmployees = computed(() => {
+  const list = batchDispatchEmployees.value || []
+  if (!list.length) return []
+
+  const processNames = batchDispatchRows.value.map(r => r.processName).filter(Boolean)
+  const keywords = getPositionKeywordsForDispatch(workshop.value, processNames)
+  const fallbackKws = workshop.value === '抛光车间' ? [...POLISH_FALLBACK_POSITION_KEYWORDS] : []
+
+  // 喷涂车间：按工序顺序重排
+  if (workshop.value === '喷涂车间' && processNames.length) {
+    const ordered = [...processNames]
+    const reordered = reorderEmployeesBySprayProcessSequence(list, ordered)
+    if (reordered.length) return reordered
+  }
+
+  // 通用优先级排序：匹配岗位关键字的排前面
+  const score = (emp) => {
+    const pos = String(emp.position || '')
+    if (!keywords.length) return 0
+    for (let i = 0; i < keywords.length; i++) {
+      if (pos.includes(keywords[i])) return keywords.length - i
+    }
+    for (const kw of fallbackKws) {
+      if (pos.includes(kw)) return -1
+    }
+    return -2
+  }
+
+  return [...list].sort((a, b) => score(b) - score(a))
+})
+
+/** 该员工是否已被某行选中 */
+const isBatchEmployeeSelected = (employeeId) => {
+  if (!employeeId) return false
+  return batchDispatchRows.value.some(r => String(r.employeeId) === String(employeeId))
+}
+
+/** 点击员工列表项：分配给当前激活的工序行 */
+const onBatchEmployeeItemClick = (emp) => {
+  const idx = batchDispatchActiveRowIndex.value
+  if (idx < 0 || idx >= batchDispatchRows.value.length) {
+    uni.showToast({ title: '请先点击选择左侧工序行', icon: 'none' })
+    return
+  }
+  batchDispatchRows.value[idx].employeeId = emp.id
+}
+
+const onBatchDispatchQtyInput = (row) => {
+  let q = Number(row.dispatchQty) || 0
+  const max = Number(row.needCount) || 0
+  if (max > 0 && q > max) {
+    q = max
+    row.dispatchQty = q
+    uni.showToast({ title: `派工数量不能超过需完成数量 ${max}`, icon: 'none' })
+  }
+  const h = toFiniteNum(row.hourlyoutput, 0)
+  if (h > 0 && q > 0) {
+    row.workHours = parseFloat((q / h).toFixed(2))
+  } else {
+    row.workHours = 0
+  }
+}
+
+const canBatchDispatchSubmit = computed(() => {
+  if (batchDispatchRows.value.length === 0) return false
+  for (const row of batchDispatchRows.value) {
+    const q = Number(row.dispatchQty)
+    if (!q || q <= 0) return false
+    const max = Number(row.needCount) || 0
+    if (max > 0 && q > max) return false
+    if (!row.employeeId) return false
+  }
+  return true
+})
+
+const confirmBatchDispatch = async () => {
+  for (const row of batchDispatchRows.value) {
+    const q = Number(row.dispatchQty)
+    if (!q || q <= 0) {
+      uni.showToast({ title: `请为「${row.processName || '工序'}」填写有效派工数量`, icon: 'none' })
+      return
+    }
+    const max = Number(row.needCount) || 0
+    if (max > 0 && q > max) {
+      uni.showToast({ title: `「${row.processName}」派工数量不能超过需完成数量 ${max}`, icon: 'none' })
+      return
+    }
+    if (!row.employeeId) {
+      uni.showToast({ title: `请为「${row.processName || '工序'}」选择员工`, icon: 'none' })
+      return
+    }
+  }
+
+  const processQtyText = batchDispatchRows.value
+    .map(r => `${r.processName || '-'}：${Number(r.dispatchQty)}`)
+    .join('；')
+  const employeeNames = batchDispatchRows.value
+    .map(r => getBatchEmployeeName(r.employeeId))
+    .filter(Boolean)
+    .join('、')
+
+  const batchDispatchPayload = batchDispatchRows.value.map(row => ({
+    processRowid: row.processRowid || '',
+    quantity: Number(row.dispatchQty) || 0,
+    employeeId: row.employeeId || ''
+  }))
+
+  if (!batchDispatchDate.value) {
+    uni.showToast({ title: '请选择派工日期', icon: 'none' })
+    return
+  }
+
+  openDispatchConfirmModal([
+    { label: '工序与数量', value: processQtyText },
+    { label: '人员', value: employeeNames },
+    { label: '派工日期', value: batchDispatchDate.value },
+  ], async () => {
+    try {
+      const resp = await http.post(BATCH_DISPATCH_URL, {
+        list: batchDispatchPayload,
+        date: batchDispatchDate.value
+      })
+      if (resp.status !== 1) {
+        uni.showToast({ title: resp.message || '批量派工失败', icon: 'none' })
+        return
+      }
+      uni.showToast({ title: '批量派工成功' })
+      closeBatchDispatchModal()
+      selectedMultiProcesses.value = []
+      setTimeout(async () => {
+        await search()
+      }, 1000)
+    } catch (error) {
+      console.error('批量派工失败:', error)
+      uni.showToast({ title: '派工失败：' + (error.message || '未知错误'), icon: 'none' })
+    }
+  })
 }
 
 // ---------- 一对多派工（仅抛光车间） ----------
@@ -3362,15 +3733,15 @@ const confirmMultiDispatch = async () => {
     }
     const overProd = targetsCheck.find((t) => {
       const n = Number(mapCheck[billKeyForMultiDispatch(t.item)])
-      const maxQty = getBillProductionQtyForDispatch(t.item)
-      return Number.isFinite(n) && n > maxQty
+      const avgNeed = calcAvgNeedCountForProcesses(t.processes)
+      return Number.isFinite(n) && avgNeed > 0 && n > avgNeed
     })
     if (overProd) {
       const oc = overProd.item?.orderCode || ''
-      const maxQty = getBillProductionQtyForDispatch(overProd.item)
+      const avgNeed = calcAvgNeedCountForProcesses(overProd.processes)
       openMultiDispatchQtyOverModal(
         '派工数量超限',
-        `派工数量不能大于排产数量（上限 ${maxQty}）。\n订单：${oc}`
+        `派工数量不能大于需完成数量（上限 ${avgNeed}）。\n订单：${oc}`
       )
       return
     }
@@ -3380,17 +3751,11 @@ const confirmMultiDispatch = async () => {
       uni.showToast({ title: '请填写有效的派工数量 (>0)', icon: 'none' })
       return
     }
-    const targetsCheckOrder = multiDispatchTargets.value
-    const overOrder = targetsCheckOrder.find((t) => {
-      const maxQty = getBillProductionQtyForDispatch(t.item)
-      return q > maxQty
-    })
-    if (overOrder) {
-      const oc = overOrder.item?.orderCode || ''
-      const maxQty = getBillProductionQtyForDispatch(overOrder.item)
+    const maxNeed = multiDispatchAvgNeedCount.value
+    if (maxNeed > 0 && q > maxNeed) {
       openMultiDispatchQtyOverModal(
         '派工数量超限',
-        `派工数量不能大于排产数量（上限 ${maxQty}）。\n订单：${oc}`
+        `派工数量不能大于需完成数量（上限 ${maxNeed}）。`
       )
       return
     }
@@ -3609,6 +3974,47 @@ const onDateChange = (e) => {
 // 多对多派工日期选择变化处理
 const onMultiDateChange = (e) => {
   multiDispatchData.value.date = e.detail.value
+}
+
+// 多对多派工：订单派工数量输入处理（限制不能超过需完成数量平均值）
+const onMultiQuantityInput = (e) => {
+  let val = e.detail.value
+  if (val === '' || val === null || val === undefined) {
+    val = 0
+  } else {
+    val = Number(val)
+    if (isNaN(val)) val = 0
+  }
+
+  const maxQty = multiDispatchAvgNeedCount.value
+  if (maxQty > 0 && val > maxQty) {
+    uni.showToast({ title: `派工数量不能超过需完成数量 ${maxQty}`, icon: 'none' })
+    val = maxQty
+  } else if (val < 0) {
+    val = 0
+  }
+
+  multiDispatchData.value.quantity = val
+}
+
+// 多对多派工：产品派工单行数量输入处理（限制不能超过该单需完成数量）
+const onMultiProductQtyInput = (e, billKey, maxNeedCount) => {
+  let val = e.detail.value
+  if (val === '' || val === null || val === undefined) {
+    val = 0
+  } else {
+    val = Number(val)
+    if (isNaN(val)) val = 0
+  }
+
+  if (maxNeedCount > 0 && val > maxNeedCount) {
+    uni.showToast({ title: `派工数量不能超过需完成数量 ${maxNeedCount}`, icon: 'none' })
+    val = maxNeedCount
+  } else if (val < 0) {
+    val = 0
+  }
+
+  multiDispatchQtyByBillKey.value[billKey] = val
 }
 
 // 多对多派工是否包含最终工序选择变化处理
@@ -4398,20 +4804,31 @@ const quit = () => {
 }
 
 // ==================== Watch监听器 ====================
-// 监听派工数量变化，验证并计算派工工时
+// 派工数量输入处理（替代 v-model.number，确保超过需派工数量时输入框同步更新）
+const onQuantityInput = (e) => {
+  let val = e.detail.value
+  if (val === '' || val === null || val === undefined) {
+    val = 0
+  } else {
+    val = Number(val)
+    if (isNaN(val)) val = 0
+  }
+
+  const maxQty = maxQuantity.value
+  if (maxQty > 0 && val > maxQty) {
+    uni.showToast({ title: `数量不能超过需派工数量 ${maxQty}`, icon: 'none' })
+    val = maxQty
+  } else if (val < 0) {
+    val = 0
+  }
+
+  processDispatchData.value.quantity = val
+  calculateWorkTime()
+}
+
+// 监听派工数量变化，自动计算派工工时
 watch(() => processDispatchData.value.quantity, (newVal) => {
   if (dispatchMode.value === 'product') return
-  const maxQty = maxQuantity.value
-  // 允许的最大数量：不能超过需派工数量（不再限制日产量）
-  if (newVal > maxQty) {
-    uni.showToast({ title: `数量不能超过需派工数量 ${maxQty}`, icon: 'none' })
-    processDispatchData.value.quantity = maxQty
-    return
-  } else if (newVal < 0) {
-    processDispatchData.value.quantity = 0
-  }
-  
-  // 自动计算派工工时：派工数量 / 小时产量（从工序数据中获取）
   calculateWorkTime()
 })
 
@@ -4622,6 +5039,7 @@ onUnload(() => {
       margin-left: 0;
       font-size: px2vw(35px);
       color: white;
+      font-weight: bold;
     }
 
     .header-tag-wrap {
@@ -4904,94 +5322,108 @@ onUnload(() => {
 
           .buttons {
             display: flex;
-            gap: px2vw(10px);
+            gap: px2vw(12px);
             align-items: center;
+            flex-wrap: wrap;
 
             .rework-btns-wrap {
               display: flex;
               flex-direction: row;
-              gap: px2vw(10px);
+              gap: px2vw(12px);
               align-items: center;
             }
 
             button {
               width: px2vw(150px);
-              padding: 0;
-              font-size: px2vw(28px);
-              border-radius: px2vw(8px);
-              border: px2vw(2px) solid #5884f1;
-              color: #5884f1;
-              background: white;
+              padding: px2vw(10px) px2vw(16px);
+              font-size: px2vw(26px);
+              border-radius: px2vw(12px);
+              border: none;
+              color: #fff;
               display: flex;
               justify-content: center;
               align-items: center;
+              box-shadow: 0 px2vw(3px) px2vw(8px) rgba(0, 0, 0, 0.12);
+              transition: all 0.2s ease;
+              font-weight: 500;
+
+              &:active {
+                transform: translateY(px2vw(2px));
+                box-shadow: 0 px2vw(1px) px2vw(4px) rgba(0, 0, 0, 0.1);
+              }
+
+              &.btn-sop {
+                background: linear-gradient(135deg, #5884f1 0%, #7b9ff7 100%);
+              }
 
               &.btn-dispatch {
-                background: white;
-                color: #5884f1;
+                background: linear-gradient(135deg, #42a5f5 0%, #64b5f6 100%);
+              }
+
+              &.btn-pack {
+                background: linear-gradient(135deg, #66bb6a 0%, #81c784 100%);
               }
               
               &.btn-normal-process {
                 width: px2vw(200px);
-                background: white;
-                color: #5884f1;
+                background: linear-gradient(135deg, #ab47bc 0%, #ba68c8 100%);
               }
 
               &.btn-first-check {
                 width: px2vw(180px);
-                background: #fff7e6;
-                color: #d46b08;
-                border-color: #d46b08;
+                background: linear-gradient(135deg, #ff9800 0%, #ffb74d 100%);
               }
 
               &.btn-rework-complete {
                 width: px2vw(180px);
-                background: #fff7e6;
-                color: #d46b08;
-                border-color: #d46b08;
+                background: linear-gradient(135deg, #ff7043 0%, #ff8a65 100%);
               }
 
               &.btn-rework-start {
                 width: px2vw(180px);
-                background: #f6ffed;
-                color: #389e0d;
-                border-color: #52c41a;
+                background: linear-gradient(135deg, #26a69a 0%, #4db6ac 100%);
+              }
+
+              &.btn-detail {
+                background: linear-gradient(135deg, #5c6bc0 0%, #7986cb 100%);
+
+                &:disabled {
+                  background: #e0e0e0;
+                  color: #999;
+                  cursor: not-allowed;
+                  opacity: 0.7;
+                  box-shadow: none;
+                }
+              }
+              
+              &.btn-delete {
+                background: linear-gradient(135deg, #ef5350 0%, #e57373 100%);
               }
               
               &.btn-multi-dispatch {
                 width: px2vw(180px);
-                background: white;
-                color: #5884f1;
+                background: linear-gradient(135deg, #8e24aa 0%, #ab47bc 100%);
                 
                 &:disabled {
-                  background: #f5f5f5;
-                  color: #ccc;
-                  border-color: #ddd;
+                  background: #e0e0e0;
+                  color: #999;
                   cursor: not-allowed;
-                  opacity: 0.6;
+                  opacity: 0.7;
+                  box-shadow: none;
                 }
               }
 
               &.btn-one-to-many {
                 width: px2vw(180px);
-                background: white;
-                color: #5884f1;
+                background: linear-gradient(135deg, #00897b 0%, #26a69a 100%);
 
                 &:disabled {
-                  background: #f5f5f5;
-                  color: #ccc;
-                  border-color: #ddd;
+                  background: #e0e0e0;
+                  color: #999;
                   cursor: not-allowed;
-                  opacity: 0.6;
+                  opacity: 0.7;
+                  box-shadow: none;
                 }
-              }
-              
-              &.btn-detail:disabled {
-                background: #f5f5f5;
-                color: #ccc;
-                border-color: #ddd;
-                cursor: not-allowed;
-                opacity: 0.6;
               }
             }
           }
@@ -5287,6 +5719,28 @@ onUnload(() => {
   border-radius: px2vw(40px);
   box-shadow: 0 px2vw(2px) px2vw(10px) rgba(0, 0, 0, 0.12);
   border: px2vw(1px) solid #eee;
+}
+
+.fab-batch {
+  width: px2vw(90px);
+  height: px2vw(90px);
+  border-radius: 50%;
+  background-color: #ff6b6b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 px2vw(4px) px2vw(10px) rgba(0, 0, 0, 0.15);
+
+  &.disabled {
+    background-color: #ccc;
+    opacity: 0.6;
+  }
+}
+
+.fab-batch-text {
+  color: #fff;
+  font-size: px2vw(40px);
+  font-weight: bold;
 }
 
 .fab-refresh {
@@ -6069,6 +6523,13 @@ onUnload(() => {
       text-align: right;
     }
 
+    &.need {
+      flex: 0.9;
+      text-align: right;
+      font-size: px2vw(24px);
+      color: #666;
+    }
+
     &.qty-head {
       flex: 0.95;
       text-align: right;
@@ -6267,18 +6728,27 @@ onUnload(() => {
     }
 
     &.prod {
-      flex: 1;
+      flex: 0.8;
       text-align: right;
+      padding-right: px2vw(16px);
+    }
+
+    &.need {
+      flex: 0.85;
+      text-align: right;
+      font-size: px2vw(24px);
+      color: #666;
+      padding-right: px2vw(16px);
     }
 
     &.qty-head {
-      flex: 0.95;
+      flex: 0.9;
       text-align: right;
       font-size: px2vw(24px);
     }
 
     &.qty-col {
-      flex: 0.95;
+      flex: 0.9;
       display: flex;
       justify-content: flex-end;
       align-items: center;
@@ -6526,6 +6996,255 @@ onUnload(() => {
 }
 
 
+
+/* 批量派工模态框 */
+.batch-dispatch-content {
+  width: px2vw(1500px);
+  max-width: 96vw;
+  height: px2vw(900px);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.batch-dispatch-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.batch-dispatch-left {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.batch-dispatch-right {
+  width: px2vw(260px);
+  min-width: px2vw(220px);
+  border-left: px2vw(1px) solid #e8eaed;
+  display: flex;
+  flex-direction: column;
+  background: #fafbfc;
+}
+
+.batch-dispatch-employee-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: px2vw(6px);
+}
+
+.batch-dispatch-employee-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: px2vw(10px) px2vw(12px);
+  margin-bottom: px2vw(6px);
+  background: #fff;
+  border-radius: px2vw(8px);
+  border: px2vw(1px) solid #e8eaed;
+  cursor: pointer;
+
+  &:active {
+    background: #eef3ff;
+  }
+
+  &.active {
+    border-color: #5884f1;
+    background: #eef3ff;
+  }
+}
+
+.batch-dispatch-employee-name {
+  font-size: px2vw(26px);
+  color: #333;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-dispatch-employee-hours {
+  font-size: px2vw(24px);
+  color: #f59a23;
+  font-weight: 500;
+  flex-shrink: 0;
+  margin-left: px2vw(8px);
+}
+
+.batch-dispatch-table {
+  margin: px2vw(16px) px2vw(20px);
+  padding: px2vw(12px) px2vw(16px);
+  background: #f7f8fa;
+  border-radius: px2vw(12px);
+  border: px2vw(1px) solid #e8eaed;
+}
+
+.batch-dispatch-header,
+.batch-dispatch-row {
+  display: flex;
+  align-items: center;
+  gap: px2vw(8px);
+}
+
+.batch-dispatch-header {
+  padding-bottom: px2vw(10px);
+  margin-bottom: px2vw(8px);
+  border-bottom: px2vw(1px) solid #dde1e6;
+  font-size: px2vw(24px);
+  color: #666;
+  font-weight: 500;
+}
+
+.batch-dispatch-row {
+  font-size: px2vw(26px);
+  color: #333;
+  padding: px2vw(10px) 0;
+  border-bottom: px2vw(1px) solid #eee;
+  cursor: pointer;
+
+  &:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  &.active {
+    background: #eef3ff;
+    border-radius: px2vw(6px);
+  }
+}
+
+.batch-dispatch-table .col {
+  min-width: 0;
+  word-break: break-all;
+  text-align: center;
+
+  &.process {
+    flex: 1.4;
+    text-align: left;
+    padding-left: px2vw(8px);
+  }
+
+  &.production {
+    flex: 1;
+  }
+
+  &.need {
+    flex: 1;
+  }
+
+  &.dispatch {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  &.hours {
+    flex: 0.8;
+  }
+
+  &.employee {
+    flex: 1.2;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+}
+
+.batch-dispatch-input {
+  width: 100%;
+  max-width: px2vw(140px);
+  min-width: px2vw(72px);
+  height: px2vw(52px);
+  padding: 0 px2vw(8px);
+  font-size: px2vw(24px);
+  text-align: center;
+  border: px2vw(1px) solid #ccc;
+  border-radius: px2vw(8px);
+  box-sizing: border-box;
+  background: #fff;
+}
+
+.batch-dispatch-employee-display {
+  min-height: px2vw(52px);
+  padding: px2vw(10px) px2vw(12px);
+  border: px2vw(1px) solid #ccc;
+  border-radius: px2vw(8px);
+  font-size: px2vw(24px);
+  color: #333;
+  background: #fff;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.batch-dispatch-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: px2vw(16px);
+}
+
+.batch-dispatch-date-group {
+  display: flex;
+  align-items: center;
+  gap: px2vw(8px);
+}
+
+.batch-dispatch-date-label {
+  font-size: px2vw(26px);
+  color: #333;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.batch-dispatch-date-value {
+  min-width: px2vw(160px);
+  height: px2vw(52px);
+  padding: 0 px2vw(16px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: px2vw(1px) solid #ccc;
+  border-radius: px2vw(8px);
+  font-size: px2vw(24px);
+  color: #333;
+  background: #fff;
+  white-space: nowrap;
+}
+
+.batch-dispatch-footer-btns {
+  display: flex;
+  align-items: center;
+  gap: px2vw(10px);
+}
+
+.batch-dispatch-summary {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: px2vw(8px);
+  margin: px2vw(8px) px2vw(20px) px2vw(16px);
+  padding: px2vw(12px) px2vw(16px);
+  background: #eef3ff;
+  border-radius: px2vw(8px);
+  border: px2vw(1px) solid #dde1e6;
+
+  .batch-dispatch-summary-label {
+    font-size: px2vw(26px);
+    color: #333;
+    font-weight: 600;
+  }
+
+  .batch-dispatch-summary-value {
+    font-size: px2vw(28px);
+    color: #5884f1;
+    font-weight: 700;
+  }
+}
 
 /* 员工选择表格样式 */
 .employee-section {

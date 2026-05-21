@@ -271,6 +271,7 @@ const quit = () => {
       text-align: center;
       font-size: px2vw(35px);
       color: white;
+      font-weight: bold;
     }
 
     .header-placeholder {

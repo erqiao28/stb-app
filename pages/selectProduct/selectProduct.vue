@@ -780,6 +780,7 @@ const confirmSelectedProducts = () => {
       margin-right: 0;
       font-size: px2vw(35px);
       color: white;
+      font-weight: bold;
     }
 
     .header-tag-wrap {

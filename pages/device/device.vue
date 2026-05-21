@@ -291,6 +291,7 @@ const quit = () => {
 		margin-left: px2vw(300px);
 		font-size: px2vw(35px);
 		color: white;
+		font-weight: bold;
 	}
 
 	.btn-box {

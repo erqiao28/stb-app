@@ -425,6 +425,7 @@ const goTimeWork = () => {
 			margin-right: px2vw(80px);
 			font-size: px2vw(35px);
 			color: white;
+			font-weight: bold;
 		}
 	}
 

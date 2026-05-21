@@ -75,6 +75,7 @@
 		.title {
 			font-size: px2vw(40px);
 			color: white;
+			font-weight: bold;
 		}
 	}       
 	/* 输入框区域 */

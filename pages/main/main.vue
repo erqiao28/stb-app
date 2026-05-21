@@ -1,22 +1,23 @@
 <template>
-	<view class="main-container" :class="{ 'gongyi-bg': isGongyiLimits }">
-		<view class="header" :style="isGongyiLimits ? { paddingTop: statusBarHeight + 'px' } : { paddingTop: statusBarHeight + 'px' }">
+	<view class="main-container" :style="{ paddingTop: statusBarHeight + 'px' }">
+		<view class="header">
 			<image src="/static/left-arrow.svg" @click="goBackToIndex"></image>
 			<view class="title">主页面</view>
 			<view></view>
 		</view>
 		<view class="btn-box">
-			<button v-if="showDispatchEntryButtons" @click="goSelectBills">订单派工</button>
-			<button v-if="showDispatchEntryButtons" @click="goSelectProductDispatch">产品派工</button>
-			<button v-if="showDispatchEntryButtons" @click="goReworkDispatch">返工派工</button>
-			<button @click="goTimeWork">记时派工</button>
-			<button @click="goDispatchInquiry">派工查询</button>
+			<button v-if="showDispatchEntryButtons" class="btn-order" @click="goSelectBills">订单派工</button>
+			<button v-if="showDispatchEntryButtons" class="btn-product" @click="goSelectProductDispatch">产品派工</button>
+			<button v-if="showDispatchEntryButtons" class="btn-rework" @click="goReworkDispatch">返工派工</button>
+			<button class="btn-time" @click="goTimeWork">记时派工</button>
+			<button class="btn-query" @click="goDispatchInquiry">派工查询</button>
 			<button
 				v-if="showDispatchInquiryMore"
+				class="btn-inquiry-more"
 				@click="goDispatchInquiryMore"
 			>多对多派工查询</button>
-			<button v-if="isGongyiLimits" @click="goCraftOrder">工艺订单</button>
-			<button @click="goWorkload">员工工作量查询</button>
+			<button v-if="isGongyiLimits" class="btn-craft" @click="goCraftOrder">工艺订单</button>
+			<button class="btn-workload" @click="goWorkload">员工工作量查询</button>
 		</view>
 	</view>
 </template>
@@ -81,7 +82,6 @@ const goDispatchInquiry = () => {
 }
 
 const goDispatchInquiryMore = () => {
-	// 不带车间参数：由多对多派工查询页根据登录权限 loginLimits 默认选中车间
 	uni.navigateTo({
 		url: '/pages/dispatchInquiryMore/dispatchInquiryMore'
 	})
@@ -108,25 +108,6 @@ const goWorkload = () => {
 	display: flex;
 	flex-direction: column;
 	position: relative;
-	overflow: hidden;
-
-	&.gongyi-bg {
-		background-color: transparent;
-	}
-
-	&.gongyi-bg::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: 0;
-		width: 100%;
-		height: 100%;
-		background-image: url('/static/bz.jpg');
-		background-size: cover;
-		background-position: center;
-		background-repeat: no-repeat;
-		z-index: 0;
-	}
 
 	.header {
 		height: px2vw(120px);
@@ -136,9 +117,6 @@ const goWorkload = () => {
 		align-items: center;
 		background-color: #5884f1;
 		flex-shrink: 0;
-		transition: background-color 0.3s;
-		position: relative;
-		z-index: 1;
 
 		image {
 			margin-left: px2vw(20px);
@@ -150,57 +128,74 @@ const goWorkload = () => {
 			margin-right: px2vw(80px);
 			font-size: px2vw(35px);
 			color: white;
+			font-weight: bold;
 		}
 	}
 
-	&.gongyi-bg .header {
-		background-color: transparent;
-	}
-
 	.btn-box {
-		position: relative;
-		z-index: 1;
-
 		width: 100%;
 		flex: 1;
 		display: flex;
 		flex-wrap: wrap;
-		justify-content: space-between;
+		justify-content: flex-start;
 		align-content: flex-end;
-		padding: 0 px2vw(40px) px2vw(60px);
-		gap: px2vw(25px);
+		padding: 0 px2vw(40px) px2vw(80px);
+		gap: px2vw(20px);
 
 		button {
-			width: calc((100% - #{px2vw(50px)}) / 3);
-			height: px2vw(120px);
-			background-color: white;
-			color: #3556e3;
-			border-radius: px2vw(60px);
-			font-size: px2vw(40px);
+			width: calc((100% - #{px2vw(60px)}) / 4);
+			height: px2vw(100px);
+			border-radius: px2vw(20px);
+			font-size: px2vw(32px);
 			display: flex;
 			justify-content: center;
 			align-items: center;
-		}
-	}
-
-	&.gongyi-bg .btn-box {
-		padding: px2vw(100px) px2vw(40px) px2vw(60px);
-		align-content: flex-start;
-
-		button {
-			width: calc((100% - #{px2vw(25px)}) / 2);
-			height: px2vw(140px);
-			background-color: rgba(255, 255, 255, 0.6);
-			color: #5884f1;
-			font-size: px2vw(36px);
-			font-weight: 500;
-			border: px2vw(3px) solid rgba(255, 255, 255, 0.3);
-			box-shadow: 0 px2vw(10px) px2vw(30px) rgba(0, 0, 0, 0.15);
-			transition: all 0.3s ease;
+			box-shadow: 0 px2vw(6px) px2vw(16px) rgba(0, 0, 0, 0.2);
+			transition: all 0.25s ease;
+			color: white;
+			font-weight: 600;
+			line-height: 1.3;
+			padding: 0 px2vw(10px);
+			text-align: center;
 
 			&:active {
-				transform: scale(0.96);
-				background-color: rgba(255, 255, 255, 0.8);
+				transform: translateY(px2vw(4px)) scale(0.97);
+				box-shadow: 0 px2vw(2px) px2vw(8px) rgba(0, 0, 0, 0.15);
+			}
+
+			&.btn-order {
+				background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			}
+
+			&.btn-product {
+				background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+			}
+
+			&.btn-rework {
+				background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+			}
+
+			&.btn-time {
+				background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+			}
+
+			&.btn-query {
+				background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+			}
+
+			&.btn-inquiry-more {
+				background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+				color: #8e44ad;
+			}
+
+			&.btn-craft {
+				background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
+				color: #5a4fcf;
+			}
+
+			&.btn-workload {
+				background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+				color: #5a4fcf;
 			}
 		}
 	}

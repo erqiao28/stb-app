@@ -2,58 +2,73 @@
 	<view class="content-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<view class="main-home" v-if="isMainPage">
 			<view class="btn-box">
-				<button @click="goSelectBills">订单派工</button>
-				<button @click="goSelectProductDispatch">产品派工</button>
-				<button @click="goReworkDispatch">返工派工</button>
-				<button @click="goTimeWork">记时派工</button>
-				<button @click="goDispatchInquiry">派工查询</button>
-				<button @click="goWorkload">员工工作量查询</button>
+				<button class="btn-order" @click="goSelectBills">
+					<view class="btn-icon">📋</view>
+					<view class="btn-text">订单派工</view>
+				</button>
+				<button class="btn-product" @click="goSelectProductDispatch">
+					<view class="btn-icon">📦</view>
+					<view class="btn-text">产品派工</view>
+				</button>
+				<button class="btn-rework" @click="goReworkDispatch">
+					<view class="btn-icon">🔄</view>
+					<view class="btn-text">返工派工</view>
+				</button>
+				<button class="btn-time" @click="goTimeWork">
+					<view class="btn-icon">⏱️</view>
+					<view class="btn-text">记时派工</view>
+				</button>
+				<button class="btn-query" @click="goDispatchInquiry">
+					<view class="btn-icon">🔍</view>
+					<view class="btn-text">派工查询</view>
+				</button>
+				<button class="btn-workload" @click="goWorkload">
+					<view class="btn-icon">📊</view>
+					<view class="btn-text">员工工作量查询</view>
+				</button>
 			</view>
 		</view>
-		<view v-else>
-		<!-- 用户列表 -->
-		<view class="user-list" v-if="isUserlist">
-			<view class="user-item" v-for="item in userStore.userlist" :key="item.rowid">
-				<view class="user-item-main" @click="selectWorker(item)">
-					<view class="user-name">{{ item.username }}</view>
+		<view class="login-page" v-else>
+			<!-- 左侧：用户列表 -->
+			<view class="user-list" v-if="isUserlist">
+				<view class="user-list-header">
+					<text class="user-list-title">历史登录账号</text>
 				</view>
-				<image
-					class="user-del-btn"
-					src="/static/rubish.svg"
-					mode="aspectFit"
-					@tap.stop="del(item.rowid)"
-				/>
+				<view class="user-item" v-for="item in userStore.userlist" :key="item.rowid" @click="selectWorker(item)">
+					<view class="user-item-main">
+						<view class="user-avatar">{{ item.username.charAt(0) }}</view>
+						<view class="user-name">{{ item.username }}</view>
+					</view>
+					<view class="user-del-btn" @tap.stop="del(item.rowid)">
+						<image src="/static/rubish.svg" mode="aspectFit" />
+					</view>
+				</view>
 			</view>
-		</view>
-		<view class="login-box">
-			<view class="username">
-				<image src="/static/user.svg"></image>
-				<input type="text" v-model="loginform.username" />
+			<!-- 右侧：检查更新等按钮 -->
+			<view class="login-right-sidebar">
+				<button class="check-update" @click="checkUpdate()">
+					<image src="/static/update.svg"></image>检查更新
+				</button>
 			</view>
-			<view class="password">
-				<image src="/static/password.svg"></image>
-				<input type="password" v-model="loginform.password" />
+			<!-- 中间输入框区域 -->
+			<view class="login-center">
+				<view class="login-box">
+					<view class="username">
+						<image src="/static/user.svg"></image>
+						<input type="text" v-model="loginform.username" />
+					</view>
+					<view class="password">
+						<image src="/static/password.svg"></image>
+						<input type="password" v-model="loginform.password" />
+					</view>
+					<view class="rem-box">
+						<checkbox class="rem-check" :checked="userStore.rememberPassword"
+							@click="userStore.changeRememberPassword()" />
+						<text class="rem-text">记住密码</text>
+					</view>
+					<button class="login-btn" @click="login">登录</button>
+				</view>
 			</view>
-			<view class="rem-box">
-				<checkbox class="rem-check" :checked="userStore.rememberPassword"
-					@click="userStore.changeRememberPassword()" />
-				<text class="rem-text">记住密码</text>
-			</view>
-			<button class="login-btn" @click="login">登录</button>
-		</view>
-		<image src="/static/recode.svg" class="recode-btn" @click="isShow">
-		</image>
-		<view class="setting-box">
-			<button class="login-setting" @click="goFieldTypes()">
-				<image src="/static/setting.svg"></image>查看字段
-			</button>
-			<button class="check-update" @click="checkUpdate()">
-				<image src="/static/update.svg"></image>检查更新
-			</button>
-			<button class="change-password" @click="goChangePassword()">
-				<image src="/static/key.svg"></image>修改密码
-			</button>
-		</view>
 		</view>
 	</view>
 </template>
@@ -303,10 +318,6 @@ const downloadAndInstall = (wgtUrl, newVersion) => {
 const userStore = useUserStore()
 const isUserlist = ref(true)
 const isMainPage = ref(false)
-const isShow = () => {
-	isUserlist.value = !isUserlist.value
-}
-
 // 登录表单
 const loginform = ref({
 	username: '',
@@ -450,6 +461,7 @@ const goFieldTypes = async () => {
 	width: 100vw;
 	background-color: #3556e3;
 	display: flex;
+	flex-direction: column;
 	box-sizing: border-box;
 
 	.main-home {
@@ -462,127 +474,261 @@ const goFieldTypes = async () => {
 			width: 100%;
 			display: flex;
 			flex-wrap: wrap;
-			justify-content: space-between;
-			padding: 0 px2vw(40px) px2vw(60px);
-			gap: px2vw(25px);
+			justify-content: center;
+			padding: 0 px2vw(40px) px2vw(80px);
+			gap: px2vw(30px);
 
 			button {
-				width: calc((100% - #{px2vw(50px)}) / 3);
-				height: px2vw(120px);
-				background-color: white;
-				color: #3556e3;
-				border-radius: px2vw(60px);
-				font-size: px2vw(40px);
+				width: calc((100% - #{px2vw(60px)}) / 3);
+				height: px2vw(140px);
+				border-radius: px2vw(24px);
+				font-size: px2vw(36px);
 				display: flex;
+				flex-direction: column;
 				justify-content: center;
 				align-items: center;
+				border: none;
+				box-shadow: 0 px2vw(6px) px2vw(16px) rgba(0, 0, 0, 0.2);
+				transition: all 0.25s ease;
+				color: white;
+				font-weight: 600;
+				line-height: 1.3;
+
+				&:active {
+					transform: translateY(px2vw(4px)) scale(0.97);
+					box-shadow: 0 px2vw(2px) px2vw(8px) rgba(0, 0, 0, 0.15);
+				}
+
+				.btn-icon {
+					font-size: px2vw(48px);
+					margin-bottom: px2vw(8px);
+				}
+
+				.btn-text {
+					font-size: px2vw(32px);
+				}
+
+				&.btn-order {
+					background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+				}
+
+				&.btn-product {
+					background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+				}
+
+				&.btn-rework {
+					background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+				}
+
+				&.btn-time {
+					background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+				}
+
+				&.btn-query {
+					background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+				}
+
+				&.btn-workload {
+					background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+					color: #5a4fcf;
+				}
 			}
 		}
 	}
 
+	/* 登录页 */
+	.login-page {
+		flex: 1;
+		display: flex;
+		flex-direction: row;
+		position: relative;
+		align-items: flex-start;
+		justify-content: space-between;
+		overflow: auto;
+		box-sizing: border-box;
+	}
+
 	/* 用户列表 */
 	.user-list {
-		position: absolute;
-		width: px2vw(400px);
+		width: px2vw(420px);
 		height: 100%;
 		display: flex;
 		flex-direction: column;
 		overflow: auto;
 		scrollbar-width: thin;
 		scrollbar-color: #ccc #3556e3;
+		padding: px2vw(20px);
+		box-sizing: border-box;
+		flex-shrink: 0;
+		position: absolute;
+		top: 0;
+		left: 0;
+		z-index: 10;
+
+		.user-list-header {
+			padding: px2vw(20px) px2vw(16px);
+			margin-bottom: px2vw(10px);
+
+			.user-list-title {
+				color: rgba(255, 255, 255, 0.7);
+				font-size: px2vw(28px);
+				font-weight: 500;
+			}
+		}
 
 		/* 用户每一项 */
 		.user-item {
 			color: #fff;
-			height: px2vw(150px);
 			width: 100%;
-			border: px2vw(2px) solid #fff;
+			background: rgba(255, 255, 255, 0.1);
+			border: px2vw(1px) solid rgba(255, 255, 255, 0.2);
+			border-radius: px2vw(16px);
 			display: flex;
 			align-items: center;
 			justify-content: space-between;
-			padding: px2vw(25px);
-			font-size: px2vw(50px);
+			padding: px2vw(16px) px2vw(20px);
+			margin-bottom: px2vw(12px);
+			font-size: px2vw(32px);
 			box-sizing: border-box;
+			transition: all 0.2s ease;
+			cursor: pointer;
+
+			&:active {
+				background: rgba(255, 255, 255, 0.2);
+				transform: scale(0.98);
+			}
 
 			.user-item-main {
 				flex: 1;
 				min-width: 0;
 				display: flex;
 				align-items: center;
+				gap: px2vw(16px);
+			}
+
+			.user-avatar {
+				width: px2vw(56px);
+				height: px2vw(56px);
+				border-radius: 50%;
+				background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+				display: flex;
+				justify-content: center;
+				align-items: center;
+				font-size: px2vw(28px);
+				font-weight: bold;
+				color: white;
+				flex-shrink: 0;
 			}
 
 			.user-name {
 				overflow: hidden;
 				text-overflow: ellipsis;
 				white-space: nowrap;
+				font-size: px2vw(32px);
+				font-weight: 500;
 			}
 
 			.user-del-btn {
 				flex-shrink: 0;
-				height: px2vw(50px);
-				width: px2vw(50px);
-				margin-left: px2vw(16px);
+				width: px2vw(44px);
+				height: px2vw(44px);
 				padding: px2vw(8px);
+				border-radius: 50%;
+				background: rgba(255, 255, 255, 0.15);
+				display: flex;
+				justify-content: center;
+				align-items: center;
+				transition: all 0.2s ease;
+
+				&:active {
+					background: rgba(255, 100, 100, 0.4);
+				}
+
+				image {
+					width: 100%;
+					height: 100%;
+				}
 			}
 		}
 	}
 
+	/* 登录区域居中 */
+	.login-center {
+		width: 100%;
+		display: flex;
+		justify-content: center;
+		align-items: flex-end;
+		padding: px2vw(160px) px2vw(40px) px2vw(80px);
+		min-width: 0;
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		box-sizing: border-box;
+	}
+
 	/* 登录区域 */
 	.login-box {
-		position: absolute;
-		bottom: px2vw(70px);
-		left: px2vw(450px);
+		width: 100%;
+		max-width: px2vw(1000px);
 
 		.username {
-			width: px2vw(1000px);
+			width: 100%;
 			height: px2vw(100px);
 			border: px2vw(4px) solid #fff;
-			margin: px2vw(20px);
+			margin: px2vw(20px) 0;
 			border-radius: px2vw(87.5px);
 			display: flex;
 			justify-content: space-between;
 			align-items: center;
 			padding: 0 px2vw(75px);
+			box-sizing: border-box;
 
 			image {
 				width: px2vw(70px);
 				height: px2vw(70px);
+				flex-shrink: 0;
 			}
 
 			input {
 				height: px2vw(100px);
-				width: px2vw(750px);
+				flex: 1;
+				min-width: 0;
 				color: white;
 				font-size: px2vw(50px);
+				margin-left: px2vw(20px);
 			}
 		}
 
 		.password {
-			width: px2vw(1000px);
+			width: 100%;
 			height: px2vw(100px);
 			border: px2vw(4px) solid #fff;
-			margin: px2vw(20px);
+			margin: px2vw(20px) 0;
 			border-radius: px2vw(50px);
 			display: flex;
 			justify-content: space-between;
 			align-items: center;
 			padding: 0 px2vw(75px);
+			box-sizing: border-box;
 
 			image {
 				width: px2vw(70px);
 				height: px2vw(70px);
+				flex-shrink: 0;
 			}
 
 			input {
 				height: px2vw(100px);
-				width: px2vw(750px);
+				flex: 1;
+				min-width: 0;
 				color: white;
 				font-size: px2vw(50px);
+				margin-left: px2vw(20px);
 			}
 		}
 
 		.rem-box {
-			margin: px2vw(25px);
+			margin: px2vw(25px) 0;
 
 			.rem-text {
 				color: #fff;
@@ -591,7 +737,7 @@ const goFieldTypes = async () => {
 		}
 
 		.login-btn {
-			width: px2vw(1000px);
+			width: 100%;
 			height: px2vw(100px);
 			color: #4274e0;
 			border-radius: px2vw(50px);
@@ -600,39 +746,49 @@ const goFieldTypes = async () => {
 			justify-content: center;
 			align-items: center;
 			font-size: px2vw(50px);
+			margin-top: px2vw(20px);
 		}
 	}
-	.recode-btn {
-		width: px2vw(70px);
-		height: px2vw(70px);
-		position: absolute;
-		left: px2vw(1500px);
-		top: px2vw(450px);
-	}
 
-	/* 设置区域 */
-	.setting-box {
+	/* 右侧边栏 */
+	.login-right-sidebar {
+		width: px2vw(300px);
+		height: 100%;
+		flex-shrink: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: px2vw(20px);
+		box-sizing: border-box;
 		position: absolute;
-		right: px2vw(75px);
+		top: 0;
+		right: 0;
+		z-index: 10;
 
-		.login-setting,
-		.check-update,
-		.change-password {
-			width: px2vw(262.5px);
-			height: px2vw(70px);
-			border-radius: px2vw(35px);
-			font-size: px2vw(30px);
+		.check-update {
+			width: 100%;
+			height: px2vw(80px);
+			border-radius: px2vw(40px);
+			font-size: px2vw(32px);
 			display: flex;
 			justify-content: center;
 			align-items: center;
-			margin: px2vw(17.5px);
-			background-color: white;
-			color: #3556e3;
+			background: rgba(255, 255, 255, 0.1);
+			border: px2vw(1px) solid rgba(255, 255, 255, 0.2);
+			color: white;
+			padding: 0 px2vw(20px);
+			transition: all 0.25s ease;
+
+			&:active {
+				transform: translateY(px2vw(2px)) scale(0.97);
+				box-shadow: 0 px2vw(2px) px2vw(6px) rgba(0, 0, 0, 0.2);
+			}
 
 			image {
-				height: px2vw(43.75px);
-				width: px2vw(43.75px);
-				margin-right: px2vw(17.5px);
+				height: px2vw(44px);
+				width: px2vw(44px);
+				margin-right: px2vw(12px);
+				flex-shrink: 0;
 			}
 		}
 	}
