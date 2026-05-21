@@ -91,15 +91,21 @@
 									<view class="picker-value">{{ timeWorkForm.workshop || '请选择车间' }}</view>
 								</picker>
 							</view>
-						</view>
-						<view class="form-row">
-							<view class="form-group">
-								<text class="label">派工工时：</text>
-								<input v-model.number="timeWorkForm.workHours" type="digit" placeholder="请输入派工工时" class="input-field" />
-							</view>
 							<view class="form-group">
 								<text class="label">时薪：</text>
 								<input v-model.number="timeWorkForm.hourlyRate" type="digit" placeholder="请输入时薪（选填）" class="input-field" />
+							</view>
+						</view>
+						<view class="form-row">
+							<view class="form-group">
+								<text class="label">派工日期：</text>
+								<picker mode="date" :value="timeWorkForm.date" @change="(e) => timeWorkForm.date = e.detail.value">
+									<view class="picker-value">{{ timeWorkForm.date || '请选择日期' }}</view>
+								</picker>
+							</view>
+							<view class="form-group">
+								<text class="label">派工工时：</text>
+								<input v-model.number="timeWorkForm.workHours" type="digit" placeholder="请输入派工工时" class="input-field" />
 							</view>
 						</view>
 						<view class="form-row">
@@ -224,7 +230,8 @@ const timeWorkForm = ref({
 	workshop: getDefaultTimeWorkshop(),
 	workHours: '',
 	hourlyRate: '',
-	remark: ''
+	remark: '',
+	date: ''
 })
 
 // 记时派工模态框内的车间（传给 AddWorkerRadiobox）
@@ -426,7 +433,8 @@ const onFabAdd = () => {
 		workshop: w,
 		workHours: '',
 		hourlyRate: '',
-		remark: ''
+		remark: '',
+		date: getCurrentDate()
 	}
 	timeWorkEmployeeList.value = []
 	modalWorkshop.value = workshopForFilter(w)
@@ -513,7 +521,7 @@ const doTimeWorkDispatch = async () => {
 		workHours: parseFloat(timeWorkForm.value.workHours) || 0,
 		hourlyRate: parseFloat(timeWorkForm.value.hourlyRate) || 0,
 		remark: timeWorkForm.value.remark || '',
-		date: getCurrentDate(),
+		date: timeWorkForm.value.date || getCurrentDate(),
 		employees: employeesPayload,
 		// 供工作流脚本节点 JSON.parse：部分平台对嵌套数组解析不稳定，增加纯字符串字段更可靠
 		employeesJson: JSON.stringify(employeesPayload),
@@ -574,6 +582,7 @@ onLoad((options) => {
 		timeWorkForm.value.workshop = getDefaultTimeWorkshop()
 		modalWorkshop.value = workshopForFilter(timeWorkForm.value.workshop)
 	}
+	timeWorkForm.value.date = getCurrentDate()
 	loadTimeWorkBills()
 })
 </script>
@@ -931,8 +940,9 @@ onLoad((options) => {
 			display: flex;
 			align-items: center;
 			gap: px2vw(12px);
-			margin: 0 px2vw(10px);
+			margin: 0;
 			flex: 1;
+			min-width: 0;
 
 			&.full { width: 100%; }
 
@@ -941,25 +951,40 @@ onLoad((options) => {
 				color: #666;
 				white-space: nowrap;
 				width: px2vw(140px);
+				text-align: right;
+				flex-shrink: 0;
+			}
+
+			picker {
+				flex: 1;
+				min-width: 0;
 			}
 
 			.picker-value {
-				flex: 1;
-				height: px2vw(60px);
-				line-height: px2vw(60px);
-				padding: 0 px2vw(10px);
-				border: px2vw(1px) solid #eee;
+				width: 100%;
+				height: px2vw(72px);
+				line-height: px2vw(72px);
+				padding: 0 px2vw(16px);
+				border: px2vw(1px) solid #ccc;
 				border-radius: px2vw(8px);
 				font-size: px2vw(28px);
+				background: #fff;
+				box-sizing: border-box;
+				overflow: hidden;
+				text-overflow: ellipsis;
+				white-space: nowrap;
 			}
 
 			.input-field {
 				flex: 1;
-				height: px2vw(60px);
-				padding: 0 px2vw(12px);
-				border: px2vw(1px) solid #eee;
+				min-width: 0;
+				height: px2vw(72px);
+				padding: 0 px2vw(16px);
+				border: px2vw(1px) solid #ccc;
 				border-radius: px2vw(8px);
 				font-size: px2vw(28px);
+				background: #fff;
+				box-sizing: border-box;
 			}
 
 			.textarea-field {
