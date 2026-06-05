@@ -18,6 +18,7 @@
 			>多对多派工查询</button>
 			<button v-if="isGongyiLimits" class="btn-craft" @click="goCraftOrder">工艺订单</button>
 			<button class="btn-workload" @click="goWorkload">员工工作量查询</button>
+			<button class="btn-pre-dispatched" @click="goPreDispatched">预派工</button>
 		</view>
 	</view>
 </template>
@@ -98,6 +99,12 @@ const goWorkload = () => {
 		url: '/pages/workload/workload'
 	})
 }
+
+const goPreDispatched = () => {
+	uni.navigateTo({
+		url: '/pages/preDispatched/preDispatched'
+	})
+}
 </script>
 
 <style scoped lang="scss">
@@ -110,7 +117,7 @@ const goWorkload = () => {
 	position: relative;
 
 	.header {
-		height: px2vw(120px);
+		height: px2vw(90px);
 		width: 100%;
 		display: flex;
 		justify-content: space-between;
@@ -120,13 +127,13 @@ const goWorkload = () => {
 
 		image {
 			margin-left: px2vw(20px);
-			height: px2vw(60px);
-			width: px2vw(60px);
+			height: px2vw(50px);
+			width: px2vw(50px);
 		}
 
 		.title {
 			margin-right: px2vw(80px);
-			font-size: px2vw(35px);
+			font-size: px2vw(32px);
 			color: white;
 			font-weight: bold;
 		}
@@ -196,6 +203,11 @@ const goWorkload = () => {
 			&.btn-workload {
 				background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
 				color: #5a4fcf;
+			}
+
+			&.btn-pre-dispatched {
+				background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+				color: #c0392b;
 			}
 		}
 	}

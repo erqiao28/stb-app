@@ -596,7 +596,7 @@ onLoad((options) => {
 	flex-direction: column;
 
 	.header {
-		height: px2vw(120px);
+		height: px2vw(90px);
 		width: 100%;
 		display: flex;
 		justify-content: space-between;
@@ -606,13 +606,13 @@ onLoad((options) => {
 
 		image {
 			margin-left: px2vw(20px);
-			height: px2vw(60px);
-			width: px2vw(60px);
+			height: px2vw(50px);
+			width: px2vw(50px);
 		}
 
 		.title {
 			margin-right: px2vw(80px);
-			font-size: px2vw(35px);
+			font-size: px2vw(32px);
 			color: white;
 			font-weight: bold;
 		}

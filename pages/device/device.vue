@@ -272,7 +272,7 @@ const quit = () => {
 
 	/* 导航栏 */
 	.header {
-		height: px2vw(100px);
+		height: px2vw(90px);
 		width: 100%;
 		display: flex;
 		justify-content: space-between;
@@ -282,14 +282,14 @@ const quit = () => {
 
 		image {
 			margin: px2vw(20px);
-			height: px2vw(60px);
-			width: px2vw(60px);
+			height: px2vw(50px);
+			width: px2vw(50px);
 		}
 	}
 
 	.title {
 		margin-left: px2vw(300px);
-		font-size: px2vw(35px);
+		font-size: px2vw(32px);
 		color: white;
 		font-weight: bold;
 	}

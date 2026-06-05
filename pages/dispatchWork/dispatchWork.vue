@@ -1571,6 +1571,9 @@ const dispatchConfirmAction = ref(null)
 /** 防止确认二次弹窗里「确认派工」连触导致 hook 执行两遍 */
 const processDispatchConfirmSubmitting = ref(false)
 
+// ---------- 预派工跳转自动赋值配置 ----------
+const preDispatchConfig = ref(null)
+
 // ---------- 员工相关 ----------
 const employeeList = ref([])
 const selectedEmployee = ref([])
@@ -2224,9 +2227,20 @@ const getBillsListRaw = async () => {
     })
   }
 
+  console.log('[派工] getBillsListRaw请求', {
+    workshop: workshop.value,
+    filters,
+    selectedOrderCode: selectedOrderCode.value,
+    selectedProductionCode: selectedProductionCode.value,
+  })
   const res = await callWorkflowListAPIPaged({
     worksheetId: 'paichanjihua',
     filters
+  })
+  console.log('[派工] getBillsListRaw响应', {
+    hasData: !!res.data,
+    len: res.data?.length,
+    firstRow: res.data?.[0],
   })
 
   let rows = [...(res.data || [])]
@@ -2319,6 +2333,14 @@ const search = async () => {
 
   // 获取单据列表（按车间和单据类型从后端筛选）
   const billsRes = await getBillsListRaw()
+  console.log('[派工] search-getBillsListRaw', {
+    hasData: !!billsRes.data,
+    len: billsRes.data?.length,
+    workshop: workshop.value,
+    billType: billTypeFilter.value,
+    selectedOrderCode: selectedOrderCode.value,
+    selectedProductionCode: selectedProductionCode.value,
+  })
 
   if (!billsRes.data || billsRes.data.length === 0) {
     dbgDispatchProductList('单据接口无数据', { hasData: !!billsRes.data, len: billsRes.data?.length })
@@ -2345,6 +2367,11 @@ const search = async () => {
     }
     const num = Number(item[FIELD_INCOMPLETE_PROCESS_QTY])
     return !Number.isNaN(num) && num > 0
+  })
+  console.log('[派工] 固定过滤后', {
+    before: billsRes.data.length,
+    after: filteredBillsData.length,
+    billType: billTypeFilter.value,
   })
 
   if (dispatchMode.value === 'product') {
@@ -2566,6 +2593,152 @@ const search = async () => {
   const dupFinal = findDuplicateBillKeys(newBillsList)
   dbgDispatchProductList('search 结束 billsList 条数', newBillsList.length, '列表key重复', dupFinal)
   await nextTick()
+
+  // 预派工跳转：数据加载完成后自动选中工序并打开模态框
+  if (preDispatchConfig.value && Array.isArray(preDispatchConfig.value.processDetailSids) && preDispatchConfig.value.processDetailSids.length > 0) {
+    const processDetailSids = preDispatchConfig.value.processDetailSids
+    const cfg = preDispatchConfig.value
+    // 用工序 sid 匹配工序 rowid
+    let matchedBill = null
+    let matchedProcesses = []
+    for (const bill of billsList.value) {
+      for (const sid of processDetailSids) {
+        const matchedProcess = bill.processes.find(p => String(p.rowid || '').trim() === String(sid).trim())
+        if (matchedProcess) {
+          if (!matchedBill) matchedBill = bill
+          matchedProcesses.push({ item: bill, process: matchedProcess })
+        }
+      }
+    }
+    if (matchedProcesses.length > 0 && matchedBill) {
+      if (processDetailSids.length > 1) {
+        // 多对多模式
+        selectedMultiProcesses.value = matchedProcesses
+        await openMultiDispatchModal(matchedBill)
+        // 赋值派工日期和数量
+        if (cfg.dispatchDate) {
+          multiDispatchData.value.date = cfg.dispatchDate
+        }
+        if (cfg.dispatchCount) {
+          const qty = parseFloat(cfg.dispatchCount)
+          if (Number.isFinite(qty) && qty > 0) {
+            multiDispatchData.value.quantity = qty
+          }
+        }
+        // 自动添加员工
+        if (Array.isArray(cfg.dailyWageSids) && cfg.dailyWageSids.length > 0) {
+          await loadMultiEmployeesForPreDispatch(cfg.dailyWageSids)
+        }
+      } else {
+        // 普通模式
+        const matched = matchedProcesses[0]
+        if (isMultiSelectProcessWorkshop.value) {
+          selectedMultiProcesses.value = [matched]
+        } else {
+          selectedProcess.value = matched
+        }
+        await openProcessModal(matched.item, matched.process)
+        // 赋值派工日期和数量（在 openProcessModal 内部处理）
+      }
+    }
+    // 清除配置
+    preDispatchConfig.value = null
+  }
+}
+
+// 提取关联记录的 sid 数组
+const extractSidsFromRelation = (v) => {
+  if (!v) return []
+  if (typeof v === 'string') {
+    const t = v.trim()
+    if (t.startsWith('[')) {
+      try {
+        const p = JSON.parse(t)
+        return extractSidsFromRelation(p)
+      } catch {
+        return []
+      }
+    }
+    return []
+  }
+  if (Array.isArray(v)) {
+    return v
+      .filter(item => item && typeof item === 'object')
+      .map(item => item.sid || item.value || item.id || '')
+      .filter(Boolean)
+  }
+  if (typeof v === 'object') {
+    return [v.sid || v.value || v.id || ''].filter(Boolean)
+  }
+  return []
+}
+
+// 提取关联记录的 name 数组
+const extractNamesFromRelation = (v) => {
+  if (!v) return []
+  if (typeof v === 'string') {
+    const t = v.trim()
+    if (t.startsWith('[')) {
+      try {
+        const p = JSON.parse(t)
+        return extractNamesFromRelation(p)
+      } catch {
+        return []
+      }
+    }
+    return []
+  }
+  if (Array.isArray(v)) {
+    return v
+      .filter(item => item && typeof item === 'object')
+      .map(item => item.name || item.text || item.title || '')
+      .filter(Boolean)
+  }
+  if (typeof v === 'object') {
+    return [v.name || v.text || v.title || ''].filter(Boolean)
+  }
+  return []
+}
+
+// 多对多模式：加载员工并自动勾选
+const loadMultiEmployeesForPreDispatch = async (dailyWageSids) => {
+  if (!Array.isArray(dailyWageSids) || dailyWageSids.length === 0) return
+  const plainSids = JSON.parse(JSON.stringify(dailyWageSids))
+  // 先加载员工列表
+  await loadEmployees()
+  // dailyWageSids 是当日工资表的 rowid，需要查表获取员工的真实ID
+  const wageRes = await callWorkflowListAPIPaged({
+    worksheetId: '692112b021066a9f124f5c9f',
+    filters: [{
+      controlId: 'rowid',
+      dataType: 30,
+      filterType: 2,
+      values: plainSids
+    }],
+    pageSize: 100,
+    pageNum: 1
+  })
+  if (wageRes?.data && wageRes.data.length > 0) {
+    // 从当日工资表获取员工的真实ID（6943bd902161a0fc58bad5ab）
+    const employeeIds = wageRes.data
+      .map(r => String(r['6943bd902161a0fc58bad5ab'] || '').trim())
+      .filter(Boolean)
+    // 用员工ID匹配 allEmployeesMap
+    const matchedEmployeeIds = employeeIds.filter(id => allEmployeesMap.value[id] != null)
+    if (matchedEmployeeIds.length > 0) {
+      multiEmployeeList.value = matchedEmployeeIds.map(id => {
+        const emp = allEmployeesMap.value[id]
+        return {
+          id: emp.id,
+          name: emp.name,
+          position: emp.position || '',
+          totalHours: emp.totalHours || 0,
+          unrecordedHours: emp.unrecordedHours || 0
+        }
+      })
+      selectedMultiEmployees.value = matchedEmployeeIds
+    }
+  }
 }
 
 // ---------- 图片 / SOP 相关方法 ----------
@@ -3904,8 +4077,10 @@ const confirmMultiDispatch = async () => {
 }
 
 // 打开工序派工模态框
-const openProcessModal = (item, process) => {
-  if (openingProcessModalGuard.value || showProcessModal.value) return
+const openProcessModal = async (item, process) => {
+  if (openingProcessModalGuard.value || showProcessModal.value) {
+    return
+  }
   openingProcessModalGuard.value = true
 
   try {
@@ -3942,8 +4117,59 @@ const openProcessModal = (item, process) => {
     isLastIndex.value = 1  // 默认选中第二个选项（否）
     selectedEmployee.value = []
     employeeList.value = []
-    loadEmployees()
+    await loadEmployees()
     showProcessModal.value = true
+
+    // 预派工跳转：自动添加匹配的员工并赋值
+    if (preDispatchConfig.value) {
+      const cfg = preDispatchConfig.value
+      // 赋值派工日期
+      if (cfg.dispatchDate) {
+        processDispatchData.value.date = cfg.dispatchDate
+      }
+      // 赋值派工数量
+      if (cfg.dispatchCount) {
+        const qty = parseFloat(cfg.dispatchCount)
+        if (Number.isFinite(qty) && qty > 0) {
+          processDispatchData.value.quantity = qty
+        }
+      }
+      // 自动添加匹配的员工（dailyWageSids 是当日工资表的 rowid，需要查表获取员工ID）
+      if (Array.isArray(cfg.dailyWageSids) && cfg.dailyWageSids.length > 0 && allEmployeesMap.value) {
+        const plainSids = JSON.parse(JSON.stringify(cfg.dailyWageSids))
+        const wageRes = await callWorkflowListAPIPaged({
+          worksheetId: '692112b021066a9f124f5c9f',
+          filters: [{
+            controlId: 'rowid',
+            dataType: 30,
+            filterType: 2,
+            values: plainSids
+          }],
+          pageSize: 100,
+          pageNum: 1
+        })
+        if (wageRes?.data && wageRes.data.length > 0) {
+          const employeeIds = wageRes.data
+            .map(r => String(r['6943bd902161a0fc58bad5ab'] || '').trim())
+            .filter(Boolean)
+          for (const id of employeeIds) {
+            const emp = allEmployeesMap.value[id]
+            if (emp) {
+              employeeList.value.push({
+                id: emp.id,
+                name: emp.name,
+                position: emp.position || '',
+                totalHours: emp.totalHours || 0,
+                unrecordedHours: emp.unrecordedHours || 0
+              })
+              if (!selectedEmployee.value.includes(id)) {
+                selectedEmployee.value.push(id)
+              }
+            }
+          }
+        }
+      }
+    }
   } finally {
     nextTick(() => {
       openingProcessModalGuard.value = false
@@ -4955,10 +5181,44 @@ onLoad((options) => {
     searchForm.value.orderItem = orderItem
   }
 
+  // 从预派工页面跳转：解析自动赋值参数
+  if (options?.fromPreDispatch === '1') {
+    let processDetailSids = []
+    let dailyWageSids = []
+    try {
+      if (options.processDetailSids) {
+        processDetailSids = JSON.parse(decodeURIComponent(options.processDetailSids))
+      }
+    } catch (e) { /* 解析失败 */ }
+    try {
+      if (options.dailyWageSids) {
+        dailyWageSids = JSON.parse(decodeURIComponent(options.dailyWageSids))
+      }
+    } catch (e) { /* 解析失败 */ }
+    preDispatchConfig.value = {
+      processDetailSids,
+      dailyWageSids,
+      dispatchDate: options.dispatchDate ? decodeURIComponent(options.dispatchDate) : '',
+      dispatchCount: options.dispatchCount ? decodeURIComponent(options.dispatchCount) : '',
+      workshop: options.workshop ? decodeURIComponent(options.workshop) : '',
+    }
+    // 若预派工传了车间，覆盖当前车间
+    if (preDispatchConfig.value.workshop && workshopOptions.value.includes(preDispatchConfig.value.workshop)) {
+      workshop.value = preDispatchConfig.value.workshop
+      isWorkshopLocked.value = preDispatchConfig.value.workshop !== '喷涂车间'
+    }
+    // 若预派工传了产品名称，覆盖 searchForm.orderItem
+    if (options.productName) {
+      searchForm.value.orderItem = decodeURIComponent(options.productName)
+    }
+  }
+
   // 与登录权限 loginLimits 一致，不将喷涂映射为组装（喷涂权限允许在页面内改车间，不锁）
+  // 预派工跳转时，以预派工传入的车间为准，不被 loginLimits 覆盖
   const limitsOnLoad = (userStore.loginLimits || '').trim()
   if (
     !craftProductMode.value &&
+    !preDispatchConfig.value &&
     limitsOnLoad &&
     workshopOptions.value.includes(limitsOnLoad)
   ) {
@@ -4981,8 +5241,10 @@ onLoad((options) => {
 
 onShow(() => {
   const limitsOnShow = (userStore.loginLimits || '').trim()
+  // 预派工跳转时，保留传入的车间，不被 loginLimits 覆盖
   if (
     !craftProductMode.value &&
+    !preDispatchConfig.value &&
     limitsOnShow &&
     workshopOptions.value.includes(limitsOnShow)
   ) {
@@ -5018,7 +5280,7 @@ onUnload(() => {
 
   /* 导航栏样式 */
   .header {
-    height: px2vw(100px);
+    height: px2vw(90px);
     width: 100%;
     display: flex;
     justify-content: space-between;
@@ -5028,8 +5290,8 @@ onUnload(() => {
 
     image {
       margin: px2vw(20px);
-      height: px2vw(60px);
-      width: px2vw(60px);
+      height: px2vw(50px);
+      width: px2vw(50px);
     }
 
     .title {
@@ -5037,7 +5299,7 @@ onUnload(() => {
       left: 50%;
       transform: translateX(-50%);
       margin-left: 0;
-      font-size: px2vw(35px);
+      font-size: px2vw(32px);
       color: white;
       font-weight: bold;
     }

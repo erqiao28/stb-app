@@ -59,21 +59,21 @@
 <style lang="scss">
 	/* 导航栏 */
 	.header {
-		height: px2vw(120px);
+		height: px2vw(90px);
 		width: 100%;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
 		background-color: #5884f1;
-	
+
 		image {
 			margin: px2vw(20px);
-			height: px2vw(60px);
-			width: px2vw(60px);
+			height: px2vw(50px);
+			width: px2vw(50px);
 		}
-	
+
 		.title {
-			font-size: px2vw(40px);
+			font-size: px2vw(32px);
 			color: white;
 			font-weight: bold;
 		}
