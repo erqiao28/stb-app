@@ -6,6 +6,63 @@
 			<view></view>
 		</view>
 
+		<view class="search-box">
+			<view class="search-row">
+				<input
+					v-model="filterOrderCode"
+					type="text"
+					placeholder="订单编号"
+					class="search-input"
+					confirm-type="search"
+					@confirm="handleSearch"
+				/>
+				<input
+					v-model="filterProductName"
+					type="text"
+					placeholder="产品名称"
+					class="search-input"
+					confirm-type="search"
+					@confirm="handleSearch"
+				/>
+				<view class="btn-reset" @click="handleReset">重置</view>
+				<view class="btn-search" @click="handleSearch">搜索</view>
+			</view>
+			<view class="search-row search-row--spec">
+				<input
+					v-model="filterCraft"
+					type="text"
+					placeholder="工艺"
+					class="search-input search-input--spec"
+					confirm-type="search"
+					@confirm="handleSearch"
+				/>
+				<input
+					v-model="filterInnerPaint"
+					type="text"
+					placeholder="内涂料"
+					class="search-input search-input--spec"
+					confirm-type="search"
+					@confirm="handleSearch"
+				/>
+				<input
+					v-model="filterPolish"
+					type="text"
+					placeholder="抛光"
+					class="search-input search-input--spec"
+					confirm-type="search"
+					@confirm="handleSearch"
+				/>
+				<input
+					v-model="filterGuokou"
+					type="text"
+					placeholder="锅口"
+					class="search-input search-input--spec"
+					confirm-type="search"
+					@confirm="handleSearch"
+				/>
+			</view>
+		</view>
+
 		<scroll-view class="pre-dispatched-list" scroll-y @scrolltolower="loadMore">
 			<view
 				class="pre-dispatched-item"
@@ -102,6 +159,13 @@ const hasMore = ref(true)
 const pageNum = ref(1)
 const PAGE_SIZE = 20
 
+const filterOrderCode = ref('')
+const filterProductName = ref('')
+const filterCraft = ref('')
+const filterInnerPaint = ref('')
+const filterPolish = ref('')
+const filterGuokou = ref('')
+
 // 预派工表工作表ID（使用原始ID）
 const WORKSHEET_ID = '6a1e468d27514927ff33cbae'
 
@@ -155,6 +219,25 @@ const formatFieldValue = (v) => {
 		return String(v.name || v.text || v.value || v.label || v.title || '').trim()
 	}
 	return String(v).trim()
+}
+
+// 解析规格型号，提取工艺、内涂料、抛光、锅口
+const parseSpecification = (spec) => {
+	if (!spec) return { craft: '', innerPaint: '', polish: '', guokou: '' }
+	const result = { craft: '', innerPaint: '', polish: '', guokou: '' }
+	const pairs = spec.split(';')
+	for (const pair of pairs) {
+		const idx = pair.indexOf(':')
+		if (idx > 0) {
+			const key = pair.substring(0, idx).trim().toLowerCase()
+			const value = pair.substring(idx + 1).trim()
+			if (key === '工艺') result.craft = value
+			else if (key === '内涂料') result.innerPaint = value
+			else if (key === '抛光') result.polish = value
+			else if (key === '锅口') result.guokou = value
+		}
+	}
+	return result
 }
 
 // 提取关联记录的 sid 数组
@@ -211,6 +294,7 @@ const mapRawRows = (raw) => {
 		worktime: formatFieldValue(item[FIELD_MAP.worktime]),
 		wage: formatFieldValue(item[FIELD_MAP.wage]),
 		specification: formatSpecification(item[FIELD_MAP.specification]),
+		...parseSpecification(item[FIELD_MAP.specification]),
 		processName: formatFieldValue(item[FIELD_MAP.processName]),
 		employeeName: formatFieldValue(item[FIELD_MAP.employeeName]),
 		productionCode: formatFieldValue(item[FIELD_MAP.productionCode]),
@@ -243,6 +327,20 @@ const handleItemClick = (item) => {
 	})
 }
 
+const handleSearch = () => {
+	loadData(true)
+}
+
+const handleReset = () => {
+	filterOrderCode.value = ''
+	filterProductName.value = ''
+	filterCraft.value = ''
+	filterInnerPaint.value = ''
+	filterPolish.value = ''
+	filterGuokou.value = ''
+	loadData(true)
+}
+
 const loadData = async (reset = true) => {
 	const nextPage = reset ? 1 : pageNum.value + 1
 	loadingMore.value = true
@@ -265,6 +363,24 @@ const loadData = async (reset = true) => {
 				values: [loginWorkshop.value]
 			})
 		}
+		if (filterOrderCode.value.trim()) {
+			filters.push({
+				controlId: FIELD_MAP.pureOrderNo,
+				dataType: 11,
+				spliceType: 1,
+				filterType: 1,
+				values: [filterOrderCode.value.trim()]
+			})
+		}
+		if (filterProductName.value.trim()) {
+			filters.push({
+				controlId: FIELD_MAP.productName,
+				dataType: 11,
+				spliceType: 1,
+				filterType: 1,
+				values: [filterProductName.value.trim()]
+			})
+		}
 
 		const res = await callWorkflowListAPIPaged({
 			worksheetId: WORKSHEET_ID,
@@ -275,7 +391,25 @@ const loadData = async (reset = true) => {
 		})
 
 		const raw = Array.isArray(res?.data) ? res.data : []
-		const mapped = mapRawRows(raw)
+		let mapped = mapRawRows(raw)
+
+		// 本地筛选：工艺、内涂料、抛光、锅口（从规格型号提取的字段，无法通过API筛选）
+		if (filterCraft.value.trim()) {
+			const keyword = filterCraft.value.trim().toLowerCase()
+			mapped = mapped.filter(item => item.craft.toLowerCase().includes(keyword))
+		}
+		if (filterInnerPaint.value.trim()) {
+			const keyword = filterInnerPaint.value.trim().toLowerCase()
+			mapped = mapped.filter(item => item.innerPaint.toLowerCase().includes(keyword))
+		}
+		if (filterPolish.value.trim()) {
+			const keyword = filterPolish.value.trim().toLowerCase()
+			mapped = mapped.filter(item => item.polish.toLowerCase().includes(keyword))
+		}
+		if (filterGuokou.value.trim()) {
+			const keyword = filterGuokou.value.trim().toLowerCase()
+			mapped = mapped.filter(item => item.guokou.toLowerCase().includes(keyword))
+		}
 
 		if (reset) {
 			preDispatchedList.value = mapped
@@ -337,6 +471,58 @@ onMounted(() => {
 			font-size: px2vw(32px);
 			color: white;
 			font-weight: bold;
+		}
+	}
+
+	.search-box {
+		background-color: #fff;
+		padding: px2vw(10px);
+		border-bottom: 1px solid #eee;
+		flex-shrink: 0;
+
+		.search-row {
+			display: flex;
+			gap: px2vw(10px);
+			margin-bottom: px2vw(10px);
+
+			&.search-row--spec {
+				margin-bottom: 0;
+			}
+
+			.search-input {
+				flex: 1;
+				height: px2vw(70px);
+				background-color: #f5f7fa;
+				border-radius: px2vw(8px);
+				padding: 0 px2vw(16px);
+				font-size: px2vw(24px);
+
+				&.search-input--spec {
+					height: px2vw(60px);
+					font-size: px2vw(22px);
+				}
+			}
+
+			.btn-reset,
+			.btn-search {
+				flex-shrink: 0;
+				padding: 0 px2vw(24px);
+				height: px2vw(70px);
+				line-height: px2vw(70px);
+				border-radius: px2vw(8px);
+				font-size: px2vw(26px);
+				text-align: center;
+			}
+
+			.btn-reset {
+				background-color: #f5f7fa;
+				color: #666;
+			}
+
+			.btn-search {
+				background-color: #5884f1;
+				color: #fff;
+			}
 		}
 	}
 
