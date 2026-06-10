@@ -2709,8 +2709,8 @@ const extractNamesFromRelation = (v) => {
 const loadMultiEmployeesForPreDispatch = async (dailyWageSids, orderedProcessNames = []) => {
   if (!Array.isArray(dailyWageSids) || dailyWageSids.length === 0) return
   const plainSids = JSON.parse(JSON.stringify(dailyWageSids))
-  // 先加载员工列表
-  await loadEmployees()
+  // 加载员工列表（预派工模式跳过车间过滤）
+  await loadEmployees(true)
   // dailyWageSids 是当日工资表的 rowid，需要查表获取员工的真实ID
   const wageRes = await callWorkflowListAPIPaged({
     worksheetId: '692112b021066a9f124f5c9f',
@@ -4497,28 +4497,35 @@ const handleDispatchConfirm = async () => {
 }
 
 // ---------- 员工相关方法 ----------
-const loadEmployees = async () => {
+const loadEmployees = async (skipWorkshopFilter = false) => {
   try {
     // 每次请求时获取当前日期
     const currentDate = getCurrentDate()
     
     // 使用模态框中的车间值，如果没有则使用页面车间值
+    // 喷涂车间会被 applyWorkshopWhenOpeningAddEmployeeModal 改为组装车间
     const selectedWorkshop = modalWorkshop.value || workshop.value
     
-    const res = await callWorkflowListAPIPaged({
-      worksheetId: 'yggs',
-      filters: [{
+    const filters = [{
+      "controlId": "6943bd902161a0fc58bad5ab",
+      "dataType": 30,
+      "spliceType": 1,
+      "filterType": 8
+    }]
+    // 非预派工模式时，添加车间过滤
+    if (!skipWorkshopFilter && selectedWorkshop) {
+      filters.unshift({
         "controlId": "696075d19223cfe3a0c169dc",
         "dataType": 30,
         "spliceType": 1,
         "filterType": 2,
         "values": [selectedWorkshop]
-      }, {
-        "controlId": "6943bd902161a0fc58bad5ab",
-        "dataType": 30,
-        "spliceType": 1,
-        "filterType": 8
-      }],
+      })
+    }
+    
+    const res = await callWorkflowListAPIPaged({
+      worksheetId: 'yggs',
+      filters,
       pageSize: 100,
       pageNum: 1
     })
@@ -4538,9 +4545,9 @@ const loadEmployees = async () => {
           dispatchWorkDate: dispatchWorkDate
         }
       })
-      .filter(emp => emp.dispatchWorkDate === currentDate)
+      const filteredEmployees = mappedEmployees.filter(emp => emp.dispatchWorkDate === currentDate)
 
-      allEmployeesOptions.value = mappedEmployees.map(emp => ({
+      allEmployeesOptions.value = filteredEmployees.map(emp => ({
         label: emp.name,
         value: emp.id,
         position: emp.position || '',
@@ -4549,7 +4556,7 @@ const loadEmployees = async () => {
       }))
 
       allEmployeesMap.value = {}
-      mappedEmployees.forEach(emp => {
+      filteredEmployees.forEach(emp => {
         allEmployeesMap.value[emp.id] = emp
       })
     } else {
