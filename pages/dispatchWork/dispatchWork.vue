@@ -383,6 +383,7 @@
                   <view v-for="(process, index) in multiDispatchSelectedProcessesForModal" :key="index" class="process-display-inline-wrapper">
                     <view class="process-display-inline-box">
                       <text class="process-display-inline-name">{{ process.process.processName }}</text>
+                      <text class="process-display-inline-remove" @click="removeProcessFromMultiDispatch(process)">×</text>
                     </view>
                     <view v-if="index < multiDispatchSelectedProcessesForModal.length - 1" class="process-display-connector">→</view>
                   </view>
@@ -2612,8 +2613,12 @@ const search = async () => {
     }
     if (matchedProcesses.length > 0 && matchedBill) {
       if (processDetailSids.length > 1) {
-        // 多对多模式
-        selectedMultiProcesses.value = matchedProcesses
+        // 多对多模式：按 sequence 排序工序
+        const sortedProcesses = [...matchedProcesses].sort((a, b) =>
+          (Number(a.process?.sequence) || 0) - (Number(b.process?.sequence) || 0)
+        )
+        const orderedProcessNames = sortedProcesses.map(p => p.process?.processName).filter(Boolean)
+        selectedMultiProcesses.value = sortedProcesses
         await openMultiDispatchModal(matchedBill)
         // 赋值派工日期和数量
         if (cfg.dispatchDate) {
@@ -2625,9 +2630,9 @@ const search = async () => {
             multiDispatchData.value.quantity = qty
           }
         }
-        // 自动添加员工
+        // 自动添加员工（按工序顺序排序）
         if (Array.isArray(cfg.dailyWageSids) && cfg.dailyWageSids.length > 0) {
-          await loadMultiEmployeesForPreDispatch(cfg.dailyWageSids)
+          await loadMultiEmployeesForPreDispatch(cfg.dailyWageSids, orderedProcessNames)
         }
       } else {
         // 普通模式
@@ -2701,7 +2706,7 @@ const extractNamesFromRelation = (v) => {
 }
 
 // 多对多模式：加载员工并自动勾选
-const loadMultiEmployeesForPreDispatch = async (dailyWageSids) => {
+const loadMultiEmployeesForPreDispatch = async (dailyWageSids, orderedProcessNames = []) => {
   if (!Array.isArray(dailyWageSids) || dailyWageSids.length === 0) return
   const plainSids = JSON.parse(JSON.stringify(dailyWageSids))
   // 先加载员工列表
@@ -2726,7 +2731,7 @@ const loadMultiEmployeesForPreDispatch = async (dailyWageSids) => {
     // 用员工ID匹配 allEmployeesMap
     const matchedEmployeeIds = employeeIds.filter(id => allEmployeesMap.value[id] != null)
     if (matchedEmployeeIds.length > 0) {
-      multiEmployeeList.value = matchedEmployeeIds.map(id => {
+      let empList = matchedEmployeeIds.map(id => {
         const emp = allEmployeesMap.value[id]
         return {
           id: emp.id,
@@ -2736,7 +2741,12 @@ const loadMultiEmployeesForPreDispatch = async (dailyWageSids) => {
           unrecordedHours: emp.unrecordedHours || 0
         }
       })
-      selectedMultiEmployees.value = matchedEmployeeIds
+      // 按工序顺序排序（喷涂车间）
+      if (workshop.value === '喷涂车间' && orderedProcessNames.length > 0) {
+        empList = reorderEmployeesBySprayProcessSequence(empList, orderedProcessNames)
+      }
+      multiEmployeeList.value = empList
+      selectedMultiEmployees.value = empList.map(e => String(e.id))
     }
   }
 }
@@ -3121,6 +3131,16 @@ const isProcessSelected = (item, process) => {
   if (!selectedProcess.value) return false
   return isSameBillAs(selectedProcess.value.item, item) &&
          selectedProcess.value.process.rowid === process.rowid
+}
+
+// 从多对多弹窗的所选工序中移除指定工序
+const removeProcessFromMultiDispatch = (processEntry) => {
+  const index = selectedMultiProcesses.value.findIndex(p =>
+    isSameBillAs(p.item, processEntry.item) && p.process.rowid === processEntry.process.rowid
+  )
+  if (index >= 0) {
+    selectedMultiProcesses.value.splice(index, 1)
+  }
 }
 
 // 多选工序相关方法（以订单编码 + 工序 rowid 为基准）
@@ -7695,8 +7715,20 @@ onUnload(() => {
       text-align: center;
       white-space: nowrap;
     }
+
+    .process-display-inline-remove {
+      margin-left: px2vw(8px);
+      color: #ff4444;
+      font-size: px2vw(28px);
+      font-weight: bold;
+      line-height: 1;
+
+      &:active {
+        opacity: 0.7;
+      }
+    }
   }
-  
+
   .process-display-connector {
     margin: 0 px2vw(8px);
     color: #333;
