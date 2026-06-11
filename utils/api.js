@@ -116,3 +116,6 @@ export const BATCH_DISPATCH_URL = apiUrl('/api/workflow/hooks/NmEwZWM2YmU4MWZiNG
 
 /** 操作工序（产品详情页模态框） */
 export const OPERATE_PROCESS_URL = apiUrl('/api/workflow/hooks/NmEwYmQyNmI4MWZiNGY2MDZmMWQxMzY4')
+
+/** 预派工作废 */
+export const PRE_DISPATCH_VOID_URL = apiUrl('/api/workflow/hooks/NmEyYTEzMGMzN2MwOTg0NTBhMDFlMzQ2')

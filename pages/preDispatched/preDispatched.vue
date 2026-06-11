@@ -69,6 +69,10 @@
 				v-for="(item, idx) in preDispatchedList"
 				:key="item.rowid || ('row-' + idx)"
 				@click="handleItemClick(item)"
+				@longpress="handleLongPress(item)"
+				@mousedown="onMouseDown(item)"
+				@mouseup="onMouseUp"
+				@mouseleave="onMouseUp"
 			>
 				<view class="item-body">
 					<view class="info-row">
@@ -135,6 +139,23 @@
 				<text class="empty-text">暂无预派工数据</text>
 			</view>
 		</scroll-view>
+
+		<!-- 作废确认弹窗 -->
+		<view class="void-modal" v-if="showVoidModal" @click.self="closeVoidModal">
+			<view class="void-modal-content">
+				<view class="void-modal-title">作废确认</view>
+				<input
+					v-model="voidReason"
+					type="text"
+					placeholder="请输入作废原因"
+					class="void-input"
+				/>
+				<view class="void-modal-buttons">
+					<view class="void-btn-cancel" @click="closeVoidModal">取消</view>
+					<view class="void-btn-confirm" @click="confirmVoid">确认</view>
+				</view>
+			</view>
+		</view>
 	</view>
 </template>
 
@@ -143,6 +164,8 @@ import { ref, onMounted, computed } from 'vue'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
+import http from '../../utils/request'
+import { PRE_DISPATCH_VOID_URL } from '../../utils/api'
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
 
@@ -158,6 +181,10 @@ const loadingMore = ref(false)
 const hasMore = ref(true)
 const pageNum = ref(1)
 const PAGE_SIZE = 20
+
+const showVoidModal = ref(false)
+const voidReason = ref('')
+const voidRowid = ref('')
 
 const filterOrderCode = ref('')
 const filterProductName = ref('')
@@ -304,7 +331,6 @@ const mapRawRows = (raw) => {
 }
 
 const handleItemClick = (item) => {
-	// item 是 mapRawRows 映射后的数据，processDetail 和 dailyWage 已经是 sid 数组
 	const processDetailSids = Array.isArray(item.processDetail) ? item.processDetail : []
 	const dailyWageSids = Array.isArray(item.dailyWage) ? item.dailyWage : []
 	const params = {
@@ -433,6 +459,61 @@ const loadData = async (reset = true) => {
 	}
 }
 
+const handleLongPress = (item) => {
+	showVoidModal.value = true
+	voidReason.value = ''
+	voidRowid.value = item.rowid || ''
+}
+
+let longPressTimer = null
+
+const onMouseDown = (item) => {
+	longPressTimer = setTimeout(() => {
+		handleLongPress(item)
+	}, 500)
+}
+
+const onMouseUp = () => {
+	if (longPressTimer) {
+		clearTimeout(longPressTimer)
+		longPressTimer = null
+	}
+}
+
+const closeVoidModal = () => {
+	showVoidModal.value = false
+	voidReason.value = ''
+	voidRowid.value = ''
+}
+
+const confirmVoid = async () => {
+	if (!voidReason.value.trim()) {
+		uni.showToast({ title: '请输入作废原因', icon: 'none' })
+		return
+	}
+	if (!voidRowid.value) {
+		uni.showToast({ title: '缺少记录ID', icon: 'none' })
+		return
+	}
+	console.log('作废参数:', { rowid: voidRowid.value, reason: voidReason.value.trim() })
+	try {
+		const resp = await http.post(PRE_DISPATCH_VOID_URL, {
+			rowid: voidRowid.value,
+			reason: voidReason.value.trim()
+		})
+		closeVoidModal()
+		if (resp.status === 1) {
+			uni.showToast({ title: resp.message || resp.msg || '作废失败', icon: 'none' })
+			return
+		}
+		uni.showToast({ title: '作废成功', icon: 'success' })
+		loadData(true)
+	} catch (e) {
+		console.error('作废失败:', e)
+		uni.showToast({ title: '作废失败', icon: 'none' })
+	}
+}
+
 const loadMore = () => {
 	if (loadingMore.value || !hasMore.value) return
 	loadData(false)
@@ -518,11 +599,6 @@ onMounted(() => {
 				background-color: #f5f7fa;
 				color: #666;
 			}
-
-			.btn-search {
-				background-color: #5884f1;
-				color: #fff;
-			}
 		}
 	}
 
@@ -558,6 +634,21 @@ onMounted(() => {
 							.value {
 								color: #e67e22;
 								font-weight: 500;
+							}
+						}
+
+						.item-actions {
+							display: flex;
+							align-items: center;
+							gap: px2vw(10px);
+
+							.btn-item-void {
+								padding: px2vw(6px) px2vw(16px);
+								background-color: #ff4d4f;
+								color: #fff;
+								border-radius: px2vw(6px);
+								font-size: px2vw(22px);
+								white-space: nowrap;
 							}
 						}
 					}
@@ -610,6 +701,69 @@ onMounted(() => {
 				font-size: px2vw(28px);
 				color: #aaa;
 			}
+		}
+	}
+}
+
+.void-modal {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 999;
+
+	.void-modal-content {
+		width: px2vw(600px);
+		background-color: #fff;
+		border-radius: px2vw(16px);
+		padding: px2vw(40px);
+	}
+
+	.void-modal-title {
+		font-size: px2vw(32px);
+		font-weight: bold;
+		text-align: center;
+		margin-bottom: px2vw(30px);
+	}
+
+	.void-input {
+		width: 100%;
+		height: px2vw(80px);
+		border: 1px solid #ddd;
+		border-radius: px2vw(8px);
+		padding: 0 px2vw(20px);
+		font-size: px2vw(28px);
+		box-sizing: border-box;
+		margin-bottom: px2vw(30px);
+	}
+
+	.void-modal-buttons {
+		display: flex;
+		gap: px2vw(20px);
+
+		.void-btn-cancel,
+		.void-btn-confirm {
+			flex: 1;
+			height: px2vw(80px);
+			line-height: px2vw(80px);
+			text-align: center;
+			border-radius: px2vw(8px);
+			font-size: px2vw(28px);
+		}
+
+		.void-btn-cancel {
+			background-color: #f5f7fa;
+			color: #666;
+		}
+
+		.void-btn-confirm {
+			background-color: #ff4d4f;
+			color: #fff;
 		}
 	}
 }
