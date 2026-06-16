@@ -20,7 +20,6 @@
         <view class="search-main-row">
           <view class="search-filters-row">
         <view class="filter-row filter-row--order">
-          <text class="filter-label">订单编号</text>
           <view class="product-name-stack">
             <view class="suggest-field">
               <view class="suggest-input-box suggest-input-box--chips suggest-input-box--compact">
@@ -38,7 +37,7 @@
                 <input
                   v-model="orderSuggestInput"
                   type="text"
-                  placeholder="输入关键词，点下方加入"
+                  placeholder="订单编号"
                   confirm-type="search"
                 />
               </view>
@@ -55,7 +54,6 @@
         </view>
 
         <view class="filter-row filter-row--product">
-          <text class="filter-label">产品名称</text>
           <view class="product-name-stack">
             <view class="suggest-field">
               <view class="suggest-input-box suggest-input-box--chips suggest-input-box--compact">
@@ -73,7 +71,7 @@
                 <input
                   v-model="productNameSuggestInput"
                   type="text"
-                  placeholder="输入关键词，点下方加入"
+                  placeholder="产品名称"
                   confirm-type="search"
                 />
               </view>
@@ -104,7 +102,6 @@
 
       <view v-if="specFiltersExpanded" class="search-filters-row search-filters-row--spec">
         <view class="filter-row filter-row--spec">
-          <text class="filter-label">锅口</text>
           <view class="product-name-stack">
             <view class="suggest-field">
               <view class="suggest-input-box suggest-input-box--chips suggest-input-box--compact">
@@ -122,7 +119,7 @@
                 <input
                   v-model="guokouSuggestInput"
                   type="text"
-                  placeholder="输入关键词，点下方加入"
+                  placeholder="锅口"
                   confirm-type="search"
                 />
               </view>
@@ -136,7 +133,6 @@
         </view>
 
         <view class="filter-row filter-row--spec">
-          <text class="filter-label">工艺</text>
           <view class="product-name-stack">
             <view class="suggest-field">
               <view class="suggest-input-box suggest-input-box--chips suggest-input-box--compact">
@@ -154,7 +150,7 @@
                 <input
                   v-model="craftSuggestInput"
                   type="text"
-                  placeholder="输入关键词，点下方加入"
+                  placeholder="工艺"
                   confirm-type="search"
                 />
               </view>
@@ -168,7 +164,6 @@
         </view>
 
         <view class="filter-row filter-row--spec">
-          <text class="filter-label">抛光</text>
           <view class="product-name-stack">
             <view class="suggest-field">
               <view class="suggest-input-box suggest-input-box--chips suggest-input-box--compact">
@@ -186,7 +181,7 @@
                 <input
                   v-model="polishSuggestInput"
                   type="text"
-                  placeholder="输入关键词，点下方加入"
+                  placeholder="抛光"
                   confirm-type="search"
                 />
               </view>
@@ -816,26 +811,25 @@ const confirmSelectedProducts = () => {
   .search-box {
     width: 100%;
     background-color: #fff;
-    min-height: px2vw(100px);
-    padding: px2vw(15px) px2vw(20px);
-    margin: px2vw(10px);
-    border-radius: px2vw(18px);
+    padding: px2vw(10px);
+    border-bottom: 1px solid #eee;
     box-sizing: border-box;
     position: relative;
     z-index: 5;
+    flex-shrink: 0;
 
     .search-box-inner {
       width: 100%;
       display: flex;
       flex-direction: column;
-      gap: px2vw(12px);
+      gap: px2vw(10px);
     }
 
     .search-main-row {
       display: flex;
       flex-direction: row;
-      align-items: flex-end;
-      gap: px2vw(12px);
+      align-items: center;
+      gap: px2vw(10px);
       min-width: 0;
     }
 
@@ -845,15 +839,13 @@ const confirmSelectedProducts = () => {
       flex-direction: row;
       align-items: center;
       gap: px2vw(10px);
-      padding-bottom: px2vw(2px);
     }
 
     .spec-expand-btn {
-      width: px2vw(76px);
-      height: px2vw(76px);
-      border-radius: px2vw(14px);
-      border: px2vw(3px) solid #5884f1;
-      background-color: #fff;
+      width: px2vw(70px);
+      height: px2vw(70px);
+      border-radius: px2vw(8px);
+      background-color: #f5f7fa;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -861,8 +853,8 @@ const confirmSelectedProducts = () => {
     }
 
     .spec-expand-arrow {
-      font-size: px2vw(32px);
-      color: #5884f1;
+      font-size: px2vw(28px);
+      color: #666;
       line-height: 1;
     }
 
@@ -871,8 +863,8 @@ const confirmSelectedProducts = () => {
       min-width: 0;
       display: flex;
       flex-direction: row;
-      align-items: flex-start;
-      gap: px2vw(16px);
+      align-items: center;
+      gap: px2vw(10px);
     }
 
     .search-filters-row--spec {
@@ -893,14 +885,6 @@ const confirmSelectedProducts = () => {
       display: flex;
       flex-direction: column;
       align-items: stretch;
-      gap: px2vw(6px);
-    }
-
-    .filter-label {
-      font-size: px2vw(24px);
-      color: #333;
-      line-height: 1.3;
-      flex-shrink: 0;
     }
 
     .filter-row--order {
@@ -925,11 +909,11 @@ const confirmSelectedProducts = () => {
       flex-direction: row;
       align-items: center;
       max-width: 100%;
-      padding: px2vw(6px) px2vw(12px);
-      border-radius: px2vw(10px);
+      padding: px2vw(4px) px2vw(10px);
+      border-radius: px2vw(6px);
       background-color: #e8eefc;
       border: px2vw(2px) solid #b8c8f5;
-      font-size: px2vw(22px);
+      font-size: px2vw(20px);
       color: #2755f1;
       box-sizing: border-box;
     }
@@ -940,12 +924,12 @@ const confirmSelectedProducts = () => {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      margin-right: px2vw(8px);
+      margin-right: px2vw(6px);
     }
 
     .filter-tag-close {
       flex-shrink: 0;
-      font-size: px2vw(30px);
+      font-size: px2vw(26px);
       line-height: 1;
       color: #666;
     }
@@ -957,17 +941,16 @@ const confirmSelectedProducts = () => {
 
     .suggest-input-box {
       width: 100%;
-      border: px2vw(3px) solid #5884f1;
-      border-radius: px2vw(18px);
+      border-radius: px2vw(8px);
       box-sizing: border-box;
-      background-color: #fff;
+      background-color: #f5f7fa;
     }
 
     .filter-tags-inline {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: px2vw(8px);
+      gap: px2vw(6px);
       margin-right: px2vw(6px);
     }
 
@@ -977,16 +960,16 @@ const confirmSelectedProducts = () => {
       flex-wrap: wrap;
       align-items: center;
       align-content: center;
-      gap: px2vw(8px);
-      min-height: px2vw(80px);
-      padding: px2vw(10px) px2vw(18px);
+      gap: px2vw(6px);
+      min-height: px2vw(70px);
+      padding: px2vw(8px) px2vw(12px);
       box-sizing: border-box;
 
       input {
         flex: 1;
-        min-width: px2vw(160px);
-        height: px2vw(52px);
-        font-size: px2vw(25px);
+        min-width: px2vw(120px);
+        height: px2vw(44px);
+        font-size: px2vw(22px);
         border: none;
         background: transparent;
         padding: 0;
@@ -995,8 +978,8 @@ const confirmSelectedProducts = () => {
 
     /* 双列：输入随剩余空间拉满便于点击；标签 flex-wrap，多条自动换行 */
     .suggest-input-box--chips.suggest-input-box--compact {
-      min-height: px2vw(76px);
-      padding: px2vw(10px) px2vw(12px);
+      min-height: px2vw(70px);
+      padding: px2vw(8px) px2vw(10px);
       align-items: center;
 
       input {
@@ -1005,8 +988,8 @@ const confirmSelectedProducts = () => {
         min-width: 0;
         width: auto;
         font-size: px2vw(22px);
-        min-height: px2vw(52px);
-        height: px2vw(52px);
+        min-height: px2vw(44px);
+        height: px2vw(44px);
         box-sizing: border-box;
       }
     }
@@ -1020,15 +1003,15 @@ const confirmSelectedProducts = () => {
       max-height: px2vw(420px);
       overflow-y: auto;
       background-color: #fff;
-      border: px2vw(3px) solid #5884f1;
-      border-radius: px2vw(14px);
+      border: px2vw(2px) solid #ddd;
+      border-radius: px2vw(8px);
       z-index: 30;
       box-shadow: 0 px2vw(8px) px2vw(24px) rgba(0, 0, 0, 0.12);
     }
 
     .suggest-item {
-      padding: px2vw(20px) px2vw(22px);
-      font-size: px2vw(26px);
+      padding: px2vw(16px) px2vw(18px);
+      font-size: px2vw(24px);
       color: #333;
       border-bottom: px2vw(1px) solid #f0f0f0;
     }
@@ -1046,15 +1029,15 @@ const confirmSelectedProducts = () => {
     .input-box {
       flex: 1;
       min-width: 0;
-      height: px2vw(80px);
-      border: px2vw(3px) solid #5884f1;
-      border-radius: px2vw(18px);
+      height: px2vw(70px);
+      background-color: #f5f7fa;
+      border-radius: px2vw(8px);
       display: flex;
       align-items: center;
-      padding: 0 px2vw(30px);
+      padding: 0 px2vw(16px);
 
       input {
-        font-size: px2vw(25px);
+        font-size: px2vw(22px);
         width: 100%;
       }
     }
@@ -1063,17 +1046,17 @@ const confirmSelectedProducts = () => {
       flex-shrink: 0;
       margin: 0;
       width: auto;
-      min-width: px2vw(148px);
-      height: px2vw(76px);
+      min-width: px2vw(120px);
+      height: px2vw(70px);
       padding: 0 px2vw(22px);
       box-sizing: border-box;
       display: flex;
       justify-content: center;
       align-items: center;
-      border-radius: px2vw(14px);
+      border-radius: px2vw(8px);
       color: #fff;
       background-color: #28a745;
-      font-size: px2vw(25px);
+      font-size: px2vw(26px);
     }
   }
 

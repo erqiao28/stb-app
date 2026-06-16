@@ -125,15 +125,10 @@
             <text class="selected-process-name">{{ selectedProcess.processName || '-' }}</text>
           </view>
 
-          <!-- 搜索和车间筛选 -->
+          <!-- 搜索 -->
           <view class="filter-bar">
             <view class="search-box">
               <input type="text" placeholder="请输入工序名称" v-model="modalSearchValue" @input="handleModalSearch" />
-            </view>
-            <view class="workshop-picker">
-              <picker mode="selector" :range="workshopOptions" :value="modalWorkshopIndex" @change="onModalWorkshopChange">
-                <view class="picker-value">{{ workshopOptions[modalWorkshopIndex] }}</view>
-              </picker>
             </view>
           </view>
 
@@ -392,8 +387,6 @@ const quit = () => {
 
 // ==================== 操作工序模态框 ====================
 const showActionModal = ref(false)
-const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
-const modalWorkshopIndex = ref(0)
 const modalSearchValue = ref('')
 const modalTableData = ref([])
 const modalCurrentPage = ref(1)
@@ -405,11 +398,6 @@ const modalProductionSequence = ref('')
 const modifyModeOptions = ref(['添加', '替换'])
 const modalModifyModeIndex = ref(0)
 
-const NEW_PROCESS_NAME_CHAR = '新'
-
-const shouldLimitToNewChar = (workshop) =>
-  workshop === '拉伸车间' || workshop === '喷涂车间'
-
 const openActionModal = () => {
   // 必须选中一个工序才能打开模态框
   if (!selectedProcess.value) {
@@ -418,7 +406,6 @@ const openActionModal = () => {
   }
   showActionModal.value = true
   // 初始化默认值
-  modalWorkshopIndex.value = 0
   modalSearchValue.value = ''
   modalSelectedProcess.value = null
   modalModifyModeIndex.value = 0
@@ -434,12 +421,6 @@ const closeActionModal = () => {
   showActionModal.value = false
 }
 
-const onModalWorkshopChange = (e) => {
-  modalWorkshopIndex.value = Number(e.detail.value) || 0
-  modalSearchValue.value = ''
-  loadModalProcessList(1, true)
-}
-
 const handleModalSearch = () => {
   loadModalProcessList(1, true)
 }
@@ -452,13 +433,10 @@ const loadModalMore = () => {
 const loadModalProcessList = async (pageNum, isRefresh = false) => {
   if (modalLoading.value) return
   modalLoading.value = true
-  const workshop = workshopOptions.value[modalWorkshopIndex.value]
-  const limitNewChar = shouldLimitToNewChar(workshop)
 
   const baseFilters = [
     { controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
-    { controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
-    { controlId: '691e8522d50c894e2e798d03', dataType: 30, spliceType: 1, filterType: 2, values: [workshop] }
+    { controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] }
   ]
 
   let filters = [...baseFilters]
@@ -470,14 +448,6 @@ const loadModalProcessList = async (pageNum, isRefresh = false) => {
       spliceType: 1,
       filterType: 1,
       values: [nameSearch]
-    })
-  } else if (limitNewChar) {
-    filters.push({
-      controlId: '6614b6721103c1d5d3a08122',
-      dataType: 30,
-      spliceType: 1,
-      filterType: 1,
-      values: [NEW_PROCESS_NAME_CHAR]
     })
   }
 
@@ -491,12 +461,6 @@ const loadModalProcessList = async (pageNum, isRefresh = false) => {
       processName: item['Name'],
       rowid: item['rowid'] || ''
     }))
-
-    if (limitNewChar) {
-      mappedData = mappedData.filter((row) =>
-        String(row.processName || '').includes(NEW_PROCESS_NAME_CHAR)
-      )
-    }
 
     if (isRefresh) {
       modalTableData.value = mappedData
@@ -531,8 +495,7 @@ const confirmAction = async () => {
     sequence: parseFloat(modalProductionSequence.value) || 0,
     modifyMode: modifyModeOptions.value[modalModifyModeIndex.value] || '添加',
     selectedProcessId: selectedProcess.value?.rowid || '',
-    productionCode: productionCode.value || '',
-    workshop: workshopOptions.value[modalWorkshopIndex.value] || ''
+    productionCode: productionCode.value || ''
   }
 
   console.log('【操作工序】请求参数:', JSON.stringify(params))
@@ -1132,32 +1095,6 @@ const deleteSelectedProcess = async () => {
         outline: none;
         font-size: px2vw(28px);
         background: transparent;
-      }
-    }
-
-    .workshop-picker {
-      flex: 0 0 px2vw(400px);
-      height: px2vw(80px);
-      background-color: #5884f1;
-      border-radius: px2vw(12px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0 px2vw(20px);
-      box-sizing: border-box;
-
-      picker {
-        width: 100%;
-      }
-
-      .picker-value {
-        font-size: px2vw(28px);
-        color: white;
-        text-align: center;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        font-weight: bold;
       }
     }
   }

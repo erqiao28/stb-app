@@ -18,13 +18,18 @@
 
 		<!-- 搜索区域：销售订单 + 查询（排产类型由入口参数/缓存固定，不再提供切换按钮） -->
 		<view class="search-box">
-			<view class="salesOrder">
-				<text class="salesOrder-text">销售订单</text>
-				<view class="input-box">
-					<input type="text" v-model="searchForm.salesOrder" placeholder="请输入销售订单" />
-				</view>
+			<view class="search-row">
+				<input
+					v-model="searchForm.salesOrder"
+					type="text"
+					placeholder="销售订单"
+					class="search-input"
+					confirm-type="search"
+					@confirm="search"
+				/>
+				<view class="btn-reset" @click="handleReset">重置</view>
+				<view class="btn-search" @click="search">搜索</view>
 			</view>
-			<view class="btn-item search-btn" @click="search">查询</view>
 		</view>
 
 		<!-- 订单列表：订单编号、出货时间、客户名称、产品数量（返工排产时显示为返工产品数量）；上拉加载更多 -->
@@ -325,6 +330,11 @@ const search = async () => {
 	}
 }
 
+const handleReset = () => {
+	searchForm.value.salesOrder = ''
+	search()
+}
+
 const loadMore = async () => {
 	if (!hasMore.value || loadingMore.value || listLoading.value) return
 	const nextPage = listPageNum.value + 1
@@ -442,8 +452,7 @@ const goTimeWork = () => {
 		}
 	}
 
-	.btn-list .btn-item,
-	.search-box .search-btn {
+	.btn-list .btn-item {
 		height: px2vw(80px);
 		padding: px2vw(16px) px2vw(25px);
 		display: flex;
@@ -457,53 +466,45 @@ const goTimeWork = () => {
 	}
 
 	.search-box {
-		$search-row-btn-w: px2vw(340px);
-
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		width: 100%;
 		background-color: #fff;
-		min-height: px2vw(120px);
-		padding: px2vw(10px) px2vw(10px);
-		margin: px2vw(10px) px2vw(5px);
-		border-radius: px2vw(18px);
-		box-sizing: border-box;
-		gap: px2vw(10px);
+		padding: px2vw(10px);
+		border-bottom: 1px solid #eee;
+		flex-shrink: 0;
 
-		.salesOrder {
+		.search-row {
 			display: flex;
+			gap: px2vw(10px);
 			align-items: center;
-			flex: 1;
-			min-width: 0;
 
-			.salesOrder-text {
-				font-size: px2vw(25px);
-				margin-right: px2vw(10px);
-				white-space: nowrap;
-			}
-
-			.input-box {
+			.search-input {
 				flex: 1;
-				min-width: 0;
-				height: px2vw(80px);
-				border: px2vw(3px) solid #5884f1;
-				border-radius: px2vw(18px);
-				display: flex;
-				align-items: center;
-				padding: 0 px2vw(24px);
-
-				input {
-					font-size: px2vw(25px);
-					width: 100%;
-				}
+				height: px2vw(70px);
+				background-color: #f5f7fa;
+				border-radius: px2vw(8px);
+				padding: 0 px2vw(16px);
+				font-size: px2vw(24px);
 			}
-		}
 
-		.search-btn {
-			flex: 0 0 $search-row-btn-w;
-			width: $search-row-btn-w;
-			box-sizing: border-box;
+			.btn-reset,
+			.btn-search {
+				flex-shrink: 0;
+				padding: 0 px2vw(24px);
+				height: px2vw(70px);
+				line-height: px2vw(70px);
+				border-radius: px2vw(8px);
+				font-size: px2vw(26px);
+				text-align: center;
+			}
+
+			.btn-reset {
+				background-color: #f5f7fa;
+				color: #666;
+			}
+
+			.btn-search {
+				background-color: #2755f1;
+				color: #fff;
+			}
 		}
 	}
 
