@@ -1574,6 +1574,7 @@ const processDispatchConfirmSubmitting = ref(false)
 
 // ---------- 预派工跳转自动赋值配置 ----------
 const preDispatchConfig = ref(null)
+const preDispatchRowid = ref('')
 
 // ---------- 员工相关 ----------
 const employeeList = ref([])
@@ -1714,6 +1715,8 @@ const employeeModalAutoSelectMatching = computed(() => {
 /** 相同 body 并发时合并为一次 uni.request（防止极端双击）；地址见 utils/api DISPATCH_PROCESS_URL */
 const processDispatchPostInflight = new Map()
 const postProcessDispatchHook = (dispatchData) => {
+  console.log('派工接口参数:', dispatchData)
+  console.log('派工时 preDispatchConfig:', preDispatchConfig.value)
   let key
   try {
     key = JSON.stringify(dispatchData)
@@ -3749,6 +3752,7 @@ const confirmOneToManyDispatch = async () => {
       employeeId: emp.id,
       employeeName: emp.name || '',
       processDispatchList,
+      prerowid: preDispatchRowid.value || '',
     }
 
     try {
@@ -4040,7 +4044,8 @@ const confirmMultiDispatch = async () => {
             employees: selectedEmployees.map((emp) => ({
               id: emp.id
             })),
-            dispatchList
+            dispatchList,
+            prerowid: preDispatchRowid.value || '',
           }
           return http.post(DISPATCH_MULTI_URL, dispatchParams)
         }
@@ -4422,7 +4427,8 @@ const confirmProcessDispatch = async () => {
           salaryMethod: processDispatchData.value.salaryMethod || '',
           price: processDispatchData.value.price ?? anchor?.process?.price ?? 0,
           isLast: processDispatchData.value.isLast || '否',
-          dispatchList: dispatchListFiltered
+          dispatchList: dispatchListFiltered,
+          prerowid: preDispatchRowid.value || '',
         }
         const resp = await postProcessDispatchHook(dispatchData)
         if (resp.status === 1) {
@@ -4450,7 +4456,8 @@ const confirmProcessDispatch = async () => {
           salaryMethod: processDispatchData.value.salaryMethod || '',
           price: processDispatchData.value.price || 0,
           isLast: processDispatchData.value.isLast || '否',
-          dispatchList
+          dispatchList,
+          prerowid: preDispatchRowid.value || '',
         }
         const resp = await postProcessDispatchHook(dispatchData)
         if (resp.status === 1) {
@@ -5229,6 +5236,8 @@ onLoad((options) => {
       dispatchCount: options.dispatchCount ? decodeURIComponent(options.dispatchCount) : '',
       workshop: options.workshop ? decodeURIComponent(options.workshop) : '',
     }
+    preDispatchRowid.value = options.prerowid ? decodeURIComponent(options.prerowid) : ''
+    console.log('预派工跳转接收参数:', { fromPreDispatch: options.fromPreDispatch, prerowid: options.prerowid, preDispatchConfig: preDispatchConfig.value })
     // 若预派工传了车间，覆盖当前车间
     if (preDispatchConfig.value.workshop && workshopOptions.value.includes(preDispatchConfig.value.workshop)) {
       workshop.value = preDispatchConfig.value.workshop

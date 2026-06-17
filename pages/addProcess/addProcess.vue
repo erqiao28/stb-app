@@ -193,10 +193,12 @@ onLoad((options) => {
 	// 判断权限是否为「工序」（从 store 或本地存储读取）
 	const lim = (userStore.loginLimits || '').trim()
 	isGongxuLimits.value = lim === '工序'
-	// 权限为「工序」时：初始化车间选择器为传入的车间
-	if (isGongxuLimits.value && orderData.value.workshop) {
+	// 初始化车间选择器为传入的车间（无论什么权限都初始化）
+	if (orderData.value.workshop) {
 		const idx = workshopOptions.value.indexOf(orderData.value.workshop)
-		if (idx >= 0) selectedWorkshopIndex.value = idx
+		if (idx >= 0) {
+			selectedWorkshopIndex.value = idx
+		}
 	}
 	getProcessList(1, true)  // 初次加载全部
 })
