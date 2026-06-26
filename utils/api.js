@@ -119,3 +119,12 @@ export const OPERATE_PROCESS_URL = apiUrl('/api/workflow/hooks/NmEwYmQyNmI4MWZiN
 
 /** 预派工作废 */
 export const PRE_DISPATCH_VOID_URL = apiUrl('/api/workflow/hooks/NmEyYTEzMGMzN2MwOTg0NTBhMDFlMzQ2')
+
+/** 预派工调整：修改预派工数据（派工日期、数量、员工） */
+export const PRE_DISPATCH_UPDATE_URL = apiUrl('/api/workflow/hooks/NmEzYjc5NzIzN2MwOTg0NTBhOTIzMjYw')
+
+/** 预派工新增：添加预派工记录（工序rowid数组、员工编号数组、派工日期、派工数量） */
+export const PRE_DISPATCH_ADD_URL = apiUrl('/api/workflow/hooks/NmEzYzkxMTYzN2MwOTg0NTBhYTM3MGJl')
+
+/** 确认派工：将预派工转为正式派工（预派工rowid数组） */
+export const PRE_DISPATCH_CONFIRM_URL = apiUrl('/api/workflow/hooks/NmEzY2I3OTEzN2MwOTg0NTBhYWE3ZWEw')

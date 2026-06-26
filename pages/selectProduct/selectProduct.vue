@@ -281,6 +281,8 @@ const billTypeFilter = ref('正常排产')
 const billTypeIndex = ref(0)
 const isBillTypeReadonly = ref(false)
 const dispatchMode = ref('order')
+// 是否来自预派工页面
+const fromPreDispatch = ref(false)
 /** 是否展开锅口 / 工艺 / 抛光筛选行 */
 const specFiltersExpanded = ref(false)
 
@@ -511,6 +513,9 @@ onLoad((options) => {
   isBillTypeReadonly.value = readonlyFlag === '1' || readonlyFlag.toLowerCase() === 'true'
   const mode = String(options?.dispatchMode || '').trim()
   dispatchMode.value = mode === 'product' ? 'product' : 'order'
+  // 是否来自预派工页面
+  const fromPreDispatchFlag = String(options?.fromPreDispatch || '')
+  fromPreDispatch.value = fromPreDispatchFlag === '1'
 
   // 进入页面后立即根据当前条件获取数据
   search()
@@ -708,6 +713,7 @@ const quit = () => {
 // 选择产品后，跳转到派工页面：车间、订单、生产单号、物品名称、排产类型（与当前列表筛选一致）
 const selectProductItem = (item) => {
   const readonlyPart = isBillTypeReadonly.value ? '&billTypeReadonly=1' : ''
+  const preDispatchPart = fromPreDispatch.value ? '&fromPreDispatch=1' : ''
   uni.navigateTo({
     url: `/pages/dispatchWork/dispatchWork?workshop=${encodeURIComponent(
       workshop.value
@@ -715,7 +721,7 @@ const selectProductItem = (item) => {
       item.productionCode || ''
     )}&orderItem=${encodeURIComponent(item.name || '')}&billType=${encodeURIComponent(
       billTypeFilter.value || '正常排产'
-    )}&billTypeIndex=${billTypeIndex.value}&dispatchMode=${dispatchMode.value}${readonlyPart}`
+    )}&billTypeIndex=${billTypeIndex.value}&dispatchMode=${dispatchMode.value}${readonlyPart}${preDispatchPart}`
   })
 }
 
@@ -726,6 +732,7 @@ const confirmSelectedProducts = () => {
     return
   }
   const readonlyPart = isBillTypeReadonly.value ? '&billTypeReadonly=1' : ''
+  const preDispatchPart = fromPreDispatch.value ? '&fromPreDispatch=1' : ''
   const payload = selectedItems.map(item => ({
     orderCode: item.orderCode || '',
     productionCode: item.productionCode || '',
@@ -739,7 +746,7 @@ const confirmSelectedProducts = () => {
       billTypeFilter.value || '正常排产'
     )}&billTypeIndex=${billTypeIndex.value}&dispatchMode=product&selectedProducts=${encodeURIComponent(
       JSON.stringify(payload)
-    )}${readonlyPart}`
+    )}${readonlyPart}${preDispatchPart}`
   })
 }
 </script>

@@ -62,12 +62,17 @@
 				/>
 			</view>
 			<view class="search-row search-row--date">
-				<picker mode="date" :value="filterDate" @change="onDateChange">
+				<picker mode="date" :value="filterDate" @change="onDateChange" class="date-picker-wrapper">
 					<view class="date-picker">
 						<text class="date-label">日期筛选：</text>
 						<text class="date-value">{{ filterDate || '请选择日期' }}</text>
 					</view>
 				</picker>
+				<view class="btn-group-right">
+					<view class="btn-add-pre" @click="handleAddPreDispatch">添加预派工</view>
+					<view class="btn-confirm-dispatch" @click="handleConfirmDispatch">确认派工</view>
+					<view class="btn-refresh" @click="handleRefresh">刷新</view>
+				</view>
 			</view>
 		</view>
 
@@ -90,6 +95,15 @@
 						<view class="product-info">
 							<text class="product-order">{{ product.orderNo || '-' }}</text>
 							<text class="product-name">{{ product.productNameNew || '-' }}</text>
+							<view class="product-spec">
+								<text v-if="product.thickness">{{ product.thickness }} |</text>
+								<text v-if="product.guokouSpec">{{ product.guokouSpec }} |</text>
+								<text v-if="product.guokouSizeSpec">{{ product.guokouSizeSpec }} |</text>
+								<text v-if="product.craftSpec">{{ product.craftSpec }} |</text>
+								<text v-if="product.paintSpec">{{ product.paintSpec }} |</text>
+								<text v-if="product.polishSpec">{{ product.polishSpec }} |</text>
+								<text v-if="product.materialSizeSpec">{{ product.materialSizeSpec }}</text>
+							</view>
 						</view>
 					</view>
 					<view class="empty-wrap" v-if="!productList.length && !loadingProducts">
@@ -163,6 +177,19 @@
 				<view class="void-modal-buttons">
 					<view class="void-btn-cancel" @click="closeVoidModal">取消</view>
 					<view class="void-btn-confirm" @click="confirmVoid">确认</view>
+				</view>
+			</view>
+		</view>
+
+		<view class="confirm-dispatch-modal" v-if="showConfirmDispatchModal" @click.self="closeConfirmDispatchModal">
+			<view class="confirm-dispatch-content">
+				<view class="confirm-dispatch-title">确认派工</view>
+				<view class="confirm-dispatch-body">
+					<text class="confirm-dispatch-tip">确定要将 {{ confirmDispatchCount }} 条预派工转为正式派工吗？</text>
+				</view>
+				<view class="confirm-dispatch-buttons">
+					<view class="confirm-dispatch-btn-cancel" @click="closeConfirmDispatchModal">取消</view>
+					<view class="confirm-dispatch-btn-confirm" @click="doConfirmDispatch">确认</view>
 				</view>
 			</view>
 		</view>
@@ -270,7 +297,7 @@ import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
-import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL } from '../../utils/api'
+import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL } from '../../utils/api'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -302,6 +329,13 @@ const PRE_DISPATCH_FIELD_MAP = {
 	craftPosition: '6a3a1e6b6d70ffabc66e6757',
 	dailyWage: '6a1e47d727514927ff33cc4e',
 	productionCode: '6a1fee4638176d619e00db16',
+	thickness: '6a3deb356d70ffabc6702cfd',
+	guokouSpec: '6a3deb356d70ffabc6702cfe',
+	guokouSizeSpec: '6a3deb356d70ffabc6702cff',
+	craftSpec: '6a3deb356d70ffabc6702d00',
+	paintSpec: '6a3deb356d70ffabc6702d01',
+	polishSpec: '6a3deb356d70ffabc6702d02',
+	materialSizeSpec: '6a3debe76d70ffabc6702dbb',
 }
 
 const PRE_DISPATCH_SUMMARY_FIELD_MAP = {
@@ -342,6 +376,10 @@ const selectedProductId = ref('')
 const showVoidModal = ref(false)
 const voidReason = ref('')
 const voidRowid = ref('')
+
+const showConfirmDispatchModal = ref(false)
+const confirmDispatchCount = ref(0)
+const confirmDispatchRowids = ref([])
 
 const showEditModal = ref(false)
 const editData = ref({
@@ -470,6 +508,13 @@ const mapPreDispatchRow = (item) => ({
 	dailyWage: extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.dailyWage]),
 	productionCode: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.productionCode]),
 	...parseSpecification(item[PRE_DISPATCH_FIELD_MAP.specification]),
+	thickness: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.thickness]),
+	guokouSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.guokouSpec]),
+	guokouSizeSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.guokouSizeSpec]),
+	craftSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.craftSpec]),
+	paintSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.paintSpec]),
+	polishSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.polishSpec]),
+	materialSizeSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.materialSizeSpec]),
 })
 
 const mapSummaryRow = (item) => ({
@@ -502,6 +547,51 @@ const handleReset = () => {
 
 const onDateChange = (e) => {
 	filterDate.value = e.detail.value
+	handleSearch()
+}
+
+const handleAddPreDispatch = () => {
+	const workshop = loginWorkshop.value || '拉伸车间'
+	uni.navigateTo({
+		url: `/pages/selectBills/selectBills?workshop=${encodeURIComponent(workshop)}&fromPreDispatch=1`
+	})
+}
+
+const handleConfirmDispatch = () => {
+	const rowids = productList.value
+		.map(item => item.rowid)
+		.filter(Boolean)
+	if (rowids.length === 0) {
+		uni.showToast({ title: '没有可确认的预派工', icon: 'none' })
+		return
+	}
+	confirmDispatchCount.value = rowids.length
+	confirmDispatchRowids.value = rowids
+	showConfirmDispatchModal.value = true
+}
+
+const doConfirmDispatch = async () => {
+	showConfirmDispatchModal.value = false
+	try {
+		uni.showLoading({ title: '确认中...' })
+		const resp = await http.post(PRE_DISPATCH_CONFIRM_URL, {
+			rowids: confirmDispatchRowids.value
+		})
+		uni.hideLoading()
+		if (resp.status === 1) {
+			uni.showToast({ title: '确认派工成功', icon: 'success' })
+			handleSearch()
+		} else {
+			uni.showToast({ title: resp.message || '确认派工失败', icon: 'none' })
+		}
+	} catch (e) {
+		uni.hideLoading()
+		console.error('确认派工失败:', e)
+		uni.showToast({ title: '确认派工失败', icon: 'none' })
+	}
+}
+
+const handleRefresh = () => {
 	handleSearch()
 }
 
@@ -845,6 +935,12 @@ const closeVoidModal = () => {
 	voidRowid.value = ''
 }
 
+const closeConfirmDispatchModal = () => {
+	showConfirmDispatchModal.value = false
+	confirmDispatchCount.value = 0
+	confirmDispatchRowids.value = []
+}
+
 const confirmVoid = async () => {
 	if (!voidReason.value.trim()) {
 		uni.showToast({ title: '请输入作废原因', icon: 'none' })
@@ -1170,23 +1266,77 @@ onMounted(() => {
 					color: #666;
 				}
 
-				.date-picker {
+				.date-picker-wrapper {
+					flex-shrink: 0;
+				}
+
+				.btn-group-right {
 					flex: 1;
-					height: px2vw(60px);
+					display: flex;
+					justify-content: flex-end;
+					align-items: center;
+					gap: px2vw(12px);
+				}
+
+				.date-picker {
+					width: auto;
+					min-width: px2vw(280px);
+					height: px2vw(70px);
 					background-color: #f5f7fa;
 					border-radius: px2vw(8px);
 					padding: 0 px2vw(16px);
 					display: flex;
 					align-items: center;
-					font-size: px2vw(22px);
+					font-size: px2vw(28px);
 
 					.date-label {
 						color: #666;
+						font-size: px2vw(28px);
 					}
 
 					.date-value {
 						color: #333;
+						font-size: px2vw(28px);
 					}
+				}
+
+				.btn-add-pre {
+					flex-shrink: 0;
+					height: px2vw(70px);
+					padding: 0 px2vw(24px);
+					background-color: #27ae60;
+					color: #fff;
+					border-radius: px2vw(8px);
+					font-size: px2vw(26px);
+					display: flex;
+					align-items: center;
+					justify-content: center;
+				}
+
+				.btn-confirm-dispatch {
+					flex-shrink: 0;
+					height: px2vw(70px);
+					padding: 0 px2vw(24px);
+					background-color: #3498db;
+					color: #fff;
+					border-radius: px2vw(8px);
+					font-size: px2vw(26px);
+					display: flex;
+					align-items: center;
+					justify-content: center;
+				}
+
+				.btn-refresh {
+					flex-shrink: 0;
+					height: px2vw(70px);
+					padding: 0 px2vw(24px);
+					background-color: #f39c12;
+					color: #fff;
+					border-radius: px2vw(8px);
+					font-size: px2vw(26px);
+					display: flex;
+					align-items: center;
+					justify-content: center;
 				}
 			}
 		}
@@ -1198,7 +1348,7 @@ onMounted(() => {
 		height: 0;
 
 		.left-panel {
-			width: px2vw(280px);
+			width: px2vw(400px);
 			background-color: #fff;
 			border-right: 1px solid #eee;
 			display: flex;
@@ -1262,6 +1412,12 @@ onMounted(() => {
 						font-size: px2vw(26px);
 						color: #333;
 						font-weight: 600;
+					}
+
+					.product-spec {
+						font-size: px2vw(20px);
+						color: #999;
+						margin-top: px2vw(4px);
 					}
 				}
 			}
@@ -1495,6 +1651,68 @@ onMounted(() => {
 
 		.void-btn-confirm {
 			background-color: #ff4d4f;
+			color: #fff;
+		}
+	}
+}
+
+.confirm-dispatch-modal {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 999;
+
+	.confirm-dispatch-content {
+		width: px2vw(600px);
+		background-color: #fff;
+		border-radius: px2vw(16px);
+		padding: px2vw(40px);
+	}
+
+	.confirm-dispatch-title {
+		font-size: px2vw(32px);
+		font-weight: bold;
+		text-align: center;
+		margin-bottom: px2vw(30px);
+	}
+
+	.confirm-dispatch-body {
+		margin-bottom: px2vw(30px);
+
+		.confirm-dispatch-tip {
+			font-size: px2vw(28px);
+			color: #333;
+			line-height: px2vw(40px);
+		}
+	}
+
+	.confirm-dispatch-buttons {
+		display: flex;
+		gap: px2vw(20px);
+
+		.confirm-dispatch-btn-cancel,
+		.confirm-dispatch-btn-confirm {
+			flex: 1;
+			height: px2vw(80px);
+			line-height: px2vw(80px);
+			text-align: center;
+			border-radius: px2vw(8px);
+			font-size: px2vw(28px);
+		}
+
+		.confirm-dispatch-btn-cancel {
+			background-color: #f5f7fa;
+			color: #666;
+		}
+
+		.confirm-dispatch-btn-confirm {
+			background-color: #3498db;
 			color: #fff;
 		}
 	}

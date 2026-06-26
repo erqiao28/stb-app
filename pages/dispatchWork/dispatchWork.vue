@@ -420,7 +420,8 @@
         <!-- 模态框底部按钮 -->
         <view class="modal-footer">
           <button class="btn-confirm" @click="addMultiEmployee">添加员工</button>
-          <button class="btn-confirm" @click="confirmMultiDispatch" :disabled="!canMultiDispatch">确认派工</button>
+          <button v-if="!fromPreDispatchMode" class="btn-confirm" @click="confirmMultiDispatch" :disabled="!canMultiDispatch">确认派工</button>
+          <button v-if="fromPreDispatchMode" class="btn-confirm btn-pre-dispatch" @click="onMultiPreDispatchTap" :disabled="!canMultiDispatch">预派工</button>
         </view>
       </view>
     </view>
@@ -661,9 +662,10 @@
         <!-- 模态框底部按钮 -->
         <view class="modal-footer">
           <button class="btn-confirm" @click="addEmployee">添加员工</button>
-          <button class="btn-confirm" @click.stop="onConfirmProcessDispatchTap">确认派工</button>
-          <button class="btn-confirm" :disabled="isProcessOver" @click="overProcess">终止</button>
-          <button class="btn-delete-process" @click="deleteProcess">删除</button>
+          <button v-if="!fromPreDispatchMode" class="btn-confirm" @click.stop="onConfirmProcessDispatchTap">确认派工</button>
+          <button v-if="fromPreDispatchMode" class="btn-confirm btn-pre-dispatch" @click.stop="onPreDispatchTap">预派工</button>
+          <button v-if="!fromPreDispatchMode" class="btn-confirm" :disabled="isProcessOver" @click="overProcess">终止</button>
+          <button v-if="!fromPreDispatchMode" class="btn-delete-process" @click="deleteProcess">删除</button>
           <!-- <button class="btn-confirm">转派</button>
           <button class="btn-confirm">修改</button> -->
         </view>
@@ -1020,6 +1022,7 @@ import {
   USE_NORMAL_PROCESS_URL,
   DELETE_PROCESS_URL,
   BATCH_DISPATCH_URL,
+  PRE_DISPATCH_ADD_URL,
 } from '../../utils/api'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import {
@@ -1575,6 +1578,8 @@ const processDispatchConfirmSubmitting = ref(false)
 // ---------- 预派工跳转自动赋值配置 ----------
 const preDispatchConfig = ref(null)
 const preDispatchRowid = ref('')
+// 是否来自预派工页面（用于控制模态框按钮显示）
+const fromPreDispatchMode = ref(false)
 
 // ---------- 员工相关 ----------
 const employeeList = ref([])
@@ -3320,16 +3325,19 @@ const openMultiDispatchModal = (item) => {
   }
   multiDispatchTargets.value = targets
   currentMultiDispatchItem.value = item
-  // 初始化日期为今天，格式：YYYY-MM-DD
-  const today = new Date()
-  const year = today.getFullYear()
-  const month = String(today.getMonth() + 1).padStart(2, '0')
-  const day = String(today.getDate()).padStart(2, '0')
-  const todayStr = `${year}-${month}-${day}`
-  
+  // 初始化日期：预派工模式默认为第二天，普通模式默认为今天
+  const targetDate = new Date()
+  if (fromPreDispatchMode.value) {
+    targetDate.setDate(targetDate.getDate() + 1)
+  }
+  const year = targetDate.getFullYear()
+  const month = String(targetDate.getMonth() + 1).padStart(2, '0')
+  const day = String(targetDate.getDate()).padStart(2, '0')
+  const defaultDateStr = `${year}-${month}-${day}`
+
   multiDispatchData.value = {
     quantity: 0,
-    date: todayStr, // 默认今天
+    date: defaultDateStr, // 预派工模式默认明天，普通模式默认今天
     isLast: '否', // 默认值为否
     salaryMethod: '计件'
   }
@@ -4111,12 +4119,15 @@ const openProcessModal = async (item, process) => {
   try {
     selectedProcessData.value = { item, process }
     machine.value = null
-    // 初始化日期为今天，格式：YYYY-MM-DD
-    const today = new Date()
-    const year = today.getFullYear()
-    const month = String(today.getMonth() + 1).padStart(2, '0')
-    const day = String(today.getDate()).padStart(2, '0')
-    const todayStr = `${year}-${month}-${day}`
+    // 初始化日期：预派工模式默认为第二天，普通模式默认为今天
+    const targetDate = new Date()
+    if (fromPreDispatchMode.value) {
+      targetDate.setDate(targetDate.getDate() + 1)
+    }
+    const year = targetDate.getFullYear()
+    const month = String(targetDate.getMonth() + 1).padStart(2, '0')
+    const day = String(targetDate.getDate()).padStart(2, '0')
+    const defaultDateStr = `${year}-${month}-${day}`
 
     // 初始化模态框车间为页面当前车间
     modalWorkshop.value = workshop.value
@@ -4127,7 +4138,7 @@ const openProcessModal = async (item, process) => {
       time: 0,
       machine: '',
       mold: '',
-      date: todayStr,
+      date: defaultDateStr,
       salaryMethod: '计件',  // 默认值为计件
       price: process?.price || 0,  // 将工序的工价赋值给派工模态框
       isLast: '否'  // 默认值为否
@@ -4297,6 +4308,110 @@ const onSalaryMethodChange = (e) => {
 const onIsLastChange = (e) => {
   isLastIndex.value = e.detail.value
   processDispatchData.value.isLast = isLastOptions.value[e.detail.value]
+}
+
+/** 预派工按钮点击（来自预派工页面） */
+const onPreDispatchTap = async () => {
+  if (!selectedEmployee.value || selectedEmployee.value.length === 0) {
+    uni.showToast({ title: '请至少选择一个员工', icon: 'none' })
+    return
+  }
+  if (!processDispatchData.value.date) {
+    uni.showToast({ title: '请选择派工日期', icon: 'none' })
+    return
+  }
+  const quantity = processDispatchData.value.quantity
+  if (!quantity || quantity <= 0) {
+    uni.showToast({ title: '请填写有效的派工数量', icon: 'none' })
+    return
+  }
+
+  const processRowid = selectedProcessData.value?.process?.rowid
+  if (!processRowid) {
+    uni.showToast({ title: '工序数据异常', icon: 'none' })
+    return
+  }
+
+  try {
+    uni.showLoading({ title: '提交中...' })
+    const resp = await http.post(PRE_DISPATCH_ADD_URL, {
+      processRowids: [processRowid],
+      employeeIds: selectedEmployee.value,
+      dispatchDate: processDispatchData.value.date,
+      dispatchCount: quantity
+    })
+    uni.hideLoading()
+    if (resp.status === 1) {
+      uni.showToast({ title: '预派工成功', icon: 'success' })
+      showProcessModal.value = false
+      setTimeout(() => {
+        uni.redirectTo({
+          url: '/pages/preDispatched/preDispatched'
+        })
+      }, 1500)
+    } else {
+      uni.showToast({ title: resp.message || '预派工失败', icon: 'none' })
+    }
+  } catch (e) {
+    uni.hideLoading()
+    console.error('预派工失败:', e)
+    uni.showToast({ title: '预派工失败', icon: 'none' })
+  }
+}
+
+/** 多对多预派工按钮点击（来自预派工页面） */
+const onMultiPreDispatchTap = async () => {
+  if (!selectedMultiEmployees.value || selectedMultiEmployees.value.length === 0) {
+    uni.showToast({ title: '请至少选择一个员工', icon: 'none' })
+    return
+  }
+  if (!multiDispatchData.value.date) {
+    uni.showToast({ title: '请选择派工日期', icon: 'none' })
+    return
+  }
+  const quantity = Number(multiDispatchData.value.quantity)
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    uni.showToast({ title: '请填写有效的派工数量', icon: 'none' })
+    return
+  }
+  if (selectedMultiProcesses.value.length === 0) {
+    uni.showToast({ title: '请至少选择一个工序', icon: 'none' })
+    return
+  }
+
+  const processRowids = selectedMultiProcesses.value
+    .map(p => p.process?.rowid)
+    .filter(Boolean)
+  if (processRowids.length === 0) {
+    uni.showToast({ title: '工序数据异常', icon: 'none' })
+    return
+  }
+
+  try {
+    uni.showLoading({ title: '提交中...' })
+    const resp = await http.post(PRE_DISPATCH_ADD_URL, {
+      processRowids: processRowids,
+      employeeIds: selectedMultiEmployees.value,
+      dispatchDate: multiDispatchData.value.date,
+      dispatchCount: quantity
+    })
+    uni.hideLoading()
+    if (resp.status === 1) {
+      uni.showToast({ title: '预派工成功', icon: 'success' })
+      showMultiDispatchModal.value = false
+      setTimeout(() => {
+        uni.redirectTo({
+          url: '/pages/preDispatched/preDispatched'
+        })
+      }, 1500)
+    } else {
+      uni.showToast({ title: resp.message || '预派工失败', icon: 'none' })
+    }
+  } catch (e) {
+    uni.hideLoading()
+    console.error('预派工失败:', e)
+    uni.showToast({ title: '预派工失败', icon: 'none' })
+  }
 }
 
 /** 点击确认派工：前置校验与「请至少选择一个员工」一致用 Toast */
@@ -5217,6 +5332,7 @@ onLoad((options) => {
 
   // 从预派工页面跳转：解析自动赋值参数
   if (options?.fromPreDispatch === '1') {
+    fromPreDispatchMode.value = true
     let processDetailSids = []
     let dailyWageSids = []
     try {
@@ -7289,6 +7405,19 @@ onUnload(() => {
     
     &:active {
       background: #b71c1c;
+    }
+  }
+
+  .btn-pre-dispatch {
+    background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+    color: white;
+
+    &:hover {
+      background: linear-gradient(135deg, #219a52 0%, #27ae60 100%);
+    }
+
+    &:active {
+      background: linear-gradient(135deg, #1e8449 0%, #219a52 100%);
     }
   }
 }

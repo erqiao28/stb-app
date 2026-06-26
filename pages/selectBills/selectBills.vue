@@ -85,6 +85,8 @@ const workshop = ref('拉伸车间')
 const billTypeOptions = ['正常排产', '返工排产']
 const billTypeIndex = ref(0)
 const isBillTypeReadonly = ref(false)
+// 是否来自预派工页面
+const fromPreDispatch = ref(false)
 
 const billsList = ref([])
 const searchForm = ref({ salesOrder: '' })
@@ -132,6 +134,9 @@ onLoad((options) => {
 	// 入口要求：向选择产品/派工传递 billTypeReadonly（排产类型已固定，无页面内切换）
 	const readonlyFlag = String(options?.billTypeReadonly || '')
 	isBillTypeReadonly.value = readonlyFlag === '1' || readonlyFlag.toLowerCase() === 'true'
+	// 是否来自预派工页面
+	const fromPreDispatchFlag = String(options?.fromPreDispatch || '')
+	fromPreDispatch.value = fromPreDispatchFlag === '1'
 	// 恢复持久化的销售订单、排产类型
 	try {
 		const saved = uni.getStorageSync(STORAGE_KEY)
@@ -361,21 +366,28 @@ const onScrollToLower = () => {
 	loadMore()
 }
 
-// 左箭头固定返回到 index 页面
+// 左箭头返回：根据来源决定返回页面
 const quit = () => {
-	uni.redirectTo({
-		url: '/pages/main/main'
-	})
+	if (fromPreDispatch.value) {
+		uni.redirectTo({
+			url: '/pages/preDispatched/preDispatched'
+		})
+	} else {
+		uni.redirectTo({
+			url: '/pages/main/main'
+		})
+	}
 }
 
 const selectOrder = (item) => {
 	// 进入选择产品页面：车间、订单编号、排产类型（与列表筛选一致）
 	const billType = billTypeOptions[billTypeIndex.value] || '正常排产'
 	const readonlyPart = isBillTypeReadonly.value ? '&billTypeReadonly=1' : ''
+	const preDispatchPart = fromPreDispatch.value ? '&fromPreDispatch=1' : ''
 	uni.navigateTo({
 		url: `/pages/selectProduct/selectProduct?workshop=${encodeURIComponent(
 			workshop.value
-		)}&orderCode=${encodeURIComponent(item.orderCode || '')}&billTypeIndex=${billTypeIndex.value}&billType=${encodeURIComponent(billType)}&dispatchMode=order${readonlyPart}`
+		)}&orderCode=${encodeURIComponent(item.orderCode || '')}&billTypeIndex=${billTypeIndex.value}&billType=${encodeURIComponent(billType)}&dispatchMode=order${readonlyPart}${preDispatchPart}`
 	})
 }
 
