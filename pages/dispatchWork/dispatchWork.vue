@@ -1342,12 +1342,16 @@ const closeDrawingsModal = () => {
 
 const openSingleDrawing = (drawing) => {
   closeDrawingsModal()
+  // #ifdef H5
   let url = drawing.url
   if (url.startsWith(API_BASE)) {
     url = url.slice(API_BASE.length)
   }
-  // #ifdef H5
-  window.open(url, '_blank')
+  console.log('[H5图纸] 打开URL:', url)
+  const opened = window.open(url, '_blank')
+  if (!opened) {
+    uni.showToast({ title: '请允许弹出窗口', icon: 'none' })
+  }
   // #endif
   // #ifndef H5
   uni.navigateTo({
@@ -1357,19 +1361,22 @@ const openSingleDrawing = (drawing) => {
 }
 
 const openAllDrawings = () => {
-  if (drawingList.value.length === 0) return
+  console.log('[H5图纸] 全部打开，图纸数量:', drawingList.value.length, '列表:', drawingList.value)
+  if (drawingList.value.length === 0) {
+    uni.showToast({ title: '暂无图纸', icon: 'none' })
+    return
+  }
   closeDrawingsModal()
-  const allDrawings = drawingList.value.map(d => {
-    let url = d.url
-    if (url.startsWith(API_BASE)) {
-      url = url.slice(API_BASE.length)
-    }
-    return { ...d, url }
-  })
-
   // #ifdef H5
-  if (allDrawings.length > 0) {
-    window.open(allDrawings[0].url, '_blank')
+  const first = drawingList.value[0]
+  let url = first.url
+  if (url.startsWith(API_BASE)) {
+    url = url.slice(API_BASE.length)
+  }
+  console.log('[H5图纸] 打开全部图纸, 第一份URL:', url)
+  const opened = window.open(url, '_blank')
+  if (!opened) {
+    uni.showToast({ title: '请允许弹出窗口', icon: 'none' })
   }
   // #endif
   // #ifndef H5
