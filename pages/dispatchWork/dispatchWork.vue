@@ -46,6 +46,31 @@
         </swiper>
       </view>
     </view>
+
+    <!-- 图纸清单弹窗 -->
+    <view class="drawings-modal" v-if="showDrawingModal" @click.self="closeDrawingsModal">
+      <view class="drawings-content" @click.stop>
+        <view class="drawings-header">
+          <text class="drawings-title">技术图纸（共{{ drawingList.length }}份）</text>
+          <view class="drawings-close" @click="closeDrawingsModal">×</view>
+        </view>
+        <scroll-view scroll-y class="drawings-list">
+          <view
+            v-for="(drawing, idx) in drawingList"
+            :key="idx"
+            class="drawing-item"
+            @click="openSingleDrawing(drawing)"
+          >
+            <view class="drawing-icon">📄</view>
+            <view class="drawing-info">
+              <text class="drawing-label">{{ drawing.label }}</text>
+              <text class="drawing-name">{{ drawing.fileName }}</text>
+            </view>
+            <view class="drawing-arrow">›</view>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
     
     <!-- 终止派工模态框 -->
     <view class="terminate-modal" v-if="showTerminateModal" @click.self="closeTerminateModal">
@@ -774,7 +799,7 @@
               >首检提醒</button>
               <block v-if="item.billType !== '返工排产'">
                 <button class="btn-sop" @click="lookSop(item)">指导书</button>
-                <button class="btn-dispatch" @click="lookImage(item)">技术图纸</button>
+                <button class="btn-dispatch" @click="openDrawingsModal(item)">图纸</button>
                 <button class="btn-pack" @click="lookPackImage(item)">包装图纸</button>
               </block>
               <view
@@ -1262,6 +1287,68 @@ const buildMultiDispatchModalListPayload = (targets, productMode, orderModeQty) 
 const showImagePreview = ref(false)
 const previewImageUrls = ref([])   // 多图预览的 URL 列表
 const previewImageIndex = ref(0)  // 当前显示的图片下标
+
+// ---------- 图纸文件相关 ----------
+const DRAWING_FIELDS = [
+  { id: '6a475a896d70ffabc6766a22', label: '锅体图纸' },
+  { id: '6a475a896d70ffabc6766a23', label: '模具图纸' },
+  { id: '6a475a896d70ffabc6766a24', label: '网版图纸' },
+  { id: '6a475a896d70ffabc6766a25', label: '装配图纸' },
+  { id: '6a475a896d70ffabc6766a26', label: '点焊图纸1' },
+  { id: '6a475a896d70ffabc6766a27', label: '点焊图纸2' },
+  { id: '6a475a896d70ffabc6766a28', label: '底标' },
+  { id: '6a475a896d70ffabc6766a29', label: '手柄标' },
+  { id: '6a475a896d70ffabc6766a2a', label: '侧标' },
+]
+
+const showDrawingModal = ref(false)
+const drawingList = ref([])
+
+const buildDrawingList = (item) => {
+  const list = []
+  for (const field of DRAWING_FIELDS) {
+    let data = item[field.id]
+    if (!data) continue
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data) } catch (e) { continue }
+    }
+    const arr = Array.isArray(data) ? data : [data]
+    const url = arr[0]?.DownloadUrl || arr[0]?.original_file_full_path ||
+      (arr[0]?.file_path && arr[0]?.file_name ? arr[0].file_path + arr[0].file_name : '')
+    const fileName = arr[0]?.original_file_name || arr[0]?.file_name || field.label
+    if (!url) continue
+    list.push({ fieldId: field.id, label: field.label, url, fileName })
+  }
+  return list
+}
+
+const openDrawingsModal = (item) => {
+  const list = buildDrawingList(item)
+  if (list.length === 0) {
+    uni.showToast({ title: '暂无图纸文件', icon: 'none' })
+    return
+  }
+  drawingList.value = list
+  showDrawingModal.value = true
+}
+
+const closeDrawingsModal = () => {
+  showDrawingModal.value = false
+  drawingList.value = []
+}
+
+const openSingleDrawing = (drawing) => {
+  closeDrawingsModal()
+  let url = drawing.url
+  if (process.env.UNI_PLATFORM === 'h5') {
+    if (url.startsWith(API_BASE)) {
+      url = url.slice(API_BASE.length)
+    }
+  }
+  uni.navigateTo({
+    url: `/pages/pdfViewer/pdfViewer?url=${encodeURIComponent(url)}&name=${encodeURIComponent(drawing.fileName)}`
+  })
+}
 
 // ---------- 工序模态相关 ----------
 const showProcessModal = ref(false)
@@ -2461,7 +2548,16 @@ const search = async () => {
       billType,
       reworkProgress: item['69ccb3e7665ab27f39105da2'],
       reworkMergeFlag: item['69ccaf64665ab27f39105bed'],
-      isFirstCheck: item['69e080b4665ab27f3915d89d']
+      isFirstCheck: item['69e080b4665ab27f3915d89d'],
+      '6a475a896d70ffabc6766a22': item['6a475a896d70ffabc6766a22'],
+      '6a475a896d70ffabc6766a23': item['6a475a896d70ffabc6766a23'],
+      '6a475a896d70ffabc6766a24': item['6a475a896d70ffabc6766a24'],
+      '6a475a896d70ffabc6766a25': item['6a475a896d70ffabc6766a25'],
+      '6a475a896d70ffabc6766a26': item['6a475a896d70ffabc6766a26'],
+      '6a475a896d70ffabc6766a27': item['6a475a896d70ffabc6766a27'],
+      '6a475a896d70ffabc6766a28': item['6a475a896d70ffabc6766a28'],
+      '6a475a896d70ffabc6766a29': item['6a475a896d70ffabc6766a29'],
+      '6a475a896d70ffabc6766a2a': item['6a475a896d70ffabc6766a2a'],
     }
   })
 
@@ -7947,5 +8043,107 @@ onUnload(() => {
     display: block;
   }
 
+}
+
+/* 图纸清单弹窗样式 */
+.drawings-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 18vh;
+
+  .drawings-content {
+    width: 80vw;
+    max-width: 600px;
+    background-color: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  }
+
+  .drawings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    background-color: #5884f1;
+    color: #fff;
+
+    .drawings-title {
+      font-size: 17px;
+      font-weight: bold;
+    }
+
+    .drawings-close {
+      font-size: 24px;
+      color: #fff;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0 4px;
+    }
+  }
+
+  .drawings-list {
+    max-height: 60vh;
+    padding: 8px 0;
+  }
+
+  .drawing-item {
+    display: flex;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+
+    &:active {
+      background-color: #f5f5f5;
+    }
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    .drawing-icon {
+      font-size: 28px;
+      margin-right: 16px;
+      flex-shrink: 0;
+    }
+
+    .drawing-info {
+      flex: 1;
+      overflow: hidden;
+
+      .drawing-label {
+        display: block;
+        font-size: 15px;
+        color: #333;
+        font-weight: 500;
+        margin-bottom: 4px;
+      }
+
+      .drawing-name {
+        display: block;
+        font-size: 12px;
+        color: #999;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    .drawing-arrow {
+      font-size: 22px;
+      color: #ccc;
+      flex-shrink: 0;
+      margin-left: 12px;
+    }
+  }
 }
 </style>
