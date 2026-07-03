@@ -69,9 +69,6 @@
             <view class="drawing-arrow">›</view>
           </view>
         </scroll-view>
-        <view class="drawings-footer">
-          <button class="btn-drawings-all" @click="openAllDrawings">全部打开</button>
-        </view>
       </view>
     </view>
     
@@ -1034,8 +1031,7 @@ import {
   computed,
   watch,
   nextTick,
-  reactive,
-  toRaw
+  reactive
 } from 'vue'
 import { onLoad, onUnload, onShow } from '@dcloudio/uni-app'
 import http from '../../utils/request'
@@ -1343,41 +1339,34 @@ const closeDrawingsModal = () => {
 
 const openSingleDrawing = (drawing) => {
   closeDrawingsModal()
-  const rawUrl = drawing.url || ''
-  let url = rawUrl.startsWith(API_BASE) ? rawUrl.slice(API_BASE.length) : rawUrl
-  // #ifdef H5
-  if (url) {
-    location.href = url
-  }
-  // #endif
-  // #ifndef H5
-  uni.navigateTo({
-    url: `/pages/pdfViewer/pdfViewer?url=${encodeURIComponent(rawUrl)}&name=${encodeURIComponent(drawing.fileName)}`
-  })
-  // #endif
-}
-
-const openAllDrawings = () => {
-  const rawList = toRaw(drawingList.value) || []
-  if (rawList.length === 0) {
-    uni.showToast({ title: '暂无图纸', icon: 'none' })
+  let url = drawing.url || ''
+  if (!url) {
+    uni.showToast({ title: '图纸文件地址不存在', icon: 'none' })
     return
   }
-  const first = rawList[0]
-  const rawUrl = first?.url || ''
-  let url = rawUrl.startsWith(API_BASE) ? rawUrl.slice(API_BASE.length) : rawUrl
-  closeDrawingsModal()
-  // #ifdef H5
-  if (url) {
-    location.href = url
+  if (process.env.UNI_PLATFORM === 'h5' && url.startsWith(API_BASE)) {
+    url = url.slice(API_BASE.length)
   }
-  // #endif
-  // #ifndef H5
-  const drawingsJson = encodeURIComponent(JSON.stringify(rawList))
-  uni.navigateTo({
-    url: `/pages/pdfViewer/pdfViewer?drawings=${drawingsJson}&index=0`
+  uni.showLoading({ title: '正在打开...' })
+  uni.downloadFile({
+    url,
+    success: (res) => {
+      uni.hideLoading()
+      if (res.statusCode === 200) {
+        uni.openDocument({
+          filePath: res.tempFilePath,
+          showMenu: true,
+          fail: () => { uni.showToast({ title: '无法打开此文件', icon: 'none' }) }
+        })
+      } else {
+        uni.showToast({ title: '文件下载失败', icon: 'none' })
+      }
+    },
+    fail: () => {
+      uni.hideLoading()
+      uni.showToast({ title: '文件下载失败', icon: 'none' })
+    }
   })
-  // #endif
 }
 
 // ---------- 工序模态相关 ----------
@@ -8173,25 +8162,6 @@ onUnload(() => {
       color: #ccc;
       flex-shrink: 0;
       margin-left: 12px;
-    }
-  }
-
-  .drawings-footer {
-    padding: 12px 24px;
-    border-top: 1px solid #f0f0f0;
-
-    .btn-drawings-all {
-      width: 100%;
-      background: #5884f1;
-      color: #fff;
-      font-size: 15px;
-      border: none;
-      border-radius: 8px;
-      padding: 12px 0;
-
-      &:active {
-        background: #2755f1;
-      }
     }
   }
 }
