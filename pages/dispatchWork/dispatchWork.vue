@@ -1034,7 +1034,8 @@ import {
   computed,
   watch,
   nextTick,
-  reactive
+  reactive,
+  toRaw
 } from 'vue'
 import { onLoad, onUnload, onShow } from '@dcloudio/uni-app'
 import http from '../../utils/request'
@@ -1357,12 +1358,12 @@ const openSingleDrawing = (drawing) => {
 }
 
 const openAllDrawings = () => {
-  const list = drawingList.value || []
-  if (list.length === 0) {
+  const rawList = toRaw(drawingList.value) || []
+  if (rawList.length === 0) {
     uni.showToast({ title: '暂无图纸', icon: 'none' })
     return
   }
-  const first = list[0]
+  const first = rawList[0]
   const rawUrl = first?.url || ''
   let url = rawUrl.startsWith(API_BASE) ? rawUrl.slice(API_BASE.length) : rawUrl
   closeDrawingsModal()
@@ -1372,7 +1373,7 @@ const openAllDrawings = () => {
   }
   // #endif
   // #ifndef H5
-  const drawingsJson = encodeURIComponent(JSON.stringify(list))
+  const drawingsJson = encodeURIComponent(JSON.stringify(rawList))
   uni.navigateTo({
     url: `/pages/pdfViewer/pdfViewer?drawings=${drawingsJson}&index=0`
   })
