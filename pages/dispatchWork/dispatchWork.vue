@@ -69,6 +69,9 @@
             <view class="drawing-arrow">›</view>
           </view>
         </scroll-view>
+        <view class="drawings-footer">
+          <button class="btn-drawings-all" @click="openAllDrawings">全部打开</button>
+        </view>
       </view>
     </view>
     
@@ -1347,6 +1350,24 @@ const openSingleDrawing = (drawing) => {
   }
   uni.navigateTo({
     url: `/pages/pdfViewer/pdfViewer?url=${encodeURIComponent(url)}&name=${encodeURIComponent(drawing.fileName)}`
+  })
+}
+
+const openAllDrawings = () => {
+  if (drawingList.value.length === 0) return
+  closeDrawingsModal()
+  const allDrawings = drawingList.value.map(d => {
+    let url = d.url
+    if (process.env.UNI_PLATFORM === 'h5') {
+      if (url.startsWith(API_BASE)) {
+        url = url.slice(API_BASE.length)
+      }
+    }
+    return { ...d, url }
+  })
+  const drawingsJson = encodeURIComponent(JSON.stringify(allDrawings))
+  uni.navigateTo({
+    url: `/pages/pdfViewer/pdfViewer?drawings=${drawingsJson}&index=0`
   })
 }
 
@@ -8143,6 +8164,25 @@ onUnload(() => {
       color: #ccc;
       flex-shrink: 0;
       margin-left: 12px;
+    }
+  }
+
+  .drawings-footer {
+    padding: 12px 24px;
+    border-top: 1px solid #f0f0f0;
+
+    .btn-drawings-all {
+      width: 100%;
+      background: #5884f1;
+      color: #fff;
+      font-size: 15px;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 0;
+
+      &:active {
+        background: #2755f1;
+      }
     }
   }
 }

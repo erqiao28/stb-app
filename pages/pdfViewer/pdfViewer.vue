@@ -2,7 +2,7 @@
   <view class="pdf-container" :style="{ paddingTop: statusBarHeight + 'px' }">
     <view class="pdf-header">
       <view class="pdf-back" @click="goBack">‹ 返回</view>
-      <text class="pdf-title">{{ fileName || 'PDF 预览' }}</text>
+      <text class="pdf-title">{{ currentFileName || 'PDF 预览' }}</text>
       <text class="pdf-page-info">{{ currentPage }} / {{ totalPages }}</text>
     </view>
 
@@ -22,6 +22,21 @@
       </view>
       <canvas ref="canvasRef" class="pdf-canvas"></canvas>
     </scroll-view>
+
+    <view class="pdf-tabs" v-if="drawings.length > 1">
+      <scroll-view scroll-x class="tabs-scroll">
+        <view
+          v-for="(d, idx) in drawings"
+          :key="idx"
+          class="tab-item"
+          :class="{ active: idx === currentIndex }"
+          @click="switchTo(idx)"
+        >
+          <text class="tab-label">{{ d.label }}</text>
+          <text class="tab-index">{{ idx + 1 }}/{{ drawings.length }}</text>
+        </view>
+      </scroll-view>
+    </view>
   </view>
 </template>
 
@@ -32,6 +47,8 @@ import { useStatusBar } from '../../composables/useStatusBar.js'
 
 const { statusBarHeight } = useStatusBar()
 
+const drawings = ref([])
+const currentIndex = ref(0)
 const pdfUrl = ref('')
 const fileName = ref('')
 const currentPage = ref(1)
@@ -41,8 +58,16 @@ const loading = ref(true)
 const error = ref('')
 const canvasRef = ref(null)
 
+const currentFileName = computed(() => {
+  if (drawings.value.length > 1) {
+    return drawings.value[currentIndex.value]?.label || ''
+  }
+  return fileName.value
+})
+
 const pdfBodyHeight = computed(() => {
-  return uni.getSystemInfoSync().windowHeight - statusBarHeight.value - 90
+  const tabBarHeight = drawings.value.length > 1 ? 60 : 0
+  return uni.getSystemInfoSync().windowHeight - statusBarHeight.value - 90 - tabBarHeight
 })
 
 let pdfDoc = null
@@ -50,6 +75,14 @@ let renderTask = null
 let pdfjsLib = null
 
 onLoad((options) => {
+  if (options.drawings) {
+    try {
+      drawings.value = JSON.parse(decodeURIComponent(options.drawings))
+      currentIndex.value = parseInt(options.index || '0')
+    } catch (e) {
+      console.error('图纸数据解析失败:', e)
+    }
+  }
   if (options.url) {
     pdfUrl.value = decodeURIComponent(options.url)
   }
@@ -59,27 +92,35 @@ onLoad((options) => {
 })
 
 onMount(() => {
-  if (pdfUrl.value) {
-    loadPdfJs()
-  }
+  loadPdfJs()
 })
 
 const goBack = () => {
   uni.navigateBack()
 }
 
+const getCurrentUrl = () => {
+  if (drawings.value.length > 0) {
+    return drawings.value[currentIndex.value]?.url || ''
+  }
+  return pdfUrl.value
+}
+
 const loadPdfJs = async () => {
+  const url = getCurrentUrl()
+  if (!url) return
+
   loading.value = true
   error.value = ''
+  currentPage.value = 1
+  totalPages.value = 0
+
   try {
     const pdfjsModule = await import('/static/pdfjs/pdf.mjs')
     pdfjsLib = pdfjsModule
     pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/pdfjs/pdf.worker.mjs'
 
-    const loadingTask = pdfjsLib.getDocument({
-      url: pdfUrl.value,
-    })
-
+    const loadingTask = pdfjsLib.getDocument({ url })
     pdfDoc = await loadingTask.promise
     totalPages.value = pdfDoc.numPages
     await renderPage(currentPage.value)
@@ -103,7 +144,6 @@ const renderPage = async (pageNum) => {
     const page = await pdfDoc.getPage(pageNum)
     const canvas = canvasRef.value
     const ctx = canvas.getContext('2d')
-
     const viewport = page.getViewport({ scale: scale.value })
 
     canvas.width = viewport.width
@@ -111,12 +151,7 @@ const renderPage = async (pageNum) => {
     canvas.style.width = viewport.width + 'px'
     canvas.style.height = viewport.height + 'px'
 
-    const renderContext = {
-      canvasContext: ctx,
-      viewport: viewport
-    }
-
-    renderTask = page.render(renderContext)
+    renderTask = page.render({ canvasContext: ctx, viewport })
     await renderTask.promise
     renderTask = null
   } catch (err) {
@@ -146,6 +181,12 @@ const zoomIn = async () => {
 const zoomOut = async () => {
   scale.value = Math.max(scale.value - 0.25, 0.5)
   await renderPage(currentPage.value)
+}
+
+const switchTo = (idx) => {
+  if (idx === currentIndex.value) return
+  currentIndex.value = idx
+  loadPdfJs()
 }
 </script>
 
@@ -239,5 +280,54 @@ const zoomOut = async () => {
 
 .pdf-canvas {
   display: block;
+}
+
+.pdf-tabs {
+  flex-shrink: 0;
+  background: #1a1a1a;
+  border-top: 1px solid #333;
+
+  .tabs-scroll {
+    white-space: nowrap;
+    padding: 8px 10px;
+  }
+
+  .tab-item {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 16px;
+    margin-right: 8px;
+    background: #333;
+    border-radius: 8px;
+    border: 1px solid #444;
+    min-width: 70px;
+    max-width: 100px;
+
+    &.active {
+      background: #4a9eff;
+      border-color: #4a9eff;
+    }
+
+    .tab-label {
+      font-size: 12px;
+      color: #fff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 80px;
+    }
+
+    .tab-index {
+      font-size: 10px;
+      color: #aaa;
+      margin-top: 2px;
+    }
+
+    &.active .tab-index {
+      color: rgba(255, 255, 255, 0.7);
+    }
+  }
 }
 </style>
