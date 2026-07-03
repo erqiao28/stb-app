@@ -1343,14 +1343,17 @@ const closeDrawingsModal = () => {
 const openSingleDrawing = (drawing) => {
   closeDrawingsModal()
   let url = drawing.url
-  if (process.env.UNI_PLATFORM === 'h5') {
-    if (url.startsWith(API_BASE)) {
-      url = url.slice(API_BASE.length)
-    }
+  if (url.startsWith(API_BASE)) {
+    url = url.slice(API_BASE.length)
   }
+  // #ifdef H5
+  window.open(url, '_blank')
+  // #endif
+  // #ifndef H5
   uni.navigateTo({
-    url: `/pages/pdfViewer/pdfViewer?url=${encodeURIComponent(url)}&name=${encodeURIComponent(drawing.fileName)}`
+    url: `/pages/pdfViewer/pdfViewer?url=${encodeURIComponent(drawing.url)}&name=${encodeURIComponent(drawing.fileName)}`
   })
+  // #endif
 }
 
 const openAllDrawings = () => {
@@ -1358,17 +1361,23 @@ const openAllDrawings = () => {
   closeDrawingsModal()
   const allDrawings = drawingList.value.map(d => {
     let url = d.url
-    if (process.env.UNI_PLATFORM === 'h5') {
-      if (url.startsWith(API_BASE)) {
-        url = url.slice(API_BASE.length)
-      }
+    if (url.startsWith(API_BASE)) {
+      url = url.slice(API_BASE.length)
     }
     return { ...d, url }
   })
-  const drawingsJson = encodeURIComponent(JSON.stringify(allDrawings))
+
+  // #ifdef H5
+  if (allDrawings.length > 0) {
+    window.open(allDrawings[0].url, '_blank')
+  }
+  // #endif
+  // #ifndef H5
+  const drawingsJson = encodeURIComponent(JSON.stringify(drawingList.value))
   uni.navigateTo({
     url: `/pages/pdfViewer/pdfViewer?drawings=${drawingsJson}&index=0`
   })
+  // #endif
 }
 
 // ---------- 工序模态相关 ----------
