@@ -253,6 +253,13 @@ const getProcessList = async (pageNum, isRefresh = false) => {
 			spliceType: 1,
 			filterType: 2,
 			values: [orderData.value.workshop]
+		},
+		{
+			controlId: '6a324e7d6d70ffabc66cbe5f',
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: ['1']
 		}
 	]
 

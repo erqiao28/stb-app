@@ -172,7 +172,9 @@ export const callWorkflowListAPIPaged = async (
       })
     }
 
+    console.log('[callWorkflowListAPIPaged] 请求参数:', JSON.parse(JSON.stringify(params)))
     const res = await http.post(config.WORKFLOW_API.LIST_URL, params)
+    console.log('[callWorkflowListAPIPaged] 原始响应:', res)
 
     if (res && res.data != null) {
       // 兼容两种返回格式：
@@ -187,7 +189,12 @@ export const callWorkflowListAPIPaged = async (
         throw new Error('未知的返回数据格式：' + String(res.data))
       }
 
-      // 控制台调试信息已去掉，仅保留返回结构化数据
+      console.log('[callWorkflowListAPIPaged] 解析后响应数据:', JSON.parse(JSON.stringify(responseData)))
+
+      // 检测 HAP 后端是否把异常信息包装在 data/msg 中返回（此时通常没有 rows）
+      if (responseData.msg && !responseData.rows) {
+        console.warn('[callWorkflowListAPIPaged] 接口返回异常信息:', responseData.msg, responseData)
+      }
 
       if (!silent) {
         uni.hideLoading()

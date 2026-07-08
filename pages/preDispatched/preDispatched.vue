@@ -6,85 +6,15 @@
 			<view></view>
 		</view>
 
-		<view class="search-box">
-			<view class="search-row">
-				<input
-					v-model="filterOrderCode"
-					type="text"
-					placeholder="订单编号"
-					class="search-input"
-					confirm-type="search"
-					@confirm="handleSearch"
-				/>
-				<input
-					v-model="filterProductName"
-					type="text"
-					placeholder="产品名称"
-					class="search-input"
-					confirm-type="search"
-					@confirm="handleSearch"
-				/>
-				<view class="btn-reset" @click="handleReset">重置</view>
-				<view class="btn-search" @click="handleSearch">搜索</view>
-			</view>
-			<view class="search-row search-row--spec">
-				<input
-					v-model="filterCraft"
-					type="text"
-					placeholder="工艺"
-					class="search-input search-input--spec"
-					confirm-type="search"
-					@confirm="handleSearch"
-				/>
-				<input
-					v-model="filterInnerPaint"
-					type="text"
-					placeholder="内涂料"
-					class="search-input search-input--spec"
-					confirm-type="search"
-					@confirm="handleSearch"
-				/>
-				<input
-					v-model="filterPolish"
-					type="text"
-					placeholder="抛光"
-					class="search-input search-input--spec"
-					confirm-type="search"
-					@confirm="handleSearch"
-				/>
-				<input
-					v-model="filterGuokou"
-					type="text"
-					placeholder="锅口"
-					class="search-input search-input--spec"
-					confirm-type="search"
-					@confirm="handleSearch"
-				/>
-			</view>
-			<view class="search-row search-row--date">
-				<picker mode="date" :value="filterDate" @change="onDateChange" class="date-picker-wrapper">
-					<view class="date-picker">
-						<text class="date-label">日期筛选：</text>
-						<text class="date-value">{{ filterDate || '请选择日期' }}</text>
-					</view>
-				</picker>
-				<view class="btn-group-right">
-					<view class="btn-add-pre" @click="handleAddPreDispatch">添加预派工</view>
-					<view class="btn-confirm-dispatch" @click="handleConfirmDispatch">确认派工</view>
-					<view class="btn-refresh" @click="handleRefresh">刷新</view>
-				</view>
-			</view>
-		</view>
-
 		<view class="main-content">
 			<view class="left-panel">
-				<view class="panel-title">产品列表</view>
+				<view class="panel-title">产品列表({{ selectedProductIds.length }}/{{ productList.length }})</view>
 				<scroll-view class="product-list" scroll-y>
 					<view
 						v-for="(product, idx) in productList"
 						:key="product.rowid || ('product-' + idx)"
 						class="product-item"
-						:class="{ 'product-active': selectedProductId === product.rowid }"
+						:class="{ 'product-active': selectedProductIds.includes(product.rowid) }"
 						@click="handleProductClick(product)"
 						@longpress="handleLongPress(product)"
 						@mousedown="onMouseDown(product)"
@@ -95,15 +25,16 @@
 						<view class="product-info">
 							<text class="product-order">{{ product.orderNo || '-' }}</text>
 							<text class="product-name">{{ product.productNameNew || '-' }}</text>
-							<view class="product-spec">
-								<text v-if="product.thickness">{{ product.thickness }} |</text>
-								<text v-if="product.guokouSpec">{{ product.guokouSpec }} |</text>
-								<text v-if="product.guokouSizeSpec">{{ product.guokouSizeSpec }} |</text>
-								<text v-if="product.craftSpec">{{ product.craftSpec }} |</text>
-								<text v-if="product.paintSpec">{{ product.paintSpec }} |</text>
-								<text v-if="product.polishSpec">{{ product.polishSpec }} |</text>
-								<text v-if="product.materialSizeSpec">{{ product.materialSizeSpec }}</text>
-							</view>
+						</view>
+						<text class="expand-btn" @click.stop="toggleExpand(product.rowid)">{{ expandedIds.includes(product.rowid) ? '▼' : '▲' }}</text>
+						<view class="product-spec" v-if="expandedIds.includes(product.rowid)">
+							<text v-if="product.thickness">{{ product.thickness }} |</text>
+							<text v-if="product.guokouSpec">{{ product.guokouSpec }} |</text>
+							<text v-if="product.guokouSizeSpec">{{ product.guokouSizeSpec }} |</text>
+							<text v-if="product.craftSpec">{{ product.craftSpec }} |</text>
+							<text v-if="product.paintSpec">{{ product.paintSpec }} |</text>
+							<text v-if="product.polishSpec">{{ product.polishSpec }} |</text>
+							<text v-if="product.materialSizeSpec">{{ product.materialSizeSpec }}</text>
 						</view>
 					</view>
 					<view class="empty-wrap" v-if="!productList.length && !loadingProducts">
@@ -113,55 +44,65 @@
 			</view>
 
 			<view class="right-panel">
-				<scroll-view class="summary-list" scroll-y @scrolltolower="loadMoreSummary">
-					<view
-						v-for="(summary, idx) in summaryList"
-						:key="summary.rowid || ('summary-' + idx)"
-						class="summary-card"
-						:class="idx % 2 === 0 ? 'card-border-red' : 'card-border-blue'"
-					>
-						<view class="summary-header">
-							<view class="summary-info-row col-employee">
-								<text class="info-label">员工:</text>
-								<text class="info-value">{{ summary.employeeNames || '-' }}</text>
+				<view class="right-panel-top">
+					<scroll-view class="process-list" scroll-y>
+						<view
+							v-for="group in groupedProcessList"
+							:key="group.productRowid"
+							class="process-table"
+						>
+							<view class="process-table-scroll">
+						<view
+							class="process-table-grid"
+							:style="{ gridTemplateColumns: 'auto min-content repeat(' + group.processes.length + ', min-content)' }"
+						>
+							<view class="grid-product-name" style="grid-row: 1 / span 6; grid-column: 1">
+								{{ group.productName }}
 							</view>
-							<view class="summary-info-row col-worktime">
-								<text class="info-label">总工时:</text>
-								<text class="info-value">{{ summary.totalWorktime || '-' }}</text>
-							</view>
-							<view class="summary-info-row col-wage">
-								<text class="info-label">总工资:</text>
-								<text class="info-value">{{ summary.totalWage || '-' }}</text>
-							</view>
-							<view class="summary-right">
-								<view
-									v-for="(item, itemIdx) in summary.preDispatches"
-									:key="item.rowid || ('pd-' + idx + '-' + itemIdx)"
-									class="pre-dispatch-item"
-								>
-									<view class="pd-content"><!-- @click="handleItemClick(item)" -->
-										<text class="pd-order">{{ item.orderNo || '-' }}</text>
-										<text class="pd-product">{{ item.productNameNew || '-' }}</text>
-										<text class="pd-process">{{ item.processDisplay || '-' }}</text>
-										<text class="pd-count">数量: {{ item.dispatchCount || '-' }}</text>
-										<text class="pd-worktime">工时: {{ item.worktime || '-' }}</text>
-										<text class="pd-wage">工资: {{ item.wage || '-' }}</text>
-									</view>
-									<text class="pd-circle" @click="handleCircleClick(item)">⭕️</text>
-									<text class="pd-delete" @click.stop="handleVoidClick(item)">❌</text>
+							<view class="grid-label-cell" style="grid-row: 1; grid-column: 2">选中</view>
+							<view class="grid-label-cell" style="grid-row: 2; grid-column: 2">顺序</view>
+							<view class="grid-label-cell" style="grid-row: 3; grid-column: 2">工序</view>
+							<view class="grid-label-cell" style="grid-row: 4; grid-column: 2">订单数</view>
+							<view class="grid-label-cell" style="grid-row: 5; grid-column: 2">可派数</view>
+							<view class="grid-label-cell" style="grid-row: 6; grid-column: 2">已完成</view>
+							<template v-for="(p, idx) in group.processes" :key="p.rowid">
+								<view class="grid-cell" :style="{ gridRow: 1, gridColumn: 3 + idx }">
+									<checkbox :checked="selectedProcessIds.includes(p.rowid)" @click="toggleProcessSelection(p)" />
 								</view>
-							</view>
+								<view class="grid-cell" :style="{ gridRow: 2, gridColumn: 3 + idx }">{{ p.sequence || '-' }}</view>
+								<view class="grid-cell" :style="{ gridRow: 3, gridColumn: 3 + idx }">{{ p.processName || '-' }}</view>
+								<view class="grid-cell" :style="{ gridRow: 4, gridColumn: 3 + idx }">{{ p.orderCount || 0 }}</view>
+								<view class="grid-cell" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.dispatchableCount || 0 }}</view>
+								<view class="grid-cell" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ p.finishedCount || 0 }}</view>
+							</template>
 						</view>
 					</view>
-					<view class="load-more-wrap" v-if="summaryList.length">
-						<text v-if="loadingMore" class="load-more-text">加载中...</text>
-						<text v-else-if="!hasMoreSummary" class="load-more-text">没有更多了</text>
-						<text v-else class="load-more-text">上拉加载更多</text>
+						</view>
+						<view class="empty-wrap" v-if="!processList.length && !loadingProducts">
+							<text class="empty-text">暂无工序</text>
+						</view>
+					</scroll-view>
+				</view>
+				<view class="right-panel-bottom">
+					<view class="employee-chart">
+						<view
+							v-for="emp in employeeList"
+							:key="emp.id"
+							class="employee-column"
+						>
+							<text class="emp-wage">{{ emp.wage }}</text>
+							<view class="emp-bar-container">
+								<view
+									class="emp-bar"
+									:style="{ height: emp.barHeight, backgroundColor: emp.barColor }"
+								>
+									<text v-if="emp.totalHours >= 3" class="emp-hours">{{ emp.totalHours }}</text>
+								</view>
+							</view>
+							<text class="emp-name">{{ emp.name }}</text>
+						</view>
 					</view>
-					<view class="empty-wrap" v-if="!summaryList.length && !loadingSummary">
-						<text class="empty-text">暂无预派工汇总</text>
-					</view>
-				</scroll-view>
+				</view>
 			</view>
 		</view>
 
@@ -371,7 +312,32 @@ const hasMoreSummary = ref(true)
 const summaryPageNum = ref(1)
 const SUMMARY_PAGE_SIZE = 20
 
-const selectedProductId = ref('')
+const selectedProductIds = ref([])
+const expandedIds = ref([])
+const processList = ref([])
+const loadedProductIds = ref([])
+const selectedProcessIds = ref([])
+const employeeList = ref([])
+
+const PROCESS_DETAIL_WORKSHEET_ID = 'paigongdan'
+const PROCESS_DETAIL_FIELD_MAP = {
+	sequence: '693a62040f64427fac25ae80',
+	processName: '656ffd1bba5ef3863bf3ec1e',
+	needCount: '690dc19f8d797ee211e7fc60',
+	finishCount: '697c8b023b5e707f84ce02cc',
+	allcount: '68099ac75d6fc47331574e82',
+}
+
+const EMPLOYEE_WORKSHEET_ID = 'yggs'
+const EMPLOYEE_FIELD_MAP = {
+	workshop: '696075d19223cfe3a0c169dc',
+	dispatchDate: '69524e7b7a59e0522d855df6',
+	recordedHours: '697dd01d3b5e707f84ce30c38',
+	unrecordedHours: '697dd01d3b5e707f84ce30c4',
+	employeeName: '6938db8bda0981f67b352af3',
+}
+
+const MAX_EMPLOYEE_HOURS = 11
 
 const showVoidModal = ref(false)
 const voidReason = ref('')
@@ -541,7 +507,9 @@ const handleReset = () => {
 	filterPolish.value = ''
 	filterGuokou.value = ''
 	filterDate.value = getTomorrowDate()
-	selectedProductId.value = ''
+	selectedProductIds.value = []
+	processList.value = []
+	loadedProductIds.value = []
 	handleSearch()
 }
 
@@ -853,7 +821,151 @@ const loadMoreSummary = () => {
 }
 
 const handleProductClick = (product) => {
-	selectedProductId.value = product.rowid === selectedProductId.value ? '' : product.rowid
+	if (!product || !product.rowid) return
+	const idx = selectedProductIds.value.indexOf(product.rowid)
+	if (idx >= 0) {
+		selectedProductIds.value.splice(idx, 1)
+	} else {
+		selectedProductIds.value.push(product.rowid)
+		loadProductProcesses(product)
+	}
+}
+
+const loadProductProcesses = async (product) => {
+	if (!product || !product.rowid || loadedProductIds.value.includes(product.rowid)) return
+	const productionCode = product.productionCode
+	if (!productionCode) return
+	loadedProductIds.value.push(product.rowid)
+	try {
+		const filters = [{
+			controlId: '691d6160535b29cbd5c6c0a9',
+			dataType: 30,
+			spliceType: 1,
+			filterType: 1,
+			values: [productionCode]
+		}]
+		if (loginWorkshop.value) {
+			filters.push({
+				controlId: '669a6cae2503723eec1b49bb',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: [loginWorkshop.value]
+			})
+		}
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: PROCESS_DETAIL_WORKSHEET_ID,
+			filters,
+			pageSize: 500,
+			pageNum: 1,
+			silent: true
+		})
+		const rows = Array.isArray(res?.data) ? res.data : []
+		const newProcesses = rows.map((item) => ({
+			rowid: item.rowid || '',
+			productRowid: product.rowid,
+			productName: product.productNameNew || product.productName || '-',
+			sequence: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.sequence]),
+			processName: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.processName]),
+			orderCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.allcount]) || 0,
+			dispatchableCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.needCount]) || 0,
+			finishedCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.finishCount]) || 0,
+		})).sort((a, b) => (parseFloat(a.sequence) || 0) - (parseFloat(b.sequence) || 0))
+		processList.value.push(...newProcesses)
+	} catch (e) {
+		console.error('加载工序失败:', e)
+	}
+}
+
+const toggleProcessSelection = (process) => {
+	if (!process.rowid) return
+	const index = selectedProcessIds.value.indexOf(process.rowid)
+	if (index > -1) {
+		selectedProcessIds.value.splice(index, 1)
+	} else {
+		selectedProcessIds.value.push(process.rowid)
+	}
+}
+
+const toggleExpand = (rowid) => {
+	const index = expandedIds.value.indexOf(rowid)
+	if (index > -1) {
+		expandedIds.value.splice(index, 1)
+	} else {
+		expandedIds.value.push(rowid)
+	}
+}
+
+const groupedProcessList = computed(() => {
+	const groups = {}
+	processList.value.forEach((p) => {
+		if (!groups[p.productRowid]) {
+			groups[p.productRowid] = {
+				productRowid: p.productRowid,
+				productName: p.productName,
+				processes: []
+			}
+		}
+		groups[p.productRowid].processes.push(p)
+	})
+	return Object.values(groups)
+})
+
+const loadWorkshopEmployees = async () => {
+	try {
+		const currentDate = getCurrentDate()
+		const filters = []
+		if (loginWorkshop.value) {
+			filters.push({
+				controlId: EMPLOYEE_FIELD_MAP.workshop,
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: [loginWorkshop.value]
+			})
+		}
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: EMPLOYEE_WORKSHEET_ID,
+			filters,
+			pageSize: 500,
+			pageNum: 1,
+			silent: true
+		})
+		const rows = Array.isArray(res?.data) ? res.data : []
+		const filtered = rows.filter((item) => formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) === currentDate)
+		const mapped = filtered.map((item) => {
+			const recordedHours = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.recordedHours])) || 0
+			const unrecordedHours = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.unrecordedHours])) || 0
+			const totalHours = recordedHours + unrecordedHours
+			return {
+				id: item.rowid || '',
+				name: formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName]) || '-',
+				recordedHours,
+				unrecordedHours,
+				totalHours
+			}
+		})
+		const maxTotalHours = Math.max(...mapped.map((e) => e.totalHours), 0.0001)
+		employeeList.value = mapped.map((e) => {
+			const wage = Math.round(100 + (e.totalHours / maxTotalHours) * 300)
+			const barHeight = (Math.min(e.totalHours, MAX_EMPLOYEE_HOURS) / MAX_EMPLOYEE_HOURS * 100) + '%'
+			let barColor = '#e74c3c'
+			if (e.totalHours > 0 && e.totalHours < MAX_EMPLOYEE_HOURS) {
+				barColor = '#f1c40f'
+			} else if (e.totalHours >= MAX_EMPLOYEE_HOURS) {
+				barColor = '#27ae60'
+			}
+			return {
+				...e,
+				wage,
+				barHeight,
+				barColor
+			}
+		})
+	} catch (e) {
+		console.error('加载员工数据失败:', e)
+		employeeList.value = []
+	}
 }
 
 const handleItemClick = (item) => {
@@ -1182,6 +1294,7 @@ const toggleEmployee = (emp) => {
 onMounted(() => {
 	loadProducts(true)
 	loadSummaries(true)
+	loadWorkshopEmployees()
 })
 </script>
 
@@ -1194,7 +1307,7 @@ onMounted(() => {
 	flex-direction: column;
 
 	.header {
-		height: px2vw(90px);
+		height: px2vw(70px);
 		width: 100%;
 		display: flex;
 		justify-content: space-between;
@@ -1204,13 +1317,13 @@ onMounted(() => {
 
 		image {
 			margin-left: px2vw(20px);
-			height: px2vw(50px);
-			width: px2vw(50px);
+			height: px2vw(40px);
+			width: px2vw(40px);
 		}
 
 		.title {
 			margin-right: px2vw(80px);
-			font-size: px2vw(32px);
+			font-size: px2vw(28px);
 			color: white;
 			font-weight: bold;
 		}
@@ -1218,7 +1331,7 @@ onMounted(() => {
 
 	.search-box {
 			background-color: #fff;
-			padding: px2vw(10px);
+			padding: px2vw(8px) px2vw(10px);
 			border-bottom: 1px solid #eee;
 			flex-shrink: 0;
 
@@ -1348,7 +1461,7 @@ onMounted(() => {
 		height: 0;
 
 		.left-panel {
-			width: px2vw(400px);
+			width: px2vw(460px);
 			background-color: #fff;
 			border-right: 1px solid #eee;
 			display: flex;
@@ -1372,11 +1485,12 @@ onMounted(() => {
 				overflow: hidden;
 
 				.product-item {
-					padding: px2vw(16px) px2vw(12px);
+					padding: px2vw(12px);
 					border-bottom: 1px solid #f0f0f0;
 					display: flex;
 					flex-direction: row;
 					align-items: center;
+					flex-wrap: wrap;
 
 					&.product-active {
 						background-color: #e8f4ff;
@@ -1384,40 +1498,61 @@ onMounted(() => {
 					}
 
 					.product-index {
-						width: px2vw(40px);
-						height: px2vw(40px);
-						line-height: px2vw(40px);
+						width: px2vw(36px);
+						height: px2vw(36px);
+						line-height: px2vw(36px);
 						text-align: center;
 						background-color: #3498db;
 						color: #fff;
 						border-radius: 50%;
-						font-size: px2vw(22px);
+						font-size: px2vw(20px);
 						flex-shrink: 0;
 					}
 
 					.product-info {
 						flex: 1;
 						display: flex;
-						flex-direction: column;
-						margin-left: px2vw(12px);
-						gap: px2vw(4px);
+						flex-direction: row;
+						align-items: center;
+						margin-left: px2vw(10px);
+						gap: px2vw(8px);
+						min-width: 0;
 					}
 
 					.product-order {
-						font-size: px2vw(24px);
-						color: #666;
+						font-size: px2vw(22px);
+						color: #333;
+						white-space: nowrap;
+						overflow: hidden;
+						text-overflow: ellipsis;
+						flex-shrink: 0;
 					}
 
 					.product-name {
-						font-size: px2vw(26px);
+						font-size: px2vw(22px);
 						color: #333;
-						font-weight: 600;
+						white-space: nowrap;
+						overflow: hidden;
+						text-overflow: ellipsis;
+						margin-right: px2vw(16px);
+						margin-left: px2vw(16px);
+						flex: 1;
+						min-width: 0;
+					}
+
+					.expand-btn {
+						font-size: px2vw(20px);
+						color: #999;
+						padding: px2vw(4px) px2vw(8px);
+						flex-shrink: 0;
 					}
 
 					.product-spec {
-						font-size: px2vw(20px);
+						width: 100%;
+						font-size: px2vw(18px);
 						color: #999;
-						margin-top: px2vw(4px);
+						margin-top: px2vw(8px);
+						margin-left: px2vw(46px);
 					}
 				}
 			}
@@ -1425,157 +1560,79 @@ onMounted(() => {
 
 		.right-panel {
 			flex: 1;
-			padding: px2vw(10px);
+			display: flex;
+			flex-direction: column;
+			overflow: hidden;
 
-			.summary-list {
+			.right-panel-top {
+				height: px2vw(470px);
+				overflow: hidden;
+				border-bottom: 1px solid #eee;
+			}
+
+			.right-panel-bottom {
+				flex: 1;
+				overflow: hidden;
+			}
+
+			.process-list {
 				height: 100%;
+				padding: px2vw(10px);
 
-				.summary-card {
-					background-color: #fff;
-					border-radius: px2vw(8px);
+				.process-table {
 					margin-bottom: px2vw(10px);
-					box-shadow: 0 px2vw(2px) px2vw(6px) rgba(0, 0, 0, 0.06);
-					overflow: hidden;
-					border: 1px solid #ddd;
 
-					&.card-border-red {
-						border-left: px2vw(8px) solid #e74c3c;
+					.process-table-scroll {
+						overflow-x: auto;
+						border: 1px solid #999;
 					}
 
-					&.card-border-blue {
-						border-left: px2vw(8px) solid #3498db;
-					}
+					.process-table-grid {
+						display: inline-grid;
+						grid-template-rows: repeat(6, auto);
 
-					.summary-header {
-						display: flex;
-						align-items: center;
-						padding: px2vw(10px) px2vw(12px);
-						background-color: #fafafa;
-						border-bottom: 1px solid #eee;
-
-						.summary-info-row {
+						.grid-product-name {
+							grid-row: 1 / span 6;
 							display: flex;
 							align-items: center;
-							gap: px2vw(6px);
-							margin-right: 0;
-
-							&.col-employee {
-								width: px2vw(150px);
-								flex-shrink: 0;
-							}
-
-						&.col-worktime {
-								width: px2vw(130px);
-								flex-shrink: 0;
-								margin-right: px2vw(30px);
-							}
-
-						&.col-wage {
-							width: px2vw(130px);
-							flex-shrink: 0;
-							margin-right: px2vw(40px);
+							justify-content: center;
+							writing-mode: vertical-rl;
+							text-orientation: upright;
+							background-color: #f0f0f0;
+							padding: px2vw(12px);
+							border-right: 1px solid #999;
+							font-size: px2vw(24px);
+							color: #333;
+							white-space: nowrap;
 						}
 
-							.info-label {
-								font-size: px2vw(22px);
-								color: #999;
-								white-space: nowrap;
-							}
-
-							.info-value {
-								font-size: px2vw(24px);
-								color: #333;
-								font-weight: 600;
-							}
+						.grid-label-cell {
+							background-color: #f0f0f0;
+							padding: px2vw(10px) px2vw(6px);
+							text-align: center;
+							font-size: px2vw(20px);
+							color: #333;
+							border-bottom: 1px solid #999;
+							border-right: 1px solid #999;
+							white-space: nowrap;
 						}
 
-						.summary-right {
-							flex: 1;
-							overflow: hidden;
+						.grid-cell {
+							padding: px2vw(10px) px2vw(6px);
+							text-align: center;
+							font-size: px2vw(20px);
+							color: #333;
+							border-bottom: 1px solid #999;
+							border-right: 1px solid #999;
 							display: flex;
-							flex-direction: column;
+							align-items: center;
+							justify-content: center;
+							white-space: nowrap;
 
-							.pre-dispatch-item {
-								display: flex;
-								flex-direction: row;
-								align-items: center;
-								justify-content: flex-start;
-								padding: px2vw(10px) 0;
-								border-bottom: 1px solid #f0f0f0;
-								margin-left: px2vw(12px);
-
-								&:last-child {
-									border-bottom: none;
-								}
-
-								.pd-content {
-											display: flex;
-											flex-direction: row;
-											align-items: center;
-											flex: 1;
-											justify-content: flex-start;
-											gap: px2vw(30px);
-										}
-
-										.pd-delete,
-										.pd-circle {
-											font-size: px2vw(28px);
-											padding: px2vw(8px);
-											flex-shrink: 0;
-										}
-
-										.pd-delete {
-											color: #ff4d4f;
-										}
-
-										.pd-order {
-											font-size: px2vw(22px);
-											color: #666;
-											white-space: nowrap;
-										}
-
-										.pd-product {
-											font-size: px2vw(24px);
-											color: #27ae60;
-											font-weight: 600;
-											white-space: nowrap;
-										}
-
-										.pd-process {
-											font-size: px2vw(22px);
-											color: #333;
-											white-space: nowrap;
-										}
-
-										.pd-count {
-											font-size: px2vw(20px);
-											color: #666;
-											white-space: nowrap;
-										}
-
-										.pd-worktime {
-											font-size: px2vw(20px);
-											color: #666;
-											white-space: nowrap;
-										}
-
-										.pd-wage {
-											font-size: px2vw(20px);
-											color: #666;
-											white-space: nowrap;
-										}
+							&:nth-last-child(-n+6) {
+								border-right: none;
 							}
 						}
-					}
-				}
-
-				.load-more-wrap {
-					padding: px2vw(16px) 0 px2vw(30px);
-					text-align: center;
-
-					.load-more-text {
-						font-size: px2vw(24px);
-						color: #888;
 					}
 				}
 
@@ -1586,6 +1643,63 @@ onMounted(() => {
 					.empty-text {
 						font-size: px2vw(28px);
 						color: #aaa;
+					}
+				}
+			}
+
+			.employee-chart {
+				height: 100%;
+				display: flex;
+				flex-direction: row;
+				align-items: flex-end;
+				justify-content: space-around;
+				padding: px2vw(20px);
+
+				.employee-column {
+					display: flex;
+					flex-direction: column;
+					align-items: center;
+					justify-content: flex-end;
+					height: 100%;
+					flex: 1;
+					min-width: px2vw(80px);
+
+					.emp-wage {
+						font-size: px2vw(22px);
+						color: #333;
+						margin-bottom: px2vw(8px);
+					}
+
+					.emp-bar-container {
+						width: px2vw(60px);
+						flex: 1;
+						background-color: #e0e0e0;
+						border-radius: px2vw(4px);
+						position: relative;
+						display: flex;
+						align-items: flex-end;
+						justify-content: center;
+						overflow: hidden;
+
+						.emp-bar {
+							width: 100%;
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							border-radius: px2vw(4px);
+
+							.emp-hours {
+								font-size: px2vw(20px);
+								color: #333;
+							}
+						}
+					}
+
+					.emp-name {
+						font-size: px2vw(22px);
+						color: #333;
+						margin-top: px2vw(8px);
+						text-align: center;
 					}
 				}
 			}
