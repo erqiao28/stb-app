@@ -69,15 +69,15 @@
 							<view class="grid-label-cell" style="grid-row: 5; grid-column: 2">日产量</view>
 							<view class="grid-label-cell" style="grid-row: 6; grid-column: 2">派工数量</view>
 							<template v-for="(p, idx) in group.processes" :key="p.rowid">
-								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 1, gridColumn: 3 + idx }">
-									<checkbox :checked="selectedProcessIds.includes(p.rowid)" @click="toggleProcessSelection(p)" />
-								</view>
-								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 2, gridColumn: 3 + idx }">{{ p.sequence || '-' }}</view>
-								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 3, gridColumn: 3 + idx }">{{ p.processName || '-' }}</view>
-								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 4, gridColumn: 3 + idx }">{{ p.orderCount || 0 }}</view>
-								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.dailyOutput || 0 }}</view>
-								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ productDispatchCounts[p.productRowid] || 0 }}</view>
-							</template>
+							<view class="grid-cell" :class="{ 'selected-column': p.isAssociated && selectedProcessIds.includes(p.rowid), 'disabled-column': !p.isAssociated }" :style="{ gridRow: 1, gridColumn: 3 + idx }">
+								<checkbox :checked="selectedProcessIds.includes(p.rowid)" :disabled="!p.isAssociated" @click="toggleProcessSelection(p)" />
+							</view>
+							<view class="grid-cell" :class="{ 'selected-column': p.isAssociated && selectedProcessIds.includes(p.rowid), 'disabled-column': !p.isAssociated }" :style="{ gridRow: 2, gridColumn: 3 + idx }">{{ p.sequence || '-' }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': p.isAssociated && selectedProcessIds.includes(p.rowid), 'disabled-column': !p.isAssociated }" :style="{ gridRow: 3, gridColumn: 3 + idx }">{{ p.processName || '-' }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': p.isAssociated && selectedProcessIds.includes(p.rowid), 'disabled-column': !p.isAssociated }" :style="{ gridRow: 4, gridColumn: 3 + idx }">{{ p.orderCount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': p.isAssociated && selectedProcessIds.includes(p.rowid), 'disabled-column': !p.isAssociated }" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.dailyOutput || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': p.isAssociated && selectedProcessIds.includes(p.rowid), 'disabled-column': !p.isAssociated }" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ productDispatchCounts[p.productRowid] || 0 }}</view>
+						</template>
 						</view>
 						<view class="empty-wrap" v-if="!processList.length && !loadingProducts">
 							<text class="empty-text">暂无工序</text>
@@ -258,22 +258,28 @@
 			<view class="dispatch-modal-content" @click.stop>
 				<view class="dispatch-modal-title">派工设置</view>
 				<view class="dispatch-modal-body">
-					<view class="dispatch-row">
-						<text class="dispatch-label">订单编号:</text>
-						<text class="dispatch-value">{{ dispatchModalProduct.orderNo || '-' }}</text>
-					</view>
-					<view class="dispatch-row">
-						<text class="dispatch-label">计划派工数量:</text>
-						<text class="dispatch-value">{{ dispatchModalProduct.dispatchCount || 0 }}</text>
-					</view>
-					<view class="dispatch-row">
-						<text class="dispatch-label">派工数量:</text>
-						<input
-							v-model="dispatchModalInput"
-							type="number"
-							class="dispatch-input"
-							placeholder="请输入派工数量"
-						/>
+					<view class="dispatch-grid">
+						<view class="dispatch-grid-cell">
+							<text class="grid-cell-label">订单数量</text>
+							<text class="grid-cell-value">100</text>
+						</view>
+						<view class="dispatch-grid-cell">
+							<text class="grid-cell-label">可派数量</text>
+							<text class="grid-cell-value">50</text>
+						</view>
+						<view class="dispatch-grid-cell">
+							<text class="grid-cell-label">完成数量</text>
+							<text class="grid-cell-value">30</text>
+						</view>
+						<view class="dispatch-grid-cell">
+							<text class="grid-cell-label">派工数量</text>
+							<input
+								v-model="dispatchModalInput"
+								type="number"
+								class="dispatch-input"
+								placeholder="请输入"
+							/>
+						</view>
 					</view>
 				</view>
 				<view class="dispatch-modal-buttons">
@@ -920,12 +926,41 @@ const saveDispatchModal = () => {
 	closeDispatchModal()
 }
 
+const loadAssociatedProcessDetailRowids = async (product) => {
+	try {
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
+			filters: [{
+				controlId: 'rowid',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: [product.rowid]
+			}],
+			pageSize: 500,
+			pageNum: 1,
+			silent: true
+		})
+		const rows = Array.isArray(res?.data) ? res.data : []
+		const rowids = new Set()
+		rows.forEach((item) => {
+			const sids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail])
+			sids.forEach((sid) => rowids.add(sid))
+		})
+		return rowids
+	} catch (e) {
+		console.error('加载关联工序失败:', e)
+		return new Set()
+	}
+}
+
 const loadProductProcesses = async (product) => {
 	if (!product || !product.rowid || loadedProductIds.value.includes(product.rowid)) return
 	const productionCode = product.productionCode
 	if (!productionCode) return
 	loadedProductIds.value.push(product.rowid)
 	try {
+		const associatedRowids = await loadAssociatedProcessDetailRowids(product)
 		const filters = [{
 			controlId: '691d6160535b29cbd5c6c0a9',
 			dataType: 30,
@@ -958,6 +993,7 @@ const loadProductProcesses = async (product) => {
 			processName: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.processName]),
 			orderCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.allcount]) || 0,
 			dailyOutput: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.dailyOutput]) || 0,
+			isAssociated: associatedRowids.has(item.rowid)
 		})).sort((a, b) => (parseFloat(a.sequence) || 0) - (parseFloat(b.sequence) || 0))
 		processList.value.push(...newProcesses)
 	} catch (e) {
@@ -967,6 +1003,10 @@ const loadProductProcesses = async (product) => {
 
 const toggleProcessSelection = (process) => {
 	if (!process.rowid) return
+	if (!process.isAssociated) {
+		uni.showToast({ title: '产品还未流转到该工序', icon: 'none' })
+		return
+	}
 	const index = selectedProcessIds.value.indexOf(process.rowid)
 	if (index > -1) {
 		selectedProcessIds.value.splice(index, 1)
@@ -1831,6 +1871,11 @@ onMounted(() => {
 							background-color: #d4edda;
 						}
 
+						&.disabled-column {
+							background-color: #f0f0f0;
+							color: #999;
+						}
+
 						&:nth-last-child(-n+6) {
 							border-right: none;
 						}
@@ -2008,33 +2053,54 @@ onMounted(() => {
 	.dispatch-modal-body {
 		margin-bottom: px2vw(30px);
 
-		.dispatch-row {
-			display: flex;
-			flex-direction: row;
-			align-items: center;
-			margin-bottom: px2vw(20px);
+		.dispatch-grid {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			grid-template-rows: 1fr 1fr;
+			border: 1px solid #ddd;
+			border-radius: px2vw(8px);
+			overflow: hidden;
 
-			.dispatch-label {
-				width: px2vw(200px);
-				font-size: px2vw(26px);
-				color: #666;
-				flex-shrink: 0;
-			}
+			.dispatch-grid-cell {
+				padding: px2vw(20px);
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				border-right: 1px solid #eee;
+				border-bottom: 1px solid #eee;
 
-			.dispatch-value {
-				flex: 1;
-				font-size: px2vw(26px);
-				color: #333;
-			}
+				&:nth-child(2n) {
+					border-right: none;
+				}
 
-			.dispatch-input {
-				flex: 1;
-				height: px2vw(50px);
-				border: 1px solid #ddd;
-				border-radius: px2vw(8px);
-				padding: 0 px2vw(20px);
-				font-size: px2vw(26px);
-				box-sizing: border-box;
+				&:nth-child(3),
+				&:nth-child(4) {
+					border-bottom: none;
+				}
+
+				.grid-cell-label {
+					font-size: px2vw(22px);
+					color: #666;
+					margin-bottom: px2vw(8px);
+				}
+
+				.grid-cell-value {
+					font-size: px2vw(28px);
+					color: #333;
+					font-weight: bold;
+				}
+
+				.dispatch-input {
+					width: 100%;
+					height: px2vw(50px);
+					border: 1px solid #ddd;
+					border-radius: px2vw(8px);
+					padding: 0 px2vw(10px);
+					font-size: px2vw(24px);
+					box-sizing: border-box;
+					text-align: center;
+				}
 			}
 		}
 	}
