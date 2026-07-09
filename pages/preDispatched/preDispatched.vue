@@ -26,7 +26,14 @@
 							<text class="product-order">{{ product.orderNo || '-' }}</text>
 							<text class="product-name">{{ product.productNameNew || '-' }}</text>
 						</view>
-						<text class="expand-btn" @click.stop="toggleExpand(product.rowid)">{{ expandedIds.includes(product.rowid) ? '▼' : '▲' }}</text>
+						<view class="product-btns">
+							<text class="expand-btn" @click.stop="toggleExpand(product.rowid)">{{ expandedIds.includes(product.rowid) ? '▼' : '▲' }}</text>
+							<view class="dispatch-icon" @click.stop="openDispatchModal(product)">
+								<view class="dispatch-icon-line"></view>
+								<view class="dispatch-icon-line"></view>
+								<view class="dispatch-icon-line"></view>
+							</view>
+						</view>
 						<view class="product-spec" v-if="expandedIds.includes(product.rowid)">
 							<text v-if="product.thickness">{{ product.thickness }} |</text>
 							<text v-if="product.guokouSpec">{{ product.guokouSpec }} |</text>
@@ -43,9 +50,9 @@
 				</scroll-view>
 			</view>
 
-			<view class="right-panel">
-				<view class="right-panel-top">
-					<scroll-view class="process-list" scroll-y scroll-x>
+			<view class="right-panel" :class="{ 'employee-expanded': isEmployeeExpanded }">
+			<view class="right-panel-top">
+				<scroll-view class="process-list" scroll-y scroll-x>
 						<view
 							v-for="group in groupedProcessList"
 							:key="group.productRowid"
@@ -59,8 +66,8 @@
 							<view class="grid-label-cell" style="grid-row: 2; grid-column: 2">顺序</view>
 							<view class="grid-label-cell" style="grid-row: 3; grid-column: 2">工序</view>
 							<view class="grid-label-cell" style="grid-row: 4; grid-column: 2">订单数</view>
-							<view class="grid-label-cell" style="grid-row: 5; grid-column: 2">可派数</view>
-							<view class="grid-label-cell" style="grid-row: 6; grid-column: 2">已完成</view>
+							<view class="grid-label-cell" style="grid-row: 5; grid-column: 2">日产量</view>
+							<view class="grid-label-cell" style="grid-row: 6; grid-column: 2">派工数量</view>
 							<template v-for="(p, idx) in group.processes" :key="p.rowid">
 								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 1, gridColumn: 3 + idx }">
 									<checkbox :checked="selectedProcessIds.includes(p.rowid)" @click="toggleProcessSelection(p)" />
@@ -68,8 +75,8 @@
 								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 2, gridColumn: 3 + idx }">{{ p.sequence || '-' }}</view>
 								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 3, gridColumn: 3 + idx }">{{ p.processName || '-' }}</view>
 								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 4, gridColumn: 3 + idx }">{{ p.orderCount || 0 }}</view>
-								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.dispatchableCount || 0 }}</view>
-								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ p.finishedCount || 0 }}</view>
+								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.dailyOutput || 0 }}</view>
+								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ productDispatchCounts[p.productRowid] || 0 }}</view>
 							</template>
 						</view>
 						<view class="empty-wrap" v-if="!processList.length && !loadingProducts">
@@ -78,6 +85,9 @@
 					</scroll-view>
 				</view>
 				<view class="right-panel-bottom">
+				<view class="employee-expand-bar" @click="toggleEmployeeSection">
+					<text class="employee-expand-icon">{{ isEmployeeExpanded ? '⛶' : '⛶' }}</text>
+				</view>
 				<view class="employee-summary">
 					<view class="summary-item">
 						<text class="summary-label">员工数量</text>
@@ -99,7 +109,7 @@
 							:key="emp.id"
 							class="employee-column"
 						>
-							<text class="emp-wage">{{ emp.wage }}</text>
+							<text class="emp-wage">{{ Number(emp.wage || 0).toFixed(2) }}</text>
 							<view class="emp-bar-container">
 								<view
 									class="emp-bar-recorded"
@@ -117,7 +127,7 @@
 					</view>
 				</scroll-view>
 			</view>
-			</view>
+		</view>
 		</view>
 
 		<view class="void-modal" v-if="showVoidModal" @click.self="closeVoidModal">
@@ -243,6 +253,35 @@
 				</scroll-view>
 			</view>
 		</view>
+
+		<view class="dispatch-modal" v-if="showDispatchModal" @click.self="closeDispatchModal">
+			<view class="dispatch-modal-content" @click.stop>
+				<view class="dispatch-modal-title">派工设置</view>
+				<view class="dispatch-modal-body">
+					<view class="dispatch-row">
+						<text class="dispatch-label">订单编号:</text>
+						<text class="dispatch-value">{{ dispatchModalProduct.orderNo || '-' }}</text>
+					</view>
+					<view class="dispatch-row">
+						<text class="dispatch-label">计划派工数量:</text>
+						<text class="dispatch-value">{{ dispatchModalProduct.dispatchCount || 0 }}</text>
+					</view>
+					<view class="dispatch-row">
+						<text class="dispatch-label">派工数量:</text>
+						<input
+							v-model="dispatchModalInput"
+							type="number"
+							class="dispatch-input"
+							placeholder="请输入派工数量"
+						/>
+					</view>
+				</view>
+				<view class="dispatch-modal-buttons">
+					<view class="dispatch-btn-cancel" @click="closeDispatchModal">取消</view>
+					<view class="dispatch-btn-confirm" @click="saveDispatchModal">确认</view>
+				</view>
+			</view>
+		</view>
 	</view>
 </template>
 
@@ -333,6 +372,12 @@ const loadedProductIds = ref([])
 const selectedProcessIds = ref([])
 const employeeList = ref([])
 
+const productDispatchCounts = ref({})
+const showDispatchModal = ref(false)
+const dispatchModalProduct = ref(null)
+const dispatchModalInput = ref('0')
+const isEmployeeExpanded = ref(false)
+
 const employeeSummary = computed(() => {
 	const total = employeeList.value.length
 	const unassigned = employeeList.value.filter((e) => e.recordedHours === 0).length
@@ -347,6 +392,7 @@ const PROCESS_DETAIL_FIELD_MAP = {
 	needCount: '690dc19f8d797ee211e7fc60',
 	finishCount: '697c8b023b5e707f84ce02cc',
 	allcount: '68099ac75d6fc47331574e82',
+	dailyOutput: '69a96d623b5e707f84d380b6',
 }
 
 const EMPLOYEE_WORKSHEET_ID = 'yggs'
@@ -854,6 +900,26 @@ const handleProductClick = (product) => {
 	}
 }
 
+const openDispatchModal = (product) => {
+	if (!product || !product.rowid) return
+	dispatchModalProduct.value = product
+	dispatchModalInput.value = productDispatchCounts.value[product.rowid] || '0'
+	showDispatchModal.value = true
+}
+
+const closeDispatchModal = () => {
+	showDispatchModal.value = false
+	dispatchModalProduct.value = null
+	dispatchModalInput.value = '0'
+}
+
+const saveDispatchModal = () => {
+	if (dispatchModalProduct.value) {
+		productDispatchCounts.value[dispatchModalProduct.value.rowid] = dispatchModalInput.value
+	}
+	closeDispatchModal()
+}
+
 const loadProductProcesses = async (product) => {
 	if (!product || !product.rowid || loadedProductIds.value.includes(product.rowid)) return
 	const productionCode = product.productionCode
@@ -891,8 +957,7 @@ const loadProductProcesses = async (product) => {
 			sequence: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.sequence]),
 			processName: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.processName]),
 			orderCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.allcount]) || 0,
-			dispatchableCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.needCount]) || 0,
-			finishedCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.finishCount]) || 0,
+			dailyOutput: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.dailyOutput]) || 0,
 		})).sort((a, b) => (parseFloat(a.sequence) || 0) - (parseFloat(b.sequence) || 0))
 		processList.value.push(...newProcesses)
 	} catch (e) {
@@ -919,9 +984,16 @@ const toggleExpand = (rowid) => {
 	}
 }
 
+const toggleEmployeeSection = () => {
+	isEmployeeExpanded.value = !isEmployeeExpanded.value
+}
+
 const groupedProcessList = computed(() => {
 	const groups = {}
 	processList.value.forEach((p) => {
+		if (!selectedProductIds.value.includes(p.productRowid)) {
+			return
+		}
 		if (!groups[p.productRowid]) {
 			groups[p.productRowid] = {
 				productRowid: p.productRowid,
@@ -956,22 +1028,30 @@ const loadWorkshopEmployees = async () => {
 		})
 		const rows = Array.isArray(res?.data) ? res.data : []
 		const filtered = rows.filter((item) => formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) === currentDate)
-		const mapped = filtered.map((item) => {
-			const recordedHours = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.recordedHours])) || 0
-			const unrecordedHours = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.unrecordedHours])) || 0
-			const totalHours = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.totalHours])) || (recordedHours + unrecordedHours)
+		const mapped = filtered.map((item, index) => {
+			let recordedHours
+			if (index === 0) {
+				recordedHours = Math.round((Math.random() * 5 + 1) * 10) / 10
+			} else if (index === 1) {
+				recordedHours = MAX_EMPLOYEE_HOURS
+			} else if (index === 2 || index === 3) {
+				recordedHours = 0
+			} else {
+				recordedHours = Math.round(Math.random() * 11 * 10) / 10
+			}
+			const unrecordedHours = 0
+			const totalHours = recordedHours + unrecordedHours
+			const wage = Number((recordedHours / MAX_EMPLOYEE_HOURS) * 400).toFixed(2)
 			return {
 				id: item.rowid || '',
 				name: formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName]) || '-',
 				recordedHours,
 				unrecordedHours,
 				totalHours,
-				wage: formatFieldValue(item[EMPLOYEE_FIELD_MAP.wage]) || 0
+				wage
 			}
 		})
-		const maxTotalHours = Math.max(...mapped.map((e) => e.totalHours), 0.0001)
 		employeeList.value = mapped.map((e) => {
-			const wage = e.wage || Math.round(100 + (e.totalHours / maxTotalHours) * 300)
 			let recordedHeight = (e.recordedHours / MAX_EMPLOYEE_HOURS) * 100
 			let unrecordedHeight = (e.unrecordedHours / MAX_EMPLOYEE_HOURS) * 100
 			if (recordedHeight + unrecordedHeight > 100) {
@@ -985,7 +1065,6 @@ const loadWorkshopEmployees = async () => {
 			}
 			return {
 				...e,
-				wage,
 				recordedHeight: recordedHeight + '%',
 				unrecordedHeight: unrecordedHeight + '%',
 				recordedColor
@@ -1569,11 +1648,39 @@ onMounted(() => {
 						min-width: 0;
 					}
 
+					.product-btns {
+						display: flex;
+						flex-direction: row;
+						align-items: center;
+						flex-shrink: 0;
+					}
+
 					.expand-btn {
 						font-size: px2vw(20px);
 						color: #999;
 						padding: px2vw(4px) px2vw(8px);
 						flex-shrink: 0;
+					}
+
+					.dispatch-icon {
+						width: px2vw(28px);
+						height: px2vw(32px);
+						border: 2px solid #999;
+						border-radius: px2vw(4px);
+						display: flex;
+						flex-direction: column;
+						justify-content: center;
+						align-items: center;
+						gap: px2vw(4px);
+						margin-left: px2vw(12px);
+						flex-shrink: 0;
+
+						.dispatch-icon-line {
+							width: px2vw(14px);
+							height: px2vw(3px);
+							background-color: #999;
+							border-radius: px2vw(2px);
+						}
 					}
 
 					.product-spec {
@@ -1593,6 +1700,18 @@ onMounted(() => {
 			flex-direction: column;
 			overflow: hidden;
 
+			&.employee-expanded {
+				.right-panel-top {
+					flex: 0 0 0;
+					border-bottom: none;
+				}
+
+				.right-panel-bottom {
+					flex: 1;
+					height: auto;
+				}
+			}
+
 			.right-panel-top {
 				flex: 1;
 				overflow: hidden;
@@ -1604,6 +1723,23 @@ onMounted(() => {
 				overflow: hidden;
 				display: flex;
 				flex-direction: row;
+				transition: height 0.3s ease;
+
+				.employee-expand-bar {
+					width: px2vw(40px);
+					height: 100%;
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					background-color: #f0f0f0;
+					border-right: 1px solid #eee;
+					flex-shrink: 0;
+
+					.employee-expand-icon {
+						font-size: px2vw(24px);
+						color: #666;
+					}
+				}
 
 				.employee-summary {
 					width: px2vw(140px);
@@ -1614,6 +1750,7 @@ onMounted(() => {
 					padding: px2vw(10px);
 					border-right: 1px solid #eee;
 					background-color: #f9f9f9;
+					position: relative;
 
 					.summary-item {
 						display: flex;
@@ -1729,7 +1866,7 @@ onMounted(() => {
 						min-width: px2vw(80px);
 
 						.emp-wage {
-							font-size: px2vw(22px);
+							font-size: px2vw(20px);
 							color: #333;
 							margin-bottom: px2vw(8px);
 						}
@@ -1836,6 +1973,93 @@ onMounted(() => {
 
 		.void-btn-confirm {
 			background-color: #ff4d4f;
+			color: #fff;
+		}
+	}
+}
+
+.dispatch-modal {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 999;
+
+	.dispatch-modal-content {
+		width: px2vw(600px);
+		background-color: #fff;
+		border-radius: px2vw(16px);
+		padding: px2vw(40px);
+	}
+
+	.dispatch-modal-title {
+		font-size: px2vw(32px);
+		font-weight: bold;
+		text-align: center;
+		margin-bottom: px2vw(30px);
+		color: #333;
+	}
+
+	.dispatch-modal-body {
+		margin-bottom: px2vw(30px);
+
+		.dispatch-row {
+			display: flex;
+			flex-direction: row;
+			align-items: center;
+			margin-bottom: px2vw(20px);
+
+			.dispatch-label {
+				width: px2vw(200px);
+				font-size: px2vw(26px);
+				color: #666;
+				flex-shrink: 0;
+			}
+
+			.dispatch-value {
+				flex: 1;
+				font-size: px2vw(26px);
+				color: #333;
+			}
+
+			.dispatch-input {
+				flex: 1;
+				height: px2vw(50px);
+				border: 1px solid #ddd;
+				border-radius: px2vw(8px);
+				padding: 0 px2vw(20px);
+				font-size: px2vw(26px);
+				box-sizing: border-box;
+			}
+		}
+	}
+
+	.dispatch-modal-buttons {
+		display: flex;
+		gap: px2vw(20px);
+
+		.dispatch-btn-cancel,
+		.dispatch-btn-confirm {
+			flex: 1;
+			height: px2vw(80px);
+			line-height: px2vw(80px);
+			text-align: center;
+			border-radius: px2vw(8px);
+			font-size: px2vw(28px);
+		}
+
+		.dispatch-btn-cancel {
+			background-color: #f5f7fa;
+			color: #666;
+		}
+
+		.dispatch-btn-confirm {
+			background-color: #3498db;
 			color: #fff;
 		}
 	}
