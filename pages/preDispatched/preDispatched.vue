@@ -45,16 +45,12 @@
 
 			<view class="right-panel">
 				<view class="right-panel-top">
-					<scroll-view class="process-list" scroll-y>
+					<scroll-view class="process-list" scroll-y scroll-x>
 						<view
 							v-for="group in groupedProcessList"
 							:key="group.productRowid"
-							class="process-table"
-						>
-							<view class="process-table-scroll">
-						<view
 							class="process-table-grid"
-							:style="{ gridTemplateColumns: 'auto min-content repeat(' + group.processes.length + ', min-content)' }"
+							:style="{ gridTemplateColumns: 'min-content min-content repeat(' + group.processes.length + ', min-content)' }"
 						>
 							<view class="grid-product-name" style="grid-row: 1 / span 6; grid-column: 1">
 								{{ group.productName }}
@@ -66,17 +62,15 @@
 							<view class="grid-label-cell" style="grid-row: 5; grid-column: 2">可派数</view>
 							<view class="grid-label-cell" style="grid-row: 6; grid-column: 2">已完成</view>
 							<template v-for="(p, idx) in group.processes" :key="p.rowid">
-								<view class="grid-cell" :style="{ gridRow: 1, gridColumn: 3 + idx }">
+								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 1, gridColumn: 3 + idx }">
 									<checkbox :checked="selectedProcessIds.includes(p.rowid)" @click="toggleProcessSelection(p)" />
 								</view>
-								<view class="grid-cell" :style="{ gridRow: 2, gridColumn: 3 + idx }">{{ p.sequence || '-' }}</view>
-								<view class="grid-cell" :style="{ gridRow: 3, gridColumn: 3 + idx }">{{ p.processName || '-' }}</view>
-								<view class="grid-cell" :style="{ gridRow: 4, gridColumn: 3 + idx }">{{ p.orderCount || 0 }}</view>
-								<view class="grid-cell" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.dispatchableCount || 0 }}</view>
-								<view class="grid-cell" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ p.finishedCount || 0 }}</view>
+								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 2, gridColumn: 3 + idx }">{{ p.sequence || '-' }}</view>
+								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 3, gridColumn: 3 + idx }">{{ p.processName || '-' }}</view>
+								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 4, gridColumn: 3 + idx }">{{ p.orderCount || 0 }}</view>
+								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.dispatchableCount || 0 }}</view>
+								<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid) }" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ p.finishedCount || 0 }}</view>
 							</template>
-						</view>
-					</view>
 						</view>
 						<view class="empty-wrap" v-if="!processList.length && !loadingProducts">
 							<text class="empty-text">暂无工序</text>
@@ -84,6 +78,21 @@
 					</scroll-view>
 				</view>
 				<view class="right-panel-bottom">
+				<view class="employee-summary">
+					<view class="summary-item">
+						<text class="summary-label">员工数量</text>
+						<text class="summary-value">{{ employeeSummary.total }}</text>
+					</view>
+					<view class="summary-item">
+						<text class="summary-label">未派人员</text>
+						<text class="summary-value">{{ employeeSummary.unassigned }}</text>
+					</view>
+					<view class="summary-item">
+						<text class="summary-label">未满人员</text>
+						<text class="summary-value">{{ employeeSummary.incomplete }}</text>
+					</view>
+				</view>
+				<scroll-view class="employee-chart-scroll" scroll-x>
 					<view class="employee-chart">
 						<view
 							v-for="emp in employeeList"
@@ -93,16 +102,21 @@
 							<text class="emp-wage">{{ emp.wage }}</text>
 							<view class="emp-bar-container">
 								<view
-									class="emp-bar"
-									:style="{ height: emp.barHeight, backgroundColor: emp.barColor }"
+									class="emp-bar-recorded"
+									:style="{ height: emp.recordedHeight, backgroundColor: emp.recordedColor }"
 								>
-									<text v-if="emp.totalHours >= 3" class="emp-hours">{{ emp.totalHours }}</text>
+									<text v-if="emp.recordedHours >= 3" class="emp-hours">{{ emp.recordedHours }}</text>
 								</view>
+								<view
+									class="emp-bar-unrecorded"
+									:style="{ height: emp.unrecordedHeight }"
+								></view>
 							</view>
 							<text class="emp-name">{{ emp.name }}</text>
 						</view>
 					</view>
-				</view>
+				</scroll-view>
+			</view>
 			</view>
 		</view>
 
@@ -301,7 +315,7 @@ const filterCraft = ref('')
 const filterInnerPaint = ref('')
 const filterPolish = ref('')
 const filterGuokou = ref('')
-const filterDate = ref(getTomorrowDate())
+const filterDate = ref(getCurrentDate())
 
 const productList = ref([])
 const summaryList = ref([])
@@ -319,6 +333,13 @@ const loadedProductIds = ref([])
 const selectedProcessIds = ref([])
 const employeeList = ref([])
 
+const employeeSummary = computed(() => {
+	const total = employeeList.value.length
+	const unassigned = employeeList.value.filter((e) => e.recordedHours === 0).length
+	const incomplete = employeeList.value.filter((e) => e.recordedHours > 0 && e.recordedHours < MAX_EMPLOYEE_HOURS).length
+	return { total, unassigned, incomplete }
+})
+
 const PROCESS_DETAIL_WORKSHEET_ID = 'paigongdan'
 const PROCESS_DETAIL_FIELD_MAP = {
 	sequence: '693a62040f64427fac25ae80',
@@ -332,8 +353,10 @@ const EMPLOYEE_WORKSHEET_ID = 'yggs'
 const EMPLOYEE_FIELD_MAP = {
 	workshop: '696075d19223cfe3a0c169dc',
 	dispatchDate: '69524e7b7a59e0522d855df6',
-	recordedHours: '697dd01d3b5e707f84ce30c38',
+	recordedHours: '697dd01d3b5e707f84ce30c3',
 	unrecordedHours: '697dd01d3b5e707f84ce30c4',
+	totalHours: '6a4f304c6d70ffabc67913b8',
+	wage: '6a4f304c6d70ffabc67913b9',
 	employeeName: '6938db8bda0981f67b352af3',
 }
 
@@ -506,7 +529,7 @@ const handleReset = () => {
 	filterInnerPaint.value = ''
 	filterPolish.value = ''
 	filterGuokou.value = ''
-	filterDate.value = getTomorrowDate()
+	filterDate.value = getCurrentDate()
 	selectedProductIds.value = []
 	processList.value = []
 	loadedProductIds.value = []
@@ -605,7 +628,7 @@ const loadProducts = async (reset = true) => {
 		const res = await callWorkflowListAPIPaged({
 			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
 			filters,
-			pageSize: 500,
+			pageSize: 100,
 			pageNum: 1,
 			silent: !reset
 		})
@@ -913,7 +936,7 @@ const groupedProcessList = computed(() => {
 
 const loadWorkshopEmployees = async () => {
 	try {
-		const currentDate = getCurrentDate()
+		const currentDate = filterDate.value
 		const filters = []
 		if (loginWorkshop.value) {
 			filters.push({
@@ -936,30 +959,36 @@ const loadWorkshopEmployees = async () => {
 		const mapped = filtered.map((item) => {
 			const recordedHours = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.recordedHours])) || 0
 			const unrecordedHours = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.unrecordedHours])) || 0
-			const totalHours = recordedHours + unrecordedHours
+			const totalHours = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.totalHours])) || (recordedHours + unrecordedHours)
 			return {
 				id: item.rowid || '',
 				name: formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName]) || '-',
 				recordedHours,
 				unrecordedHours,
-				totalHours
+				totalHours,
+				wage: formatFieldValue(item[EMPLOYEE_FIELD_MAP.wage]) || 0
 			}
 		})
 		const maxTotalHours = Math.max(...mapped.map((e) => e.totalHours), 0.0001)
 		employeeList.value = mapped.map((e) => {
-			const wage = Math.round(100 + (e.totalHours / maxTotalHours) * 300)
-			const barHeight = (Math.min(e.totalHours, MAX_EMPLOYEE_HOURS) / MAX_EMPLOYEE_HOURS * 100) + '%'
-			let barColor = '#e74c3c'
-			if (e.totalHours > 0 && e.totalHours < MAX_EMPLOYEE_HOURS) {
-				barColor = '#f1c40f'
-			} else if (e.totalHours >= MAX_EMPLOYEE_HOURS) {
-				barColor = '#27ae60'
+			const wage = e.wage || Math.round(100 + (e.totalHours / maxTotalHours) * 300)
+			let recordedHeight = (e.recordedHours / MAX_EMPLOYEE_HOURS) * 100
+			let unrecordedHeight = (e.unrecordedHours / MAX_EMPLOYEE_HOURS) * 100
+			if (recordedHeight + unrecordedHeight > 100) {
+				const total = recordedHeight + unrecordedHeight
+				recordedHeight = (recordedHeight / total) * 100
+				unrecordedHeight = (unrecordedHeight / total) * 100
+			}
+			let recordedColor = '#e74c3c'
+			if (e.recordedHours >= MAX_EMPLOYEE_HOURS) {
+				recordedColor = '#27ae60'
 			}
 			return {
 				...e,
 				wage,
-				barHeight,
-				barColor
+				recordedHeight: recordedHeight + '%',
+				unrecordedHeight: unrecordedHeight + '%',
+				recordedColor
 			}
 		})
 	} catch (e) {
@@ -1195,7 +1224,7 @@ const confirmEdit = async () => {
 	}
 }
 
-const getCurrentDate = () => {
+function getCurrentDate() {
 	const now = new Date()
 	const year = now.getFullYear()
 	const month = String(now.getMonth() + 1).padStart(2, '0')
@@ -1214,7 +1243,7 @@ function getTomorrowDate() {
 
 const loadEmployeeOptions = async () => {
 	try {
-		const currentDate = getCurrentDate()
+		const currentDate = filterDate.value
 		const filters = [{
 			controlId: '6943bd902161a0fc58bad5ab',
 			dataType: 30,
@@ -1565,144 +1594,186 @@ onMounted(() => {
 			overflow: hidden;
 
 			.right-panel-top {
-				height: px2vw(470px);
+				flex: 1;
 				overflow: hidden;
 				border-bottom: 1px solid #eee;
 			}
 
 			.right-panel-bottom {
-				flex: 1;
+				height: px2vw(210px);
 				overflow: hidden;
+				display: flex;
+				flex-direction: row;
+
+				.employee-summary {
+					width: px2vw(140px);
+					height: 100%;
+					display: flex;
+					flex-direction: column;
+					justify-content: center;
+					padding: px2vw(10px);
+					border-right: 1px solid #eee;
+					background-color: #f9f9f9;
+
+					.summary-item {
+						display: flex;
+						flex-direction: column;
+						align-items: center;
+						margin-bottom: px2vw(10px);
+
+						.summary-label {
+							font-size: px2vw(16px);
+							color: #666;
+							margin-bottom: px2vw(4px);
+						}
+
+						.summary-value {
+							font-size: px2vw(22px);
+							color: #333;
+							font-weight: bold;
+						}
+					}
+				}
+
+				.employee-chart-scroll {
+					flex: 1;
+					height: 100%;
+					overflow: hidden;
+				}
 			}
 
 			.process-list {
 				height: 100%;
-				padding: px2vw(10px);
 
-				.process-table {
-					margin-bottom: px2vw(10px);
+				.process-table-grid {
+					display: grid;
+					width: fit-content;
+					grid-template-rows: repeat(6, auto);
+					margin: px2vw(10px);
+					border: 1px solid #999;
 
-					.process-table-scroll {
-						overflow-x: auto;
-						border: 1px solid #999;
+					.grid-product-name {
+						grid-row: 1 / span 6;
+						display: flex;
+						align-items: center;
+						justify-content: center;
+						writing-mode: vertical-rl;
+						text-orientation: upright;
+						background-color: #f0f0f0;
+						padding: px2vw(10px);
+						border-right: 1px solid #999;
+						font-size: px2vw(20px);
+						color: #333;
+						white-space: nowrap;
 					}
 
-					.process-table-grid {
-						display: inline-grid;
-						grid-template-rows: repeat(6, auto);
+					.grid-label-cell {
+						background-color: #f0f0f0;
+						padding: px2vw(9px) px2vw(5px);
+						text-align: center;
+						font-size: px2vw(17px);
+						color: #333;
+						border-bottom: 1px solid #999;
+						border-right: 1px solid #999;
+						white-space: nowrap;
+					}
 
-						.grid-product-name {
-							grid-row: 1 / span 6;
-							display: flex;
-							align-items: center;
-							justify-content: center;
-							writing-mode: vertical-rl;
-							text-orientation: upright;
-							background-color: #f0f0f0;
-							padding: px2vw(12px);
-							border-right: 1px solid #999;
-							font-size: px2vw(24px);
-							color: #333;
-							white-space: nowrap;
+					.grid-cell {
+						padding: px2vw(9px) px2vw(5px);
+						text-align: center;
+						font-size: px2vw(17px);
+						color: #333;
+						border-bottom: 1px solid #999;
+						border-right: 1px solid #999;
+						display: flex;
+						align-items: center;
+						justify-content: center;
+						white-space: nowrap;
+
+						&.selected-column {
+							background-color: #d4edda;
 						}
 
-						.grid-label-cell {
-							background-color: #f0f0f0;
-							padding: px2vw(10px) px2vw(6px);
-							text-align: center;
-							font-size: px2vw(20px);
-							color: #333;
-							border-bottom: 1px solid #999;
-							border-right: 1px solid #999;
-							white-space: nowrap;
-						}
-
-						.grid-cell {
-							padding: px2vw(10px) px2vw(6px);
-							text-align: center;
-							font-size: px2vw(20px);
-							color: #333;
-							border-bottom: 1px solid #999;
-							border-right: 1px solid #999;
-							display: flex;
-							align-items: center;
-							justify-content: center;
-							white-space: nowrap;
-
-							&:nth-last-child(-n+6) {
-								border-right: none;
-							}
+						&:nth-last-child(-n+6) {
+							border-right: none;
 						}
 					}
 				}
 
 				.empty-wrap {
-					padding: px2vw(100px) 0;
+					padding: px2vw(85px) 0;
 					text-align: center;
 
 					.empty-text {
-						font-size: px2vw(28px);
+						font-size: px2vw(24px);
 						color: #aaa;
 					}
 				}
 			}
 
 			.employee-chart {
-				height: 100%;
-				display: flex;
-				flex-direction: row;
-				align-items: flex-end;
-				justify-content: space-around;
-				padding: px2vw(20px);
-
-				.employee-column {
-					display: flex;
-					flex-direction: column;
-					align-items: center;
-					justify-content: flex-end;
 					height: 100%;
-					flex: 1;
-					min-width: px2vw(80px);
+					display: inline-flex;
+					flex-direction: row;
+					align-items: flex-end;
+					justify-content: flex-start;
+					padding: px2vw(20px);
 
-					.emp-wage {
-						font-size: px2vw(22px);
-						color: #333;
-						margin-bottom: px2vw(8px);
-					}
-
-					.emp-bar-container {
-						width: px2vw(60px);
-						flex: 1;
-						background-color: #e0e0e0;
-						border-radius: px2vw(4px);
-						position: relative;
+					.employee-column {
 						display: flex;
-						align-items: flex-end;
-						justify-content: center;
-						overflow: hidden;
+						flex-direction: column;
+						align-items: center;
+						justify-content: flex-end;
+						height: 100%;
+						flex: 1;
+						min-width: px2vw(80px);
 
-						.emp-bar {
-							width: 100%;
-							display: flex;
-							align-items: center;
-							justify-content: center;
+						.emp-wage {
+							font-size: px2vw(22px);
+							color: #333;
+							margin-bottom: px2vw(8px);
+						}
+
+						.emp-bar-container {
+							width: px2vw(45px);
+							flex: 1;
+							background-color: #e0e0e0;
 							border-radius: px2vw(4px);
+							position: relative;
+							display: flex;
+							flex-direction: column;
+							align-items: center;
+							justify-content: flex-end;
+							overflow: hidden;
 
-							.emp-hours {
-								font-size: px2vw(20px);
-								color: #333;
+							.emp-bar-recorded {
+								width: 100%;
+								display: flex;
+								align-items: center;
+								justify-content: center;
+
+								.emp-hours {
+									font-size: px2vw(16px);
+									color: #333;
+								}
+							}
+
+							.emp-bar-unrecorded {
+								width: 100%;
+								background-color: #bdbdbd;
+								border-bottom-left-radius: px2vw(4px);
+								border-bottom-right-radius: px2vw(4px);
 							}
 						}
-					}
 
-					.emp-name {
-						font-size: px2vw(22px);
-						color: #333;
-						margin-top: px2vw(8px);
-						text-align: center;
+						.emp-name {
+							font-size: px2vw(18px);
+							color: #333;
+							margin-top: px2vw(8px);
+							text-align: center;
+						}
 					}
 				}
-			}
 		}
 	}
 }
