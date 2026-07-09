@@ -105,9 +105,11 @@
 				<scroll-view class="employee-chart-scroll" scroll-x>
 					<view class="employee-chart">
 						<view
-							v-for="emp in employeeList"
+							v-for="(emp, index) in employeeList"
 							:key="emp.id"
 							class="employee-column"
+							:id="'emp-column-' + index"
+							@click="openEmployeeTaskPopover(emp, index)"
 						>
 							<text class="emp-wage">{{ Number(emp.wage || 0).toFixed(2) }}</text>
 							<view class="emp-bar-container">
@@ -288,11 +290,35 @@
 				</view>
 			</view>
 		</view>
+		<view class="employee-task-popover" v-if="showEmployeeTaskPopover" @click="closeEmployeeTaskPopover">
+			<view class="employee-task-content" :style="employeeTaskPopoverStyle" @click.stop>
+				<view class="employee-task-arrow" :style="employeeTaskArrowStyle"></view>
+				<view class="employee-task-list">
+					<view class="employee-task-header">
+						<text class="task-header-cell">订单编号</text>
+						<text class="task-header-cell">产品名称</text>
+						<text class="task-header-cell">派工数量</text>
+					</view>
+					<view
+						class="employee-task-item"
+						v-for="(task, idx) in selectedEmployeeForPopover?.tasks || []"
+						:key="idx"
+					>
+						<text class="task-cell">{{ task.orderNo }}</text>
+						<text class="task-cell">{{ task.productName }}</text>
+						<text class="task-cell">{{ task.dispatchCount }}</text>
+					</view>
+					<view class="employee-task-empty" v-if="!(selectedEmployeeForPopover?.tasks || []).length">
+						<text>暂无任务</text>
+					</view>
+				</view>
+			</view>
+		</view>
 	</view>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, getCurrentInstance } from 'vue'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
@@ -383,6 +409,12 @@ const showDispatchModal = ref(false)
 const dispatchModalProduct = ref(null)
 const dispatchModalInput = ref('0')
 const isEmployeeExpanded = ref(false)
+
+const showEmployeeTaskPopover = ref(false)
+const selectedEmployeeForPopover = ref(null)
+const employeeTaskPopoverStyle = ref({})
+const employeeTaskArrowStyle = ref({})
+const instance = getCurrentInstance()
 
 const employeeSummary = computed(() => {
 	const total = employeeList.value.length
@@ -1026,6 +1058,47 @@ const toggleExpand = (rowid) => {
 
 const toggleEmployeeSection = () => {
 	isEmployeeExpanded.value = !isEmployeeExpanded.value
+}
+
+const generateFakeEmployeeTasks = () => {
+	const products = [
+		{ orderNo: '317-001', productName: '24C款煎锅', dispatchCount: 50 },
+		{ orderNo: '317-002', productName: '28C款煎锅', dispatchCount: 30 },
+		{ orderNo: '318-001', productName: '30C款煎锅', dispatchCount: 20 },
+		{ orderNo: '319-001', productName: '32C款煎锅', dispatchCount: 40 }
+	]
+	const count = Math.floor(Math.random() * 3) + 2
+	return products.slice(0, count)
+}
+
+const openEmployeeTaskPopover = (emp, index) => {
+	const tasks = generateFakeEmployeeTasks()
+	selectedEmployeeForPopover.value = { ...emp, tasks }
+	const query = uni.createSelectorQuery().in(instance)
+	query.select('#emp-column-' + index).boundingClientRect((rect) => {
+		if (rect) {
+			const systemInfo = uni.getSystemInfoSync()
+			const windowWidth = systemInfo.windowWidth
+			const popoverWidth = 320
+			const popoverHeight = 220
+			const arrowGap = 16
+			let left = rect.left + rect.width / 2 - popoverWidth / 2
+			let top = rect.top - popoverHeight - arrowGap
+			if (left < 10) left = 10
+			if (left + popoverWidth > windowWidth - 10) left = windowWidth - popoverWidth - 10
+			if (top < 10) top = rect.bottom + arrowGap
+			employeeTaskPopoverStyle.value = { left: left + 'px', top: top + 'px' }
+			employeeTaskArrowStyle.value = { left: (rect.left + rect.width / 2 - left - 8) + 'px' }
+		}
+		showEmployeeTaskPopover.value = true
+	}).exec()
+}
+
+const closeEmployeeTaskPopover = () => {
+	showEmployeeTaskPopover.value = false
+	selectedEmployeeForPopover.value = null
+	employeeTaskPopoverStyle.value = {}
+	employeeTaskArrowStyle.value = {}
 }
 
 const groupedProcessList = computed(() => {
@@ -1956,6 +2029,72 @@ onMounted(() => {
 						}
 					}
 				}
+		}
+	}
+}
+
+.employee-task-popover {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 1000;
+
+	.employee-task-content {
+		position: absolute;
+		width: 320px;
+		min-height: 120px;
+		background-color: #fff;
+		border-radius: px2vw(12px);
+		padding: px2vw(20px);
+		box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+
+		.employee-task-arrow {
+			position: absolute;
+			bottom: -10px;
+			width: 0;
+			height: 0;
+			border-left: 10px solid transparent;
+			border-right: 10px solid transparent;
+			border-top: 10px solid #fff;
+		}
+
+		.employee-task-list {
+			.employee-task-header {
+				display: flex;
+				flex-direction: row;
+				padding: px2vw(10px) 0;
+				border-bottom: 1px solid #eee;
+
+				.task-header-cell {
+					flex: 1;
+					font-size: px2vw(20px);
+					color: #666;
+					text-align: center;
+				}
+			}
+
+			.employee-task-item {
+				display: flex;
+				flex-direction: row;
+				padding: px2vw(12px) 0;
+				border-bottom: 1px solid #f0f0f0;
+
+				.task-cell {
+					flex: 1;
+					font-size: px2vw(20px);
+					color: #333;
+					text-align: center;
+				}
+			}
+
+			.employee-task-empty {
+				padding: px2vw(30px) 0;
+				text-align: center;
+				font-size: px2vw(22px);
+				color: #999;
+			}
 		}
 	}
 }
