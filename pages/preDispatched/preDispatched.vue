@@ -666,6 +666,7 @@ const EMPLOYEE_FIELD_MAP = {
 	totalHours: '6a4f304c6d70ffabc67913b8',
 	wage: '6a4f304c6d70ffabc67913b9',
 	employeeName: '6938db8bda0981f67b352af3',
+	attendance: '6959e1077a59e0522d877f8b'
 }
 
 const MAX_EMPLOYEE_HOURS = 11
@@ -1876,13 +1877,15 @@ const loadWorkshopEmployees = async () => {
 			const unrecordedHours = 0
 			const totalHours = recordedHours + unrecordedHours
 			const wage = Number((recordedHours / MAX_EMPLOYEE_HOURS) * 400).toFixed(2)
+			const attendance = formatFieldValue(item[EMPLOYEE_FIELD_MAP.attendance]) || ''
 			return {
 				id: item.rowid || '',
 				name: formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName]) || '-',
 				recordedHours,
 				unrecordedHours,
 				totalHours,
-				wage
+				wage,
+				attendance
 			}
 		})
 		employeeList.value = mapped.map((e) => {
@@ -1894,8 +1897,11 @@ const loadWorkshopEmployees = async () => {
 				unrecordedHeight = (unrecordedHeight / total) * 100
 			}
 			let recordedColor = '#e74c3c'
-			if (e.recordedHours >= MAX_EMPLOYEE_HOURS) {
+			const attendance = String(e.attendance).trim()
+			if (attendance === '上班') {
 				recordedColor = '#27ae60'
+			} else if (attendance === '请假') {
+				recordedColor = '#f1c40f'
 			}
 			return {
 				...e,
