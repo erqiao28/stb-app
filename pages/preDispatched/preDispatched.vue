@@ -1,9 +1,81 @@
-<template>
+﻿<template>
 	<view class="pre-dispatched-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="goBack"></image>
 			<view class="title">预派工</view>
 			<view></view>
+		</view>
+
+		<view class="dropdown-panel-overlay" v-if="showDropdownPanel" @click="toggleDropdownPanel"></view>
+		<view class="dropdown-panel-wrapper" :class="{ open: showDropdownPanel }">
+			<view class="dropdown-panel">
+				<view class="dropdown-panel-content">
+					<view class="employee-chart-scroll">
+					<view class="employee-chart">
+						<template v-for="(emp, index) in employeeList" :key="emp.id">
+							<view class="employee-chart-column">
+								<view
+									class="employee-chart-bar"
+									:class="{
+										'swipe-up': chartSwipeAnimatingId === emp.id && chartSwipeDirection === 'up',
+										'swipe-down': chartSwipeAnimatingId === emp.id && chartSwipeDirection === 'down'
+									}"
+									:style="{ height: '100%', backgroundColor: emp.recordedColor }"
+									@click="toggleEmployeeExpand(emp)"
+									@touchstart="onChartEmployeeTouchStart(emp, $event)"
+									@touchmove="onChartEmployeeTouchMove(emp, $event)"
+									@touchend="onChartEmployeeTouchEnd(emp, $event)"
+									@mousedown="onChartEmployeeMouseDown(emp, $event)"
+									@mousemove="onChartEmployeeMouseMove(emp, $event)"
+									@mouseup="onChartEmployeeMouseUp(emp, $event)"
+									@mouseleave="onChartEmployeeMouseLeave(emp, $event)"
+								>
+									<text class="employee-chart-name">{{ emp.name }}</text>
+								</view>
+							</view>
+							<view class="employee-expand-panel" v-if="expandedEmployeeId === emp.id">
+								<view
+									class="expand-process-item"
+									:class="{ selected: selectedProcessSeq === n }"
+									v-for="n in 3"
+									:key="n"
+									@click.stop="handleProcessItemClick(emp, n)"
+								>
+									<text class="expand-process-seq">{{ n }}</text>
+									<text class="expand-process-name">工序{{ n }}</text>
+								</view>
+							</view>
+						</template>
+						<view class="employee-chart-empty" v-if="!employeeList.length">
+							<text>暂无员工数据</text>
+						</view>
+					</view>
+					</view>
+				</view>
+			</view>
+		</view>
+		<view class="panel-bookmark" :class="{ open: showDropdownPanel }" @click="toggleDropdownPanel">
+			<text class="bookmark-title">员工</text>
+			<text class="bookmark-arrow" :class="{ open: showDropdownPanel }">▼</text>
+		</view>
+
+		<view class="process-dropdown-wrapper" :class="{ open: showProcessDropdownPanel && showDropdownPanel }">
+			<view class="dropdown-panel">
+				<view class="dropdown-panel-content">
+					<view class="employee-chart-scroll">
+						<view class="employee-chart">
+							<view class="employee-chart-column" v-for="(proc, index) in processDropdownList" :key="proc.rowid">
+								<view class="employee-chart-bar process-bar" :style="{ height: '100%' }">
+									<text class="employee-chart-name">{{ proc.processName }}</text>
+								</view>
+							</view>
+							<view class="employee-chart-empty" v-if="!processDropdownList.length">
+								<text>暂无工序数据</text>
+							</view>
+						</view>
+					</view>
+				</view>
+			</view>
 		</view>
 
 		<view class="main-content">
@@ -464,7 +536,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, getCurrentInstance } from 'vue'
+import { ref, onMounted, computed, getCurrentInstance, watch } from 'vue'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
@@ -635,6 +707,223 @@ const processActionSelected = ref(null)
 const processActionModeIndex = ref(0)
 const processActionModeOptions = ['添加', '替换', '删除']
 const processActionLoading = ref(false)
+
+const showDropdownPanel = ref(false)
+const chartSwipeAnimatingId = ref('')
+const chartSwipeDirection = ref('')
+const expandedEmployeeId = ref('')
+
+const showProcessDropdownPanel = ref(false)
+const processDropdownList = ref([])
+const selectedProcessDropdownEmployee = ref(null)
+const selectedProcessSeq = ref(0)
+
+let chartTouchStartY = 0
+let chartTouchStartTime = 0
+let chartCurrentEmployee = null
+
+const getChartEventClientY = (e) => {
+	if (e.changedTouches && e.changedTouches.length > 0) {
+		return e.changedTouches[0].clientY
+	}
+	if (e.touches && e.touches.length > 0) {
+		return e.touches[0].clientY
+	}
+	if (e.clientY != null) {
+		return e.clientY
+	}
+	return 0
+}
+
+const onChartEmployeeTouchStart = (emp, e) => {
+	chartTouchStartY = getChartEventClientY(e)
+	chartTouchStartTime = Date.now()
+	chartCurrentEmployee = emp
+	chartSwipeAnimatingId.value = emp.id
+	chartSwipeDirection.value = ''
+}
+
+const onChartEmployeeTouchMove = (emp, e) => {
+	if (!chartCurrentEmployee || chartCurrentEmployee.id !== emp.id) return
+	const currentY = getChartEventClientY(e)
+	const deltaY = chartTouchStartY - currentY
+	if (deltaY > 0) {
+		chartSwipeDirection.value = 'up'
+	} else if (deltaY < 0) {
+		chartSwipeDirection.value = 'down'
+	}
+}
+
+const onChartEmployeeTouchEnd = (emp, e) => {
+	if (!chartCurrentEmployee || chartCurrentEmployee.id !== emp.id) {
+		chartSwipeAnimatingId.value = ''
+		chartSwipeDirection.value = ''
+		return
+	}
+	const endY = getChartEventClientY(e)
+	const deltaY = chartTouchStartY - endY
+	const minSwipeDistance = 10
+
+	setTimeout(() => {
+		chartSwipeAnimatingId.value = ''
+		chartSwipeDirection.value = ''
+	}, 300)
+
+	if (Math.abs(deltaY) < minSwipeDistance) return
+
+	if (deltaY > 0) {
+		handleChartEmployeeSwipeUp(emp)
+	} else {
+		handleChartEmployeeSwipeDown(emp)
+	}
+}
+
+const onChartEmployeeMouseDown = (emp, e) => {
+	onChartEmployeeTouchStart(emp, e)
+	document.addEventListener('mousemove', onChartDragMouseMove)
+	document.addEventListener('mouseup', onChartDragMouseUp)
+}
+
+const onChartDragMouseMove = (e) => {
+	if (!chartCurrentEmployee) return
+	const currentY = getChartEventClientY(e)
+	const deltaY = chartTouchStartY - currentY
+	if (deltaY > 0) {
+		chartSwipeDirection.value = 'up'
+	} else if (deltaY < 0) {
+		chartSwipeDirection.value = 'down'
+	}
+}
+
+const onChartDragMouseUp = (e) => {
+	document.removeEventListener('mousemove', onChartDragMouseMove)
+	document.removeEventListener('mouseup', onChartDragMouseUp)
+	if (!chartCurrentEmployee) {
+		chartSwipeAnimatingId.value = ''
+		chartSwipeDirection.value = ''
+		return
+	}
+	const endY = getChartEventClientY(e)
+	const deltaY = chartTouchStartY - endY
+	const minSwipeDistance = 10
+
+	setTimeout(() => {
+		chartSwipeAnimatingId.value = ''
+		chartSwipeDirection.value = ''
+	}, 300)
+
+	if (Math.abs(deltaY) < minSwipeDistance) return
+
+	if (deltaY > 0) {
+		handleChartEmployeeSwipeUp(chartCurrentEmployee)
+	} else {
+		handleChartEmployeeSwipeDown(chartCurrentEmployee)
+	}
+}
+
+const onChartEmployeeMouseMove = (emp, e) => {
+	if (!chartCurrentEmployee || chartCurrentEmployee.id !== emp.id) return
+	onChartEmployeeTouchMove(emp, e)
+}
+
+const onChartEmployeeMouseUp = (emp, e) => {
+	onChartEmployeeTouchEnd(emp, e)
+}
+
+const onChartEmployeeMouseLeave = (emp, e) => {
+	if (chartCurrentEmployee) return
+	chartSwipeAnimatingId.value = ''
+	chartSwipeDirection.value = ''
+}
+
+const handleChartEmployeeSwipeUp = (emp) => {
+	console.log('向上滑动', emp.name, emp.id)
+	uni.showToast({ title: `向上滑动: ${emp.name}`, icon: 'none' })
+}
+
+const handleChartEmployeeSwipeDown = (emp) => {
+	console.log('向下滑动', emp.name, emp.id)
+	uni.showToast({ title: `向下滑动: ${emp.name}`, icon: 'none' })
+}
+
+const toggleDropdownPanel = () => {
+	showDropdownPanel.value = !showDropdownPanel.value
+	if (!showDropdownPanel.value) {
+		closeProcessDropdownPanel()
+	}
+}
+
+const handleProcessItemClick = (emp, seq) => {
+	if (showProcessDropdownPanel.value && selectedProcessSeq.value === seq && selectedProcessDropdownEmployee.value?.id === emp.id) {
+		closeProcessDropdownPanel()
+		return
+	}
+	openProcessDropdownPanel(emp, seq)
+}
+
+const toggleProcessDropdownPanel = () => {
+	showProcessDropdownPanel.value = !showProcessDropdownPanel.value
+	if (!showProcessDropdownPanel.value) {
+		selectedProcessDropdownEmployee.value = null
+		processDropdownList.value = []
+		expandedEmployeeId.value = ''
+	}
+}
+
+const openProcessDropdownPanel = async (emp, seq) => {
+	selectedProcessDropdownEmployee.value = emp
+	selectedProcessSeq.value = seq || 0
+	showProcessDropdownPanel.value = true
+	await loadProcessDropdownList(emp)
+}
+
+const closeProcessDropdownPanel = () => {
+	showProcessDropdownPanel.value = false
+	selectedProcessDropdownEmployee.value = null
+	processDropdownList.value = []
+	selectedProcessSeq.value = 0
+}
+
+const loadProcessDropdownList = async (emp) => {
+	try {
+		const filters = [
+			{ controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
+			{ controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
+			{ controlId: '6a324e7d6d70ffabc66cbe5f', dataType: 30, spliceType: 1, filterType: 2, values: ['1'] }
+		]
+		if (loginWorkshop.value) {
+			filters.push({
+				controlId: '691e8522d50c894e2e798d03',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: [loginWorkshop.value]
+			})
+		}
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: 'shujuzidian',
+			filters,
+			pageSize: 500,
+			pageNum: 1,
+			silent: true
+		})
+		const rows = Array.isArray(res?.data) ? res.data : []
+		processDropdownList.value = rows.map((item) => ({
+			rowid: item.rowid || '',
+			processName: item['Name'] || '-'
+		}))
+	} catch (e) {
+		console.error('加载工序抽屉数据失败:', e)
+		processDropdownList.value = []
+	}
+}
+
+const toggleEmployeeExpand = (emp) => {
+	expandedEmployeeId.value = expandedEmployeeId.value === emp.id ? '' : emp.id
+	if (!expandedEmployeeId.value) {
+		closeProcessDropdownPanel()
+	}
+}
 
 const goBack = () => {
 	uni.redirectTo({
@@ -1967,6 +2256,25 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
+@keyframes swipe-up-anim {
+	0% { transform: translateY(0); opacity: 1; }
+	30% { transform: translateY(-50px); opacity: 0.6; }
+	70% { transform: translateY(-50px); opacity: 0.6; }
+	100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes swipe-down-anim {
+	0% { transform: translateY(0); opacity: 1; }
+	30% { transform: translateY(50px); opacity: 0.6; }
+	70% { transform: translateY(50px); opacity: 0.6; }
+	100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes panel-slide-in {
+	0% { opacity: 0; transform: translateX(-10px); }
+	100% { opacity: 1; transform: translateX(0); }
+}
+
 .pre-dispatched-container {
 	height: 100vh;
 	width: 100vw;
@@ -1982,6 +2290,8 @@ onMounted(async () => {
 		align-items: center;
 		background-color: #5884f1;
 		flex-shrink: 0;
+		position: relative;
+		z-index: 200;
 
 		image {
 			margin-left: px2vw(20px);
@@ -2121,6 +2431,373 @@ onMounted(async () => {
 				}
 			}
 		}
+
+	.dropdown-panel-overlay {
+		position: absolute;
+		left: 0;
+		right: 0;
+		top: 0;
+		bottom: 0;
+		background-color: rgba(0, 0, 0, 0.2);
+		z-index: 100;
+	}
+
+	.dropdown-panel-wrapper {
+		position: absolute;
+		left: 0;
+		right: 0;
+		top: px2vw(70px);
+		height: 33vh;
+		transform: translateY(calc(-33vh));
+		transition: transform 0.3s ease;
+		z-index: 103;
+		pointer-events: none;
+
+		&.open {
+			transform: translateY(0);
+			pointer-events: auto;
+		}
+
+		.dropdown-panel {
+			width: 100%;
+			height: 33vh;
+			flex: 0 0 auto;
+			min-height: 0;
+			background-color: #fff;
+			border-bottom: 1px solid #eee;
+			overflow: hidden;
+			display: flex;
+			flex-direction: column;
+			pointer-events: auto;
+
+			.dropdown-panel-content {
+				width: 100%;
+				flex: 1;
+				padding: px2vw(20px);
+				overflow: hidden;
+				background-color: #fff;
+			}
+
+			.employee-chart-scroll {
+				width: 100%;
+				height: 100%;
+				overflow-x: auto;
+				overflow-y: hidden;
+				white-space: nowrap;
+			}
+
+			.employee-chart {
+				height: calc(100% - #{px2vw(30px)});
+				display: inline-flex;
+				align-items: flex-end;
+				gap: px2vw(24px);
+				padding: px2vw(30px) px2vw(10px) px2vw(10px);
+				min-width: 100%;
+				box-sizing: content-box;
+
+				.employee-chart-column {
+					flex: 0 0 auto;
+					width: px2vw(52px);
+					height: 100%;
+					display: inline-flex;
+					flex-direction: column;
+					align-items: center;
+					justify-content: flex-end;
+
+					.employee-chart-bar {
+						width: 100%;
+						min-height: px2vw(40px);
+						display: flex;
+						align-items: center;
+						justify-content: center;
+						border-radius: px2vw(8px) px2vw(8px) 0 0;
+						writing-mode: vertical-rl;
+						overflow: hidden;
+
+						&.swipe-up {
+							animation: swipe-up-anim 0.4s ease forwards;
+						}
+
+						&.swipe-down {
+							animation: swipe-down-anim 0.4s ease forwards;
+						}
+
+						.employee-chart-name {
+							font-size: px2vw(18px);
+							color: #fff;
+							white-space: nowrap;
+							overflow: hidden;
+							text-overflow: ellipsis;
+							max-height: 100%;
+							padding: px2vw(8px) 0;
+						}
+					}
+				}
+
+				.employee-expand-panel {
+					animation: panel-slide-in 0.25s ease;
+					margin-left: px2vw(12px);
+					margin-right: px2vw(12px);
+					flex: 0 0 auto;
+					width: px2vw(220px);
+					height: 100%;
+					display: flex;
+					flex-direction: column;
+					align-items: stretch;
+					justify-content: flex-end;
+					gap: px2vw(8px);
+					box-sizing: border-box;
+
+					.expand-process-item {
+						flex: 1;
+						min-height: px2vw(40px);
+						display: flex;
+						align-items: center;
+						gap: px2vw(8px);
+						padding: px2vw(4px) px2vw(12px);
+						background-color: #f5f7fa;
+						border-radius: px2vw(4px);
+						font-size: px2vw(20px);
+						color: #333;
+						white-space: nowrap;
+
+						&.selected {
+							background-color: #5884f1;
+							color: #fff;
+
+							.expand-process-seq {
+								color: #fff;
+							}
+						}
+
+						.expand-process-seq {
+							font-weight: bold;
+							color: #5884f1;
+							min-width: px2vw(28px);
+							text-align: center;
+							font-size: px2vw(22px);
+						}
+
+						.expand-process-name {
+							flex: 1;
+							white-space: nowrap;
+							font-size: px2vw(20px);
+						}
+					}
+				}
+
+				.employee-chart-empty {
+					padding: px2vw(40px) 0;
+					text-align: center;
+					width: 100%;
+
+					text {
+						font-size: px2vw(22px);
+						color: #999;
+					}
+				}
+			}
+		}
+	}
+
+	.panel-bookmark {
+		position: absolute;
+		left: px2vw(330px);
+		top: calc(#{px2vw(70px)} + 33vh);
+		transform: translateY(calc(-33vh));
+		transition: transform 0.3s ease;
+		z-index: 101;
+		pointer-events: auto;
+		width: px2vw(100px);
+		height: px2vw(40px);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: px2vw(8px);
+		padding: 0 px2vw(16px);
+		background-color: rgba(255, 255, 255, 0.9);
+		border: 1px solid #eee;
+		border-top: none;
+		border-radius: 0 0 px2vw(12px) px2vw(12px);
+		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+		cursor: pointer;
+
+		&.open {
+			transform: translateY(0);
+		}
+
+		.bookmark-title {
+			font-size: px2vw(20px);
+			color: #333;
+			font-weight: 500;
+		}
+
+		.bookmark-arrow {
+			font-size: px2vw(16px);
+			color: #999;
+			transition: transform 0.3s ease;
+
+			&.open {
+				transform: rotate(180deg);
+			}
+		}
+	}
+
+	.process-dropdown-overlay {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background-color: transparent;
+		z-index: 100;
+		pointer-events: none;
+	}
+
+	.process-dropdown-wrapper {
+		position: absolute;
+		left: 0;
+		right: 0;
+		top: px2vw(70px);
+		height: calc(33vh + #{px2vw(40px)});
+		transform: translateY(calc(-33vh));
+		transition: transform 0.3s ease;
+		z-index: 102;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		pointer-events: none;
+
+		&.open {
+			transform: translateY(33vh);
+			pointer-events: auto;
+		}
+
+		.dropdown-panel {
+			width: 100%;
+			height: 33vh;
+			flex: 0 0 auto;
+			min-height: 0;
+			background-color: #fff;
+			border-bottom: 1px solid #eee;
+			overflow: hidden;
+			display: flex;
+			flex-direction: column;
+			pointer-events: auto;
+
+			.dropdown-panel-content {
+				width: 100%;
+				flex: 1;
+				padding: px2vw(20px);
+				overflow: hidden;
+				background-color: #fff;
+			}
+
+			.employee-chart-scroll {
+				width: 100%;
+				height: 100%;
+				overflow-x: auto;
+				overflow-y: hidden;
+				white-space: nowrap;
+			}
+
+			.employee-chart {
+				height: calc(100% - #{px2vw(30px)});
+				display: inline-flex;
+				align-items: flex-end;
+				gap: px2vw(24px);
+				padding: px2vw(30px) px2vw(10px) px2vw(10px);
+				min-width: 100%;
+				box-sizing: content-box;
+
+				.employee-chart-column {
+					flex: 0 0 auto;
+					width: px2vw(52px);
+					height: 100%;
+					display: inline-flex;
+					flex-direction: column;
+					align-items: center;
+					justify-content: flex-end;
+
+					.employee-chart-bar {
+							width: 100%;
+							min-height: px2vw(40px);
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							border-radius: px2vw(8px) px2vw(8px) 0 0;
+							writing-mode: vertical-rl;
+							overflow: hidden;
+
+							&.process-bar {
+								background-color: #f5f5f5;
+								border: 1px solid #333;
+
+								.employee-chart-name {
+									color: #333;
+								}
+							}
+
+							.employee-chart-name {
+							font-size: px2vw(18px);
+							color: #fff;
+							white-space: nowrap;
+							overflow: hidden;
+							text-overflow: ellipsis;
+							max-height: 100%;
+							padding: px2vw(8px) 0;
+						}
+					}
+				}
+
+				.employee-chart-empty {
+					padding: px2vw(40px) 0;
+					text-align: center;
+					width: 100%;
+
+					text {
+						font-size: px2vw(22px);
+						color: #999;
+					}
+				}
+			}
+		}
+
+		.panel-bookmark {
+			pointer-events: auto;
+			flex-shrink: 0;
+			align-self: center;
+			width: px2vw(100px);
+			height: px2vw(40px);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: px2vw(8px);
+			padding: 0 px2vw(16px);
+			background-color: rgba(255, 255, 255, 0.9);
+			border: 1px solid #eee;
+			border-top: none;
+			border-radius: 0 0 px2vw(12px) px2vw(12px);
+			box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+			cursor: pointer;
+
+			.bookmark-title {
+				font-size: px2vw(20px);
+				color: #333;
+				font-weight: 500;
+			}
+
+			.bookmark-arrow {
+				font-size: px2vw(16px);
+				color: #999;
+				transition: transform 0.3s ease;
+
+				&.open {
+					transform: rotate(180deg);
+				}
+			}
+		}
+	}
 
 	.main-content {
 		flex: 1;
