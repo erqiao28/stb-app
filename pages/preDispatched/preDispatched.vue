@@ -48,6 +48,10 @@
 						<text class="empty-text">暂无产品</text>
 					</view>
 				</scroll-view>
+				<view class="left-bottom-btns">
+					<view class="left-btn left-btn-add">添加产品</view>
+					<view class="left-btn left-btn-confirm">确认派工</view>
+				</view>
 			</view>
 
 			<view class="right-panel" :class="{ 'employee-expanded': isEmployeeExpanded }">
@@ -59,24 +63,32 @@
 							class="process-table-grid"
 							:style="{ gridTemplateColumns: 'min-content min-content repeat(' + group.processes.length + ', min-content)' }"
 						>
-							<view class="grid-product-name" style="grid-row: 1 / span 6; grid-column: 1">
-								{{ group.productName }}
-							</view>
+							<view class="grid-product-name" style="grid-row: 1 / span 7; grid-column: 1">
+							<view class="grid-product-action" @click.stop="openProcessActionModalByRowid(group.productRowid)">操作</view>
+							<view class="grid-product-name-text">{{ group.productName }}</view>
+						</view>
 							<view class="grid-label-cell" style="grid-row: 1; grid-column: 2">选中</view>
 							<view class="grid-label-cell" style="grid-row: 2; grid-column: 2">顺序</view>
 							<view class="grid-label-cell" style="grid-row: 3; grid-column: 2">工序</view>
 							<view class="grid-label-cell" style="grid-row: 4; grid-column: 2">订单数</view>
 							<view class="grid-label-cell" style="grid-row: 5; grid-column: 2">日产量</view>
 							<view class="grid-label-cell" style="grid-row: 6; grid-column: 2">派工数量</view>
+						<view class="grid-label-cell" style="grid-row: 7; grid-column: 2">员工</view>
 							<template v-for="(p, idx) in group.processes" :key="p.rowid">
-							<view class="grid-cell" :class="{ 'selected-column': p.isAssociated && selectedProcessIds.includes(p.rowid), 'disabled-column': !p.isAssociated }" :style="{ gridRow: 1, gridColumn: 3 + idx }">
-								<checkbox :checked="selectedProcessIds.includes(p.rowid)" :disabled="!p.isAssociated" @click="toggleProcessSelection(p)" />
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 1, gridColumn: 3 + idx }">
+								<checkbox :checked="selectedProcessIds.includes(p.rowid)" @click="toggleProcessSelection(p)" />
 							</view>
-							<view class="grid-cell" :class="{ 'selected-column': p.isAssociated && selectedProcessIds.includes(p.rowid), 'disabled-column': !p.isAssociated }" :style="{ gridRow: 2, gridColumn: 3 + idx }">{{ p.sequence || '-' }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': p.isAssociated && selectedProcessIds.includes(p.rowid), 'disabled-column': !p.isAssociated }" :style="{ gridRow: 3, gridColumn: 3 + idx }">{{ p.processName || '-' }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': p.isAssociated && selectedProcessIds.includes(p.rowid), 'disabled-column': !p.isAssociated }" :style="{ gridRow: 4, gridColumn: 3 + idx }">{{ p.orderCount || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': p.isAssociated && selectedProcessIds.includes(p.rowid), 'disabled-column': !p.isAssociated }" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.dailyOutput || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': p.isAssociated && selectedProcessIds.includes(p.rowid), 'disabled-column': !p.isAssociated }" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ productDispatchCounts[p.productRowid] || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 2, gridColumn: 3 + idx }">{{ p.sequence || '-' }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 3, gridColumn: 3 + idx }">{{ p.processName || '-' }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 4, gridColumn: 3 + idx }">{{ p.orderCount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.dailyOutput || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ productDispatchCounts[p.productRowid] || 0 }}</view>
+							<view
+								v-if="isEmployeeGroupStart(group.processes, idx)"
+								class="grid-cell employee-cell"
+								:class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }"
+								:style="getEmployeeCellStyle(group.processes, idx)"
+							>{{ getEmployeeCellText(group.processes, idx) }}</view>
 						</template>
 						</view>
 						<view class="empty-wrap" v-if="!processList.length && !loadingProducts">
@@ -102,8 +114,94 @@
 						<text class="summary-value">{{ employeeSummary.incomplete }}</text>
 					</view>
 				</view>
-				<scroll-view class="employee-chart-scroll" scroll-x>
-					<view class="employee-chart">
+				<scroll-view class="employee-chart-scroll" scroll-x scroll-y>
+					<view
+						class="employee-dispatch-table"
+						:style="{ gridTemplateColumns: 'min-content min-content min-content' + (maxEmployeeRecordCount > 0 ? ' repeat(' + maxEmployeeRecordCount + ', min-content min-content min-content min-content min-content)' : '') + ' min-content' }"
+						v-if="isEmployeeExpanded && employeeDispatchSummary.length > 0"
+					>
+						<view class="table-header" style="grid-row: 1; grid-column: 1">员工姓名</view>
+						<view class="table-header" style="grid-row: 1; grid-column: 2">总工资</view>
+						<view class="table-header" style="grid-row: 1; grid-column: 3">总工时</view>
+						<view
+							class="table-header"
+							v-for="i in maxEmployeeRecordCount + 1"
+							:key="'order-' + i"
+							:style="{ gridRow: 1, gridColumn: 4 + (i - 1) * 5 }"
+						>订单编号</view>
+						<view
+							class="table-header"
+							v-for="i in maxEmployeeRecordCount + 1"
+							:key="'product-' + i"
+							:style="{ gridRow: 1, gridColumn: 5 + (i - 1) * 5 }"
+						>产品名称</view>
+						<view
+							class="table-header"
+							v-for="i in maxEmployeeRecordCount + 1"
+							:key="'count-' + i"
+							:style="{ gridRow: 1, gridColumn: 6 + (i - 1) * 5 }"
+						>数量</view>
+						<view
+							class="table-header"
+							v-for="i in maxEmployeeRecordCount + 1"
+							:key="'time-' + i"
+							:style="{ gridRow: 1, gridColumn: 7 + (i - 1) * 5 }"
+						>工时</view>
+						<view
+							class="table-header"
+							v-for="i in maxEmployeeRecordCount + 1"
+							:key="'wage-' + i"
+							:style="{ gridRow: 1, gridColumn: 8 + (i - 1) * 5 }"
+						>工资</view>
+						<template v-for="(emp, empIdx) in employeeDispatchSummary" :key="emp.employeeName">
+							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 1 }">{{ emp.employeeName }}</view>
+							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 2 }">{{ emp.totalWage.toFixed(2) }}</view>
+							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 3 }">{{ emp.totalWorktime.toFixed(2) }}</view>
+							<template v-for="(rec, recIdx) in emp.records" :key="recIdx">
+								<view
+									class="table-cell"
+									:class="'record-group-' + (recIdx % RECORD_BG_COLORS.length)"
+									:style="{ gridRow: 2 + empIdx, gridColumn: 4 + recIdx * 5 }"
+								>{{ rec.orderNo }}</view>
+								<view
+									class="table-cell"
+									:class="'record-group-' + (recIdx % RECORD_BG_COLORS.length)"
+									:style="{ gridRow: 2 + empIdx, gridColumn: 5 + recIdx * 5 }"
+								>{{ rec.productName }}</view>
+								<view
+									class="table-cell"
+									:class="'record-group-' + (recIdx % RECORD_BG_COLORS.length)"
+									:style="{ gridRow: 2 + empIdx, gridColumn: 6 + recIdx * 5 }"
+								>{{ rec.dispatchCount }}</view>
+								<view
+									class="table-cell"
+									:class="'record-group-' + (recIdx % RECORD_BG_COLORS.length)"
+									:style="{ gridRow: 2 + empIdx, gridColumn: 7 + recIdx * 5 }"
+								>{{ rec.worktime }}</view>
+								<view
+									class="table-cell"
+									:class="'record-group-' + (recIdx % RECORD_BG_COLORS.length)"
+									:style="{ gridRow: 2 + empIdx, gridColumn: 8 + recIdx * 5 }"
+								>{{ rec.wage }}</view>
+							</template>
+							<template v-for="padIdx in maxEmployeeRecordCount - emp.records.length" :key="'pad-' + padIdx">
+								<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 4 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
+								<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 5 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
+								<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 6 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
+								<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 7 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
+								<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 8 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
+							</template>
+							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 4 + maxEmployeeRecordCount * 5 }"></view>
+							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 5 + maxEmployeeRecordCount * 5 }"></view>
+							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 6 + maxEmployeeRecordCount * 5 }"></view>
+							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 7 + maxEmployeeRecordCount * 5 }"></view>
+							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 8 + maxEmployeeRecordCount * 5 }"></view>
+						</template>
+					</view>
+					<view class="empty-wrap" v-if="isEmployeeExpanded && employeeDispatchSummary.length === 0">
+						<text class="empty-text">暂无数据</text>
+					</view>
+					<view class="employee-chart" v-if="!isEmployeeExpanded">
 						<view
 							v-for="(emp, index) in employeeList"
 							:key="emp.id"
@@ -130,191 +228,239 @@
 				</scroll-view>
 			</view>
 		</view>
-		</view>
+	</view>
 
-		<view class="void-modal" v-if="showVoidModal" @click.self="closeVoidModal">
-			<view class="void-modal-content">
-				<view class="void-modal-title">作废确认</view>
-				<input
-					v-model="voidReason"
-					type="text"
-					placeholder="请输入作废原因"
-					class="void-input"
-				/>
-				<view class="void-modal-buttons">
-					<view class="void-btn-cancel" @click="closeVoidModal">取消</view>
-					<view class="void-btn-confirm" @click="confirmVoid">确认</view>
-				</view>
+	<view class="void-modal" v-if="showVoidModal" @click.self="closeVoidModal">
+		<view class="void-modal-content">
+			<view class="void-modal-title">作废确认</view>
+			<input
+				v-model="voidReason"
+				type="text"
+				placeholder="请输入作废原因"
+				class="void-input"
+			/>
+			<view class="void-modal-buttons">
+				<view class="void-btn-cancel" @click="closeVoidModal">取消</view>
+				<view class="void-btn-confirm" @click="confirmVoid">确认</view>
 			</view>
 		</view>
+	</view>
 
-		<view class="confirm-dispatch-modal" v-if="showConfirmDispatchModal" @click.self="closeConfirmDispatchModal">
-			<view class="confirm-dispatch-content">
-				<view class="confirm-dispatch-title">确认派工</view>
-				<view class="confirm-dispatch-body">
-					<text class="confirm-dispatch-tip">确定要将 {{ confirmDispatchCount }} 条预派工转为正式派工吗？</text>
-				</view>
-				<view class="confirm-dispatch-buttons">
-					<view class="confirm-dispatch-btn-cancel" @click="closeConfirmDispatchModal">取消</view>
-					<view class="confirm-dispatch-btn-confirm" @click="doConfirmDispatch">确认</view>
-				</view>
+	<view class="confirm-dispatch-modal" v-if="showConfirmDispatchModal" @click.self="closeConfirmDispatchModal">
+		<view class="confirm-dispatch-content">
+			<view class="confirm-dispatch-title">确认派工</view>
+			<view class="confirm-dispatch-body">
+				<text class="confirm-dispatch-tip">确定要将 {{ confirmDispatchCount }} 条预派工转为正式派工吗？</text>
+			</view>
+			<view class="confirm-dispatch-buttons">
+				<view class="confirm-dispatch-btn-cancel" @click="closeConfirmDispatchModal">取消</view>
+				<view class="confirm-dispatch-btn-confirm" @click="doConfirmDispatch">确认</view>
 			</view>
 		</view>
+	</view>
 
-		<view class="edit-modal" v-if="showEditModal" @click.self="closeEditModal">
-			<view class="edit-modal-content" @click.stop>
-				<view class="edit-modal-title">预派工调整</view>
-				<view class="edit-modal-body">
-					<view class="edit-form">
-						<view class="edit-row">
-							<text class="edit-label">订单编号:</text>
-							<text class="edit-value">{{ editData.orderNo || '-' }}</text>
-						</view>
-						<view class="edit-row">
-							<text class="edit-label">产品名称:</text>
-							<text class="edit-value">{{ editData.productNameNew || '-' }}</text>
-						</view>
-						<view class="edit-row">
-							<text class="edit-label">工序:</text>
-							<text class="edit-value">{{ editData.processDisplay || '-' }}</text>
-						</view>
-						<view class="edit-row">
-							<text class="edit-label">派工日期:</text>
-							<picker mode="date" :value="editData.dispatchDate" @change="onDispatchDateChange">
-								<view class="edit-date-picker">
-									<text class="edit-date-text">{{ editData.dispatchDate || '请选择日期' }}</text>
-									<text class="edit-date-arrow">▼</text>
-								</view>
-							</picker>
-						</view>
-						<view class="edit-row">
-							<text class="edit-label">派工数量:</text>
-							<input
-								v-model="editData.dispatchCount"
-								type="number"
-								class="edit-input"
-								placeholder="请输入派工数量"
-							/>
-						</view>
-						<view class="edit-row">
-							<text class="edit-label">员工姓名:</text>
-							<view class="edit-employee-tags">
-								<view v-for="(name, idx) in editData.selectedEmployeeNames" :key="idx" class="employee-tag">{{ name }}</view>
-								<view v-if="!editData.selectedEmployeeNames || editData.selectedEmployeeNames.length === 0" class="edit-employee-input" @click="openEmployeeSelector">
-									<text class="edit-input-text">请选择员工</text>
-									<text class="edit-input-arrow">▼</text>
-								</view>
+	<view class="edit-modal" v-if="showEditModal" @click.self="closeEditModal">
+		<view class="edit-modal-content" @click.stop>
+			<view class="edit-modal-title">预派工调整</view>
+			<view class="edit-modal-body">
+				<view class="edit-form">
+					<view class="edit-row">
+						<text class="edit-label">订单编号:</text>
+						<text class="edit-value">{{ editData.orderNo || '-' }}</text>
+					</view>
+					<view class="edit-row">
+						<text class="edit-label">产品名称:</text>
+						<text class="edit-value">{{ editData.productNameNew || '-' }}</text>
+					</view>
+					<view class="edit-row">
+						<text class="edit-label">工序:</text>
+						<text class="edit-value">{{ editData.processDisplay || '-' }}</text>
+					</view>
+					<view class="edit-row">
+						<text class="edit-label">派工日期:</text>
+						<picker mode="date" :value="editData.dispatchDate" @change="onDispatchDateChange">
+							<view class="edit-date-picker">
+								<text class="edit-date-text">{{ editData.dispatchDate || '请选择日期' }}</text>
+								<text class="edit-date-arrow">▼</text>
 							</view>
-							<view class="edit-employee-add-btn" @click="openEmployeeSelector">
-								<text class="add-btn-text">+选择</text>
+						</picker>
+					</view>
+					<view class="edit-row">
+						<text class="edit-label">派工数量:</text>
+						<input
+							v-model="editData.dispatchCount"
+							type="number"
+							class="edit-input"
+							placeholder="请输入派工数量"
+						/>
+					</view>
+					<view class="edit-row">
+						<text class="edit-label">员工姓名:</text>
+						<view class="edit-employee-tags">
+							<view v-for="(name, idx) in editData.selectedEmployeeNames" :key="idx" class="employee-tag">{{ name }}</view>
+							<view v-if="!editData.selectedEmployeeNames || editData.selectedEmployeeNames.length === 0" class="edit-employee-input" @click="openEmployeeSelector">
+								<text class="edit-input-text">请选择员工</text>
+								<text class="edit-input-arrow">▼</text>
 							</view>
 						</view>
-						<view class="edit-row">
-							<text class="edit-label">工时:</text>
-							<text class="edit-value">{{ editData.worktime || '-' }}</text>
-						</view>
-						<view class="edit-row">
-							<text class="edit-label">工价:</text>
-							<text class="edit-value">{{ editData.wage || '-' }}</text>
+						<view class="edit-employee-add-btn" @click="openEmployeeSelector">
+							<text class="add-btn-text">+选择</text>
 						</view>
 					</view>
-				</view>
-				<view class="edit-modal-buttons">
-					<view class="edit-btn-cancel" @click="closeEditModal">取消</view>
-					<view class="edit-btn-confirm" @click="confirmEdit">确认</view>
+					<view class="edit-row">
+						<text class="edit-label">工时:</text>
+						<text class="edit-value">{{ editData.worktime || '-' }}</text>
+					</view>
+					<view class="edit-row">
+						<text class="edit-label">工价:</text>
+						<text class="edit-value">{{ editData.wage || '-' }}</text>
+					</view>
 				</view>
 			</view>
+			<view class="edit-modal-buttons">
+				<view class="edit-btn-cancel" @click="closeEditModal">取消</view>
+				<view class="edit-btn-confirm" @click="confirmEdit">确认</view>
+			</view>
 		</view>
+	</view>
 
-		<view class="employee-modal" :class="{ show: showEmployeeSelector }" @click.self="closeEmployeeSelector">
-			<view class="employee-modal-content" @click.stop>
-				<view class="employee-modal-header">
-					<text class="employee-modal-title">选择员工</text>
-					<view class="employee-modal-close" @click="closeEmployeeSelector">×</view>
-				</view>
-				<scroll-view scroll-y class="employee-modal-list">
-					<view
-						v-for="emp in allEmployeeOptions"
-						:key="emp.id"
-						class="employee-modal-item"
-						:class="{ active: editData.selectedEmployeeIds.includes(emp.id) }"
-						@click="toggleEmployee(emp)"
-					>
-						<view class="employee-modal-check">
-							<text v-if="editData.selectedEmployeeIds.includes(emp.id)" class="check-icon">✓</text>
-						</view>
-						<view class="employee-modal-info">
-							<text class="employee-modal-name">{{ emp.name }}</text>
-							<text class="employee-modal-position">岗位: {{ emp.position || '-' }}</text>
-							<text class="employee-modal-hours">未派工时: {{ emp.unrecordedHours || 0 }}h</text>
-						</view>
-					</view>
-					<view class="employee-modal-empty" v-if="allEmployeeOptions.length === 0">
-						<text>暂无员工</text>
-					</view>
-				</scroll-view>
+	<view class="employee-modal" :class="{ show: showEmployeeSelector }" @click.self="closeEmployeeSelector">
+		<view class="employee-modal-content" @click.stop>
+			<view class="employee-modal-header">
+				<text class="employee-modal-title">选择员工</text>
+				<view class="employee-modal-close" @click="closeEmployeeSelector">×</view>
 			</view>
+			<scroll-view scroll-y class="employee-modal-list">
+				<view
+					v-for="emp in allEmployeeOptions"
+					:key="emp.id"
+					class="employee-modal-item"
+					:class="{ active: editData.selectedEmployeeIds.includes(emp.id) }"
+					@click="toggleEmployee(emp)"
+				>
+					<view class="employee-modal-check">
+						<text v-if="editData.selectedEmployeeIds.includes(emp.id)" class="check-icon">✓</text>
+					</view>
+					<view class="employee-modal-info">
+						<text class="employee-modal-name">{{ emp.name }}</text>
+						<text class="employee-modal-position">岗位: {{ emp.position || '-' }}</text>
+						<text class="employee-modal-hours">未派工时: {{ emp.unrecordedHours || 0 }}h</text>
+					</view>
+				</view>
+				<view class="employee-modal-empty" v-if="allEmployeeOptions.length === 0">
+					<text>暂无员工</text>
+				</view>
+			</scroll-view>
 		</view>
+	</view>
 
-		<view class="dispatch-modal" v-if="showDispatchModal" @click.self="closeDispatchModal">
-			<view class="dispatch-modal-content" @click.stop>
-				<view class="dispatch-modal-title">派工设置</view>
-				<view class="dispatch-modal-body">
-					<view class="dispatch-grid">
-						<view class="dispatch-grid-cell">
-							<text class="grid-cell-label">订单数量</text>
-							<text class="grid-cell-value">100</text>
-						</view>
-						<view class="dispatch-grid-cell">
-							<text class="grid-cell-label">可派数量</text>
-							<text class="grid-cell-value">50</text>
-						</view>
-						<view class="dispatch-grid-cell">
-							<text class="grid-cell-label">完成数量</text>
-							<text class="grid-cell-value">30</text>
-						</view>
-						<view class="dispatch-grid-cell">
-							<text class="grid-cell-label">派工数量</text>
-							<input
-								v-model="dispatchModalInput"
-								type="number"
-								class="dispatch-input"
-								placeholder="请输入"
-							/>
-						</view>
+	<view class="dispatch-modal" v-if="showDispatchModal" @click.self="closeDispatchModal">
+		<view class="dispatch-modal-content" @click.stop>
+			<view class="dispatch-modal-title">派工设置</view>
+			<view class="dispatch-modal-body">
+				<view class="dispatch-grid">
+					<view class="dispatch-grid-cell">
+						<text class="grid-cell-label">订单数量</text>
+						<text class="grid-cell-value">100</text>
 					</view>
-				</view>
-				<view class="dispatch-modal-buttons">
-					<view class="dispatch-btn-cancel" @click="closeDispatchModal">取消</view>
-					<view class="dispatch-btn-confirm" @click="saveDispatchModal">确认</view>
+					<view class="dispatch-grid-cell">
+						<text class="grid-cell-label">可派数量</text>
+						<text class="grid-cell-value">50</text>
+					</view>
+					<view class="dispatch-grid-cell">
+						<text class="grid-cell-label">完成数量</text>
+						<text class="grid-cell-value">30</text>
+					</view>
+					<view class="dispatch-grid-cell">
+						<text class="grid-cell-label">派工数量</text>
+						<input
+							v-model="dispatchModalInput"
+							type="number"
+							class="dispatch-input"
+							placeholder="请输入"
+						/>
+					</view>
 				</view>
 			</view>
+			<view class="dispatch-modal-buttons">
+				<view class="dispatch-btn-cancel" @click="closeDispatchModal">取消</view>
+				<view class="dispatch-btn-confirm" @click="saveDispatchModal">确认</view>
+			</view>
 		</view>
-		<view class="employee-task-popover" v-if="showEmployeeTaskPopover" @click="closeEmployeeTaskPopover">
-			<view class="employee-task-content" :style="employeeTaskPopoverStyle" @click.stop>
-				<view class="employee-task-arrow" :style="employeeTaskArrowStyle"></view>
-				<view class="employee-task-list">
-					<view class="employee-task-header">
-						<text class="task-header-cell">订单编号</text>
-						<text class="task-header-cell">产品名称</text>
-						<text class="task-header-cell">派工数量</text>
-					</view>
-					<view
-						class="employee-task-item"
-						v-for="(task, idx) in selectedEmployeeForPopover?.tasks || []"
-						:key="idx"
-					>
-						<text class="task-cell">{{ task.orderNo }}</text>
-						<text class="task-cell">{{ task.productName }}</text>
-						<text class="task-cell">{{ task.dispatchCount }}</text>
-					</view>
-					<view class="employee-task-empty" v-if="!(selectedEmployeeForPopover?.tasks || []).length">
-						<text>暂无任务</text>
-					</view>
+	</view>
+
+	<view class="employee-task-popover" v-if="showEmployeeTaskPopover" @click="closeEmployeeTaskPopover">
+		<view class="employee-task-content" :style="employeeTaskPopoverStyle" @click.stop>
+			<view class="employee-task-arrow" :style="employeeTaskArrowStyle"></view>
+			<view class="employee-task-list">
+				<view class="employee-task-header">
+					<text class="task-header-cell">订单编号</text>
+					<text class="task-header-cell">产品名称</text>
+					<text class="task-header-cell">派工数量</text>
+				</view>
+				<view
+					class="employee-task-item"
+					v-for="(task, idx) in selectedEmployeeForPopover?.tasks || []"
+					:key="idx"
+				>
+					<text class="task-cell">{{ task.orderNo }}</text>
+					<text class="task-cell">{{ task.productName }}</text>
+					<text class="task-cell">{{ task.dispatchCount }}</text>
+				</view>
+				<view class="employee-task-empty" v-if="!(selectedEmployeeForPopover?.tasks || []).length">
+					<text>暂无任务</text>
 				</view>
 			</view>
 		</view>
 	</view>
+
+	<view class="process-action-modal" v-if="showProcessActionModal" @click.self="closeProcessActionModal">
+		<view class="process-action-content" @click.stop>
+			<view class="process-action-header">
+				<text class="process-action-title">操作工序</text>
+				<view class="process-action-close" @click="closeProcessActionModal">&times;</view>
+			</view>
+			<view class="process-action-body">
+				<view class="process-action-filter">
+					<view class="process-action-search">
+						<input type="text" placeholder="请输入工序名称" v-model="processActionSearch" @input="handleProcessActionSearch" />
+					</view>
+				</view>
+				<view class="process-action-main">
+					<view class="process-action-list-section">
+						<scroll-view scroll-y class="process-action-list">
+							<view class="process-action-list-header">工序名称</view>
+							<view
+								v-for="item in processActionList"
+								:key="item.rowid"
+								class="process-action-list-item"
+								:class="{ selected: processActionSelected?.rowid === item.rowid }"
+								@click="selectProcessActionItem(item)"
+							>
+								{{ item.processName }}
+							</view>
+							<view class="process-action-empty" v-if="!processActionList.length && !processActionLoading">
+								<text>暂无数据</text>
+							</view>
+						</scroll-view>
+					</view>
+					<view class="process-action-form">
+						<view class="process-action-form-group">
+							<text class="process-action-form-label">操作方式</text>
+							<picker mode="selector" :range="processActionModeOptions" :value="processActionModeIndex" @change="onProcessActionModeChange" class="process-action-picker">
+								<view class="process-action-picker-value">{{ processActionModeOptions[processActionModeIndex] }}</view>
+							</picker>
+						</view>
+					</view>
+				</view>
+			</view>
+			<view class="process-action-footer">
+				<view class="process-action-btn-cancel" @click="closeProcessActionModal">取消</view>
+				<view class="process-action-btn-confirm" @click="confirmProcessAction">确定</view>
+			</view>
+		</view>
+	</view>
+</view>
 </template>
 
 <script setup>
@@ -403,6 +549,7 @@ const processList = ref([])
 const loadedProductIds = ref([])
 const selectedProcessIds = ref([])
 const employeeList = ref([])
+const employeeDispatchSummary = ref([])
 
 const productDispatchCounts = ref({})
 const showDispatchModal = ref(false)
@@ -414,6 +561,7 @@ const showEmployeeTaskPopover = ref(false)
 const selectedEmployeeForPopover = ref(null)
 const employeeTaskPopoverStyle = ref({})
 const employeeTaskArrowStyle = ref({})
+
 const instance = getCurrentInstance()
 
 const employeeSummary = computed(() => {
@@ -421,6 +569,10 @@ const employeeSummary = computed(() => {
 	const unassigned = employeeList.value.filter((e) => e.recordedHours === 0).length
 	const incomplete = employeeList.value.filter((e) => e.recordedHours > 0 && e.recordedHours < MAX_EMPLOYEE_HOURS).length
 	return { total, unassigned, incomplete }
+})
+
+const maxEmployeeRecordCount = computed(() => {
+	return Math.max(0, ...employeeDispatchSummary.value.map((e) => e.records.length))
 })
 
 const PROCESS_DETAIL_WORKSHEET_ID = 'paigongdan'
@@ -445,6 +597,8 @@ const EMPLOYEE_FIELD_MAP = {
 }
 
 const MAX_EMPLOYEE_HOURS = 11
+
+const RECORD_BG_COLORS = ['#e8f4f8', '#f2f0e6', '#f9f0f4', '#eaf6ea', '#fff6e6']
 
 const showVoidModal = ref(false)
 const voidReason = ref('')
@@ -472,6 +626,15 @@ const editData = ref({
 })
 const showEmployeeSelector = ref(false)
 const allEmployeeOptions = ref([])
+
+const showProcessActionModal = ref(false)
+const processActionProduct = ref(null)
+const processActionSearch = ref('')
+const processActionList = ref([])
+const processActionSelected = ref(null)
+const processActionModeIndex = ref(0)
+const processActionModeOptions = ['添加', '替换', '删除']
+const processActionLoading = ref(false)
 
 const goBack = () => {
 	uni.redirectTo({
@@ -601,9 +764,11 @@ const mapSummaryRow = (item) => ({
 	preDispatchRowids: extractRelationSids(item[PRE_DISPATCH_SUMMARY_FIELD_MAP.preDispatch]),
 })
 
-const handleSearch = () => {
-	loadProducts(true)
+const handleSearch = async () => {
+	await loadProducts(true)
 	loadSummaries(true)
+	loadEmployeeDispatchSummary()
+	loadWorkshopEmployees()
 }
 
 const handleReset = () => {
@@ -634,7 +799,7 @@ const handleAddPreDispatch = () => {
 
 const handleConfirmDispatch = () => {
 	const rowids = productList.value
-		.map(item => item.rowid)
+		.flatMap(item => item.preDispatchRowids || [item.rowid])
 		.filter(Boolean)
 	if (rowids.length === 0) {
 		uni.showToast({ title: '没有可确认的预派工', icon: 'none' })
@@ -741,7 +906,15 @@ const loadProducts = async (reset = true) => {
 			mapped = mapped.filter(item => item.guokou.toLowerCase().includes(keyword))
 		}
 
-		productList.value = mapped
+		const groupedMap = {}
+		mapped.forEach((item) => {
+			const key = `${item.orderNo || ''}|${item.productNameNew || ''}|${item.productionCode || ''}`
+			if (!groupedMap[key]) {
+				groupedMap[key] = { ...item, rowid: key, preDispatchRowids: [] }
+			}
+			groupedMap[key].preDispatchRowids.push(item.rowid)
+		})
+		productList.value = Object.values(groupedMap)
 	} catch (e) {
 		console.error('加载产品失败:', e)
 		uni.showToast({ title: '加载失败', icon: 'none' })
@@ -958,7 +1131,7 @@ const saveDispatchModal = () => {
 	closeDispatchModal()
 }
 
-const loadAssociatedProcessDetailRowids = async (product) => {
+const loadAssociatedProcessDetails = async (product) => {
 	try {
 		const res = await callWorkflowListAPIPaged({
 			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
@@ -967,22 +1140,62 @@ const loadAssociatedProcessDetailRowids = async (product) => {
 				dataType: 30,
 				spliceType: 1,
 				filterType: 2,
-				values: [product.rowid]
+				values: product.preDispatchRowids || [product.rowid]
 			}],
 			pageSize: 500,
 			pageNum: 1,
 			silent: true
 		})
-		const rows = Array.isArray(res?.data) ? res.data : []
-		const rowids = new Set()
-		rows.forEach((item) => {
-			const sids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail])
-			sids.forEach((sid) => rowids.add(sid))
+		const preDispatchRows = Array.isArray(res?.data) ? res.data : []
+		const dailyWageRowids = new Set()
+		preDispatchRows.forEach((item) => {
+			const sids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.dailyWage])
+			sids.forEach((sid) => dailyWageRowids.add(sid))
 		})
-		return rowids
+		const dailyWageMap = new Map()
+		if (dailyWageRowids.size > 0) {
+			const dwRes = await callWorkflowListAPIPaged({
+				worksheetId: DAILY_WAGE_WORKSHEET_ID,
+				filters: [{
+					controlId: 'rowid',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 2,
+					values: [...dailyWageRowids]
+				}],
+				pageSize: 500,
+				pageNum: 1,
+				silent: true
+			})
+			const dwRows = Array.isArray(dwRes?.data) ? dwRes.data : []
+			dwRows.forEach((item) => {
+				if (item.rowid) {
+					dailyWageMap.set(item.rowid, formatFieldValue(item[DAILY_WAGE_EMPLOYEE_NAME_FIELD]) || '-')
+				}
+			})
+		}
+		const nameSetMap = new Map()
+		preDispatchRows.forEach((item) => {
+			const processSids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail])
+			const dailyWageSids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.dailyWage])
+			const names = dailyWageSids
+				.map((sid) => dailyWageMap.get(sid))
+				.filter((name) => name && name !== '-')
+			processSids.forEach((sid) => {
+				if (!nameSetMap.has(sid)) {
+					nameSetMap.set(sid, new Set())
+				}
+				names.forEach((name) => nameSetMap.get(sid).add(name))
+			})
+		})
+		const resultMap = new Map()
+		nameSetMap.forEach((names, sid) => {
+			resultMap.set(sid, names.size > 0 ? [...names] : [])
+		})
+		return resultMap
 	} catch (e) {
 		console.error('加载关联工序失败:', e)
-		return new Set()
+		return new Map()
 	}
 }
 
@@ -992,7 +1205,8 @@ const loadProductProcesses = async (product) => {
 	if (!productionCode) return
 	loadedProductIds.value.push(product.rowid)
 	try {
-		const associatedRowids = await loadAssociatedProcessDetailRowids(product)
+		const associatedMap = await loadAssociatedProcessDetails(product)
+		const associatedRowids = new Set(associatedMap.keys())
 		const filters = [{
 			controlId: '691d6160535b29cbd5c6c0a9',
 			dataType: 30,
@@ -1017,16 +1231,30 @@ const loadProductProcesses = async (product) => {
 			silent: true
 		})
 		const rows = Array.isArray(res?.data) ? res.data : []
-		const newProcesses = rows.map((item) => ({
-			rowid: item.rowid || '',
-			productRowid: product.rowid,
-			productName: product.productNameNew || product.productName || '-',
-			sequence: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.sequence]),
-			processName: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.processName]),
-			orderCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.allcount]) || 0,
-			dailyOutput: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.dailyOutput]) || 0,
-			isAssociated: associatedRowids.has(item.rowid)
-		})).sort((a, b) => (parseFloat(a.sequence) || 0) - (parseFloat(b.sequence) || 0))
+		const sequenceList = rows
+			.filter((item) => associatedRowids.has(item.rowid))
+			.map((item) => parseFloat(formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.sequence])) || 0)
+		const maxAssociatedSequence = sequenceList.length > 0 ? Math.max(...sequenceList) : -1
+		const newProcesses = rows.map((item) => {
+			const seq = parseFloat(formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.sequence])) || 0
+			const isAssociated = associatedRowids.has(item.rowid)
+			const employeeNames = associatedMap.get(item.rowid) || []
+			return {
+				rowid: item.rowid || '',
+				productRowid: product.rowid,
+				productName: product.productNameNew || product.productName || '-',
+				sequence: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.sequence]),
+				processName: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.processName]),
+				orderCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.allcount]) || 0,
+				dailyOutput: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.dailyOutput]) || 0,
+				isAssociated,
+				isBeforeAssociated: !isAssociated && seq <= maxAssociatedSequence,
+				isAfterAssociated: !isAssociated && seq > maxAssociatedSequence,
+				employeeNames
+			}
+		}).sort((a, b) => (parseFloat(a.sequence) || 0) - (parseFloat(b.sequence) || 0))
+		const associatedIds = newProcesses.filter((p) => p.isAssociated).map((p) => p.rowid)
+		selectedProcessIds.value.push(...associatedIds.filter((id) => !selectedProcessIds.value.includes(id)))
 		processList.value.push(...newProcesses)
 	} catch (e) {
 		console.error('加载工序失败:', e)
@@ -1035,14 +1263,15 @@ const loadProductProcesses = async (product) => {
 
 const toggleProcessSelection = (process) => {
 	if (!process.rowid) return
-	if (!process.isAssociated) {
-		uni.showToast({ title: '产品还未流转到该工序', icon: 'none' })
-		return
-	}
 	const index = selectedProcessIds.value.indexOf(process.rowid)
 	if (index > -1) {
 		selectedProcessIds.value.splice(index, 1)
 	} else {
+		if (process.isAfterAssociated) {
+			uni.showToast({ title: '产品未流转到该工序', icon: 'none' })
+		} else if (process.isBeforeAssociated) {
+			uni.showToast({ title: '产品已完成该工序', icon: 'none' })
+		}
 		selectedProcessIds.value.push(process.rowid)
 	}
 }
@@ -1056,9 +1285,149 @@ const toggleExpand = (rowid) => {
 	}
 }
 
+const loadEmployeeDispatchSummary = async () => {
+	try {
+		const allRowids = productList.value.flatMap((p) => p.preDispatchRowids || [])
+		if (allRowids.length === 0) {
+			employeeDispatchSummary.value = []
+			return
+		}
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
+			filters: [{
+				controlId: 'rowid',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: allRowids
+			}],
+			pageSize: 500,
+			pageNum: 1,
+			silent: true
+		})
+		const rows = Array.isArray(res?.data) ? res.data.map(mapPreDispatchRow) : []
+		const dailyWageRowids = new Set()
+		rows.forEach((item) => {
+			extractRelationSids(item.dailyWage).forEach((sid) => dailyWageRowids.add(sid))
+		})
+		const dailyWageMap = {}
+		if (dailyWageRowids.size > 0) {
+			const dwRes = await callWorkflowListAPIPaged({
+				worksheetId: DAILY_WAGE_WORKSHEET_ID,
+				filters: [{
+					controlId: 'rowid',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 2,
+					values: [...dailyWageRowids]
+				}],
+				pageSize: 500,
+				pageNum: 1,
+				silent: true
+			})
+			const dwRows = Array.isArray(dwRes?.data) ? dwRes.data : []
+			dwRows.forEach((item) => {
+				dailyWageMap[item.rowid] = formatFieldValue(item[DAILY_WAGE_EMPLOYEE_NAME_FIELD]) || '-'
+			})
+		}
+		const map = new Map()
+		rows.forEach((item) => {
+			const sids = extractRelationSids(item.dailyWage)
+			sids.forEach((sid) => {
+				const employeeName = dailyWageMap[sid] || '-'
+				if (!map.has(employeeName)) {
+					map.set(employeeName, {
+						employeeName,
+						totalWage: 0,
+						totalWorktime: 0,
+						records: []
+					})
+				}
+				const group = map.get(employeeName)
+				group.records.push({
+					orderNo: item.orderNo || '-',
+					productName: item.productNameNew || item.productName || '-',
+					dispatchCount: item.dispatchCount || 0,
+					worktime: item.worktime || 0,
+					wage: item.wage || 0
+				})
+				group.totalWage += Number(item.wage || 0)
+				group.totalWorktime = Number((group.totalWorktime + Number(item.worktime || 0)).toFixed(2))
+			})
+		})
+		employeeDispatchSummary.value = [...map.values()].sort((a, b) => b.records.length - a.records.length)
+	} catch (e) {
+		console.error('加载员工预派工汇总失败:', e)
+		employeeDispatchSummary.value = []
+	}
+}
+
 const toggleEmployeeSection = () => {
 	isEmployeeExpanded.value = !isEmployeeExpanded.value
+	if (isEmployeeExpanded.value && employeeDispatchSummary.value.length === 0) {
+		loadEmployeeDispatchSummary()
+	}
 }
+
+const employeeNamesEqual = (a, b) => {
+	if (!a || !b) return false
+	if (a.length === 0 || b.length === 0) return false
+	if (a.length !== b.length) return false
+	return a.join(',') === b.join(',')
+}
+
+const getEmployeeGroupStart = (processes, idx) => {
+	let start = idx
+	while (start > 0 && employeeNamesEqual(processes[start - 1].employeeNames, processes[start].employeeNames)) {
+		start--
+	}
+	return start
+}
+
+const isEmployeeGroupStart = (processes, idx) => {
+	return getEmployeeGroupStart(processes, idx) === idx
+}
+
+const getEmployeeGroupSpan = (processes, idx) => {
+	if (!isEmployeeGroupStart(processes, idx)) return 0
+	let span = 1
+	while (idx + span < processes.length && employeeNamesEqual(processes[idx].employeeNames, processes[idx + span].employeeNames)) {
+		span++
+	}
+	return span
+}
+
+const getEmployeeCellStyle = (processes, idx) => {
+	const span = getEmployeeGroupSpan(processes, idx)
+	if (span <= 1) return { gridRow: 7, gridColumn: 3 + idx }
+	return { gridRow: 7, gridColumn: (3 + idx) + ' / span ' + span }
+}
+
+const getEmployeeCellText = (processes, idx) => {
+	const span = getEmployeeGroupSpan(processes, idx)
+	const names = processes[idx].employeeNames || []
+	if (names.length === 0) return '-'
+	if (span === 1 && names.length > 1) return '多人'
+	return names.join('、')
+}
+
+const groupedProcessList = computed(() => {
+	const groups = {}
+	processList.value.forEach((p) => {
+		if (!selectedProductIds.value.includes(p.productRowid)) {
+			return
+		}
+		if (!groups[p.productRowid]) {
+			groups[p.productRowid] = {
+				productRowid: p.productRowid,
+				productName: p.productName,
+				processes: []
+			}
+		}
+		groups[p.productRowid].processes.push(p)
+	})
+	return Object.values(groups)
+})
 
 const generateFakeEmployeeTasks = () => {
 	const products = [
@@ -1101,23 +1470,86 @@ const closeEmployeeTaskPopover = () => {
 	employeeTaskArrowStyle.value = {}
 }
 
-const groupedProcessList = computed(() => {
-	const groups = {}
-	processList.value.forEach((p) => {
-		if (!selectedProductIds.value.includes(p.productRowid)) {
-			return
+const openProcessActionModal = (product) => {
+	processActionProduct.value = product
+	processActionSearch.value = ''
+	processActionSelected.value = null
+	processActionModeIndex.value = 0
+	processActionList.value = []
+	showProcessActionModal.value = true
+	loadProcessActionList()
+}
+
+const openProcessActionModalByRowid = (productRowid) => {
+	const product = productList.value.find((p) => p.rowid === productRowid)
+	openProcessActionModal(product || { rowid: productRowid, productName: '' })
+}
+
+const closeProcessActionModal = () => {
+	showProcessActionModal.value = false
+	processActionProduct.value = null
+	processActionSearch.value = ''
+	processActionSelected.value = null
+	processActionModeIndex.value = 0
+	processActionList.value = []
+}
+
+const handleProcessActionSearch = () => {
+	loadProcessActionList()
+}
+
+const loadProcessActionList = async () => {
+	try {
+		processActionLoading.value = true
+		const filters = [
+			{ controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
+			{ controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
+			{ controlId: '6a324e7d6d70ffabc66cbe5f', dataType: 30, spliceType: 1, filterType: 2, values: ['1'] }
+		]
+		const nameSearch = processActionSearch.value.trim()
+		if (nameSearch) {
+			filters.push({
+				controlId: '6614b6721103c1d5d3a08122',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 1,
+				values: [nameSearch]
+			})
 		}
-		if (!groups[p.productRowid]) {
-			groups[p.productRowid] = {
-				productRowid: p.productRowid,
-				productName: p.productName,
-				processes: []
-			}
-		}
-		groups[p.productRowid].processes.push(p)
-	})
-	return Object.values(groups)
-})
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: 'shujuzidian',
+			filters,
+			pageSize: 500,
+			pageNum: 1,
+			silent: true
+		})
+		const rows = Array.isArray(res?.data) ? res.data : []
+		processActionList.value = rows.map((item) => ({
+			rowid: item.rowid || '',
+			processName: item['Name'] || '-'
+		}))
+	} catch (e) {
+		console.error('加载工序列表失败:', e)
+		processActionList.value = []
+	} finally {
+		processActionLoading.value = false
+	}
+}
+
+const selectProcessActionItem = (item) => {
+	processActionSelected.value = item
+}
+
+const onProcessActionModeChange = (e) => {
+	processActionModeIndex.value = Number(e.detail.value) || 0
+}
+
+const confirmProcessAction = () => {
+	const mode = processActionModeOptions[processActionModeIndex.value]
+	const selected = processActionSelected.value?.processName || '-'
+	uni.showToast({ title: `${mode}：${selected}`, icon: 'none' })
+	closeProcessActionModal()
+}
 
 const loadWorkshopEmployees = async () => {
 	try {
@@ -1232,6 +1664,7 @@ const handleVoidClick = async (item) => {
 					uni.showToast({ title: '作废成功', icon: 'success' })
 					loadProducts(true)
 					loadSummaries(true)
+					loadEmployeeDispatchSummary()
 				} catch (e) {
 					console.error('作废失败:', e)
 					uni.showToast({ title: '作废失败', icon: 'none' })
@@ -1244,7 +1677,8 @@ const handleVoidClick = async (item) => {
 const handleLongPress = (product) => {
 	showVoidModal.value = true
 	voidReason.value = ''
-	voidRowid.value = product.rowid || ''
+	const rowids = product.preDispatchRowids || [product.rowid]
+	voidRowid.value = rowids.filter(Boolean).join(',')
 }
 
 let longPressTimer = null
@@ -1284,18 +1718,29 @@ const confirmVoid = async () => {
 		return
 	}
 	try {
-		const resp = await http.post(PRE_DISPATCH_VOID_URL, {
-			rowid: voidRowid.value,
-			reason: voidReason.value.trim()
-		})
-		closeVoidModal()
-		if (resp.status === 1) {
-			uni.showToast({ title: resp.message || resp.msg || '作废失败', icon: 'none' })
-			return
+		const rowids = voidRowid.value.split(',').filter(Boolean)
+		let successCount = 0
+		let failCount = 0
+		for (const rowid of rowids) {
+			const resp = await http.post(PRE_DISPATCH_VOID_URL, {
+				rowid,
+				reason: voidReason.value.trim()
+			})
+			if (resp.status === 1) {
+				failCount++
+			} else {
+				successCount++
+			}
 		}
-		uni.showToast({ title: '作废成功', icon: 'success' })
+		closeVoidModal()
+		if (failCount > 0) {
+			uni.showToast({ title: `作废完成，成功 ${successCount} 条，失败 ${failCount} 条`, icon: 'none' })
+		} else {
+			uni.showToast({ title: '作废成功', icon: 'success' })
+		}
 		loadProducts(true)
 		loadSummaries(true)
+		loadEmployeeDispatchSummary()
 	} catch (e) {
 		console.error('作废失败:', e)
 		uni.showToast({ title: '作废失败', icon: 'none' })
@@ -1410,6 +1855,7 @@ const confirmEdit = async () => {
 		closeEditModal()
 		loadProducts(true)
 		loadSummaries(true)
+		loadEmployeeDispatchSummary()
 	} catch (e) {
 		console.error('更新预派工失败:', e)
 		uni.showToast({ title: '更新失败', icon: 'none' })
@@ -1512,9 +1958,10 @@ const toggleEmployee = (emp) => {
 	}
 }
 
-onMounted(() => {
-	loadProducts(true)
+onMounted(async () => {
+	await loadProducts(true)
 	loadSummaries(true)
+	loadEmployeeDispatchSummary()
 	loadWorkshopEmployees()
 })
 </script>
@@ -1701,6 +2148,37 @@ onMounted(() => {
 				flex-shrink: 0;
 			}
 
+			.left-bottom-btns {
+				height: px2vw(60px);
+				flex-shrink: 0;
+				display: flex;
+				flex-direction: row;
+				align-items: center;
+				justify-content: space-around;
+				padding: 0 px2vw(10px);
+				border-top: 1px solid #eee;
+				background-color: #f5f7fa;
+
+				.left-btn {
+					flex: 1;
+					margin: 0 px2vw(8px);
+					height: px2vw(44px);
+					line-height: px2vw(44px);
+					border-radius: px2vw(6px);
+					text-align: center;
+					font-size: px2vw(22px);
+					color: #fff;
+
+					&.left-btn-add {
+						background-color: #3498db;
+					}
+
+					&.left-btn-confirm {
+						background-color: #27ae60;
+					}
+				}
+			}
+
 			.product-list {
 				flex: 1;
 				overflow: hidden;
@@ -1741,7 +2219,7 @@ onMounted(() => {
 					}
 
 					.product-order {
-						font-size: px2vw(22px);
+						font-size: px2vw(18px);
 						color: #333;
 						white-space: nowrap;
 						overflow: hidden;
@@ -1750,7 +2228,7 @@ onMounted(() => {
 					}
 
 					.product-name {
-						font-size: px2vw(22px);
+						font-size: px2vw(18px);
 						color: #333;
 						white-space: nowrap;
 						overflow: hidden;
@@ -1875,12 +2353,16 @@ onMounted(() => {
 							font-size: px2vw(16px);
 							color: #666;
 							margin-bottom: px2vw(4px);
+							white-space: nowrap;
 						}
 
 						.summary-value {
 							font-size: px2vw(22px);
 							color: #333;
 							font-weight: bold;
+							word-break: break-all;
+							white-space: normal;
+							text-align: center;
 						}
 					}
 				}
@@ -1888,7 +2370,6 @@ onMounted(() => {
 				.employee-chart-scroll {
 					flex: 1;
 					height: 100%;
-					overflow: hidden;
 				}
 			}
 
@@ -1898,23 +2379,47 @@ onMounted(() => {
 				.process-table-grid {
 					display: grid;
 					width: fit-content;
-					grid-template-rows: repeat(6, auto);
+					grid-template-rows: repeat(7, auto);
 					margin: px2vw(10px);
 					border: 1px solid #999;
 
 					.grid-product-name {
-						grid-row: 1 / span 6;
+						grid-row: 1 / span 7;
 						display: flex;
+						flex-direction: column;
 						align-items: center;
-						justify-content: center;
-						writing-mode: vertical-rl;
-						text-orientation: upright;
+						justify-content: flex-start;
 						background-color: #f0f0f0;
 						padding: px2vw(10px);
 						border-right: 1px solid #999;
 						font-size: px2vw(20px);
 						color: #333;
 						white-space: nowrap;
+
+						.grid-product-action {
+							margin-bottom: px2vw(16px);
+							padding: px2vw(6px) px2vw(10px);
+							background-color: #999;
+							color: #fff;
+							border-radius: px2vw(6px);
+							font-size: px2vw(18px);
+							writing-mode: vertical-rl;
+							text-orientation: upright;
+							letter-spacing: px2vw(4px);
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							min-height: px2vw(80px);
+						}
+
+						.grid-product-name-text {
+							writing-mode: vertical-rl;
+							text-orientation: upright;
+							flex: 1;
+							display: flex;
+							align-items: center;
+							justify-content: center;
+						}
 					}
 
 					.grid-label-cell {
@@ -1945,11 +2450,17 @@ onMounted(() => {
 						}
 
 						&.disabled-column {
-							background-color: #f0f0f0;
+							background-color: #f7f7f7;
 							color: #999;
 						}
 
-						&:nth-last-child(-n+6) {
+						&.employee-cell {
+							white-space: normal;
+							word-break: break-all;
+							min-width: px2vw(80px);
+						}
+
+						&:nth-last-child(-n+7) {
 							border-right: none;
 						}
 					}
@@ -1966,69 +2477,110 @@ onMounted(() => {
 				}
 			}
 
-			.employee-chart {
-					height: 100%;
-					display: inline-flex;
-					flex-direction: row;
-					align-items: flex-end;
-					justify-content: flex-start;
-					padding: px2vw(20px);
+			.employee-dispatch-table {
+				display: grid;
+				width: fit-content;
+				margin: px2vw(10px);
+				border: 1px solid #999;
+				background-color: #fff;
 
-					.employee-column {
+				.table-header {
+					padding: px2vw(10px) px2vw(12px);
+					background-color: #f0f0f0;
+					border-bottom: 1px solid #999;
+					border-right: 1px solid #999;
+					font-size: px2vw(18px);
+					color: #333;
+					text-align: center;
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					white-space: nowrap;
+				}
+
+				.table-cell {
+						padding: px2vw(10px) px2vw(12px);
+						border-bottom: 1px solid #999;
+						border-right: 1px solid #999;
+						font-size: px2vw(16px);
+						color: #333;
+						text-align: center;
+						display: flex;
+						align-items: center;
+						justify-content: center;
+						white-space: nowrap;
+
+						&.record-group-0 { background-color: #e8f4f8; }
+						&.record-group-1 { background-color: #f2f0e6; }
+						&.record-group-2 { background-color: #f9f0f4; }
+						&.record-group-3 { background-color: #eaf6ea; }
+						&.record-group-4 { background-color: #fff6e6; }
+					}
+			}
+
+			.employee-chart {
+				height: 100%;
+				display: inline-flex;
+				flex-direction: row;
+				align-items: flex-end;
+				justify-content: flex-start;
+				padding: px2vw(20px);
+
+				.employee-column {
+					display: flex;
+					flex-direction: column;
+					align-items: center;
+					justify-content: flex-end;
+					height: 100%;
+					flex: 1;
+					min-width: px2vw(80px);
+
+					.emp-wage {
+						font-size: px2vw(20px);
+						color: #333;
+						margin-bottom: px2vw(8px);
+					}
+
+					.emp-bar-container {
+						width: px2vw(45px);
+						flex: 1;
+						background-color: #e0e0e0;
+						border-radius: px2vw(4px);
+						position: relative;
 						display: flex;
 						flex-direction: column;
 						align-items: center;
 						justify-content: flex-end;
-						height: 100%;
-						flex: 1;
-						min-width: px2vw(80px);
+						overflow: hidden;
 
-						.emp-wage {
-							font-size: px2vw(20px);
-							color: #333;
-							margin-bottom: px2vw(8px);
-						}
-
-						.emp-bar-container {
-							width: px2vw(45px);
-							flex: 1;
-							background-color: #e0e0e0;
-							border-radius: px2vw(4px);
-							position: relative;
+						.emp-bar-recorded {
+							width: 100%;
 							display: flex;
-							flex-direction: column;
 							align-items: center;
-							justify-content: flex-end;
-							overflow: hidden;
+							justify-content: center;
 
-							.emp-bar-recorded {
-								width: 100%;
-								display: flex;
-								align-items: center;
-								justify-content: center;
-
-								.emp-hours {
-									font-size: px2vw(16px);
-									color: #333;
-								}
-							}
-
-							.emp-bar-unrecorded {
-								width: 100%;
-								background-color: #bdbdbd;
-								border-bottom-left-radius: px2vw(4px);
-								border-bottom-right-radius: px2vw(4px);
+							.emp-hours {
+								font-size: px2vw(16px);
+								color: #333;
 							}
 						}
 
-						.emp-name {
-							font-size: px2vw(18px);
-							color: #333;
-							margin-top: px2vw(8px);
-							text-align: center;
+						.emp-bar-unrecorded {
+							width: 100%;
+							background-color: #bdbdbd;
+							border-bottom-left-radius: px2vw(4px);
+							border-bottom-right-radius: px2vw(4px);
 						}
 					}
+
+					.emp-name {
+						font-size: px2vw(18px);
+						color: #333;
+						margin-top: px2vw(8px);
+						text-align: center;
+					}
 				}
+			}
 		}
 	}
 }
@@ -2711,6 +3263,224 @@ onMounted(() => {
 				font-size: px2vw(24px);
 				color: #999;
 			}
+		}
+	}
+}
+
+.process-action-modal {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1002;
+	padding: px2vw(30px);
+
+	.process-action-content {
+		width: 100%;
+		max-width: px2vw(1200px);
+		height: 85vh;
+		background-color: #fff;
+		border-radius: px2vw(16px);
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	.process-action-header {
+		height: px2vw(100px);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0 px2vw(30px);
+		background-color: #5884f1;
+		flex-shrink: 0;
+
+		.process-action-title {
+			font-size: px2vw(35px);
+			color: white;
+			font-weight: bold;
+		}
+
+		.process-action-close {
+			font-size: px2vw(50px);
+			color: white;
+			line-height: 1;
+			padding: px2vw(10px);
+		}
+	}
+
+	.process-action-body {
+		flex: 1;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		padding: px2vw(20px);
+
+		.process-action-filter {
+			display: flex;
+			align-items: center;
+			gap: px2vw(15px);
+			margin-bottom: px2vw(15px);
+			flex-shrink: 0;
+
+			.process-action-search {
+				flex: 1;
+				display: flex;
+				align-items: center;
+				background-color: #fff;
+				border: 1px solid #e0e0e0;
+				border-radius: px2vw(12px);
+				padding: 0 px2vw(20px);
+				height: px2vw(80px);
+				min-width: 0;
+
+				input {
+					width: 100%;
+					height: px2vw(80px);
+					border: none;
+					outline: none;
+					font-size: px2vw(28px);
+					background: transparent;
+				}
+			}
+		}
+
+		.process-action-main {
+			display: flex;
+			flex: 1;
+			overflow: hidden;
+			gap: px2vw(15px);
+
+			.process-action-list-section {
+				flex: 1;
+				min-width: 0;
+				overflow: hidden;
+				display: flex;
+				flex-direction: column;
+				border: 1px solid #e0e0e0;
+				border-radius: px2vw(12px);
+
+				.process-action-list {
+					height: 100%;
+
+					.process-action-list-header {
+						display: flex;
+						align-items: center;
+						justify-content: center;
+						min-height: px2vw(80px);
+						background-color: #b0b0b0;
+						font-weight: bold;
+						font-size: px2vw(28px);
+						color: #fff;
+					}
+
+					.process-action-list-item {
+						display: flex;
+						align-items: center;
+						justify-content: center;
+						min-height: px2vw(80px);
+						font-size: px2vw(26px);
+						border-bottom: 1px solid #e0e0e0;
+
+						&:nth-of-type(odd) {
+							background-color: #f5f5f5;
+						}
+
+						&:nth-of-type(even) {
+							background-color: white;
+						}
+
+						&.selected {
+							background-color: #007AFF !important;
+							color: white !important;
+						}
+					}
+
+					.process-action-empty {
+						padding: px2vw(60px) 0;
+						text-align: center;
+						font-size: px2vw(24px);
+						color: #999;
+					}
+				}
+			}
+
+			.process-action-form {
+				flex: 0 0 px2vw(400px);
+				display: flex;
+				flex-direction: column;
+				gap: px2vw(15px);
+				padding: px2vw(20px);
+				background-color: #f5f5f5;
+				border-radius: px2vw(12px);
+
+				.process-action-form-group {
+					display: flex;
+					flex-direction: column;
+					gap: px2vw(8px);
+
+					.process-action-form-label {
+						font-size: px2vw(26px);
+						font-weight: bold;
+						color: #333;
+					}
+
+					.process-action-picker {
+						width: 100%;
+					}
+
+					.process-action-picker-value {
+						height: px2vw(70px);
+						padding: 0 px2vw(20px);
+						border: 1px solid #e0e0e0;
+						border-radius: px2vw(10px);
+						font-size: px2vw(26px);
+						background-color: #fff;
+						display: flex;
+						align-items: center;
+						color: #333;
+					}
+				}
+			}
+		}
+	}
+
+	.process-action-footer {
+		height: px2vw(120px);
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: px2vw(20px);
+		padding: 0 px2vw(30px);
+		border-top: 1px solid #e0e0e0;
+		flex-shrink: 0;
+
+		.process-action-btn-cancel,
+		.process-action-btn-confirm {
+			height: px2vw(80px);
+			padding: 0 px2vw(50px);
+			border-radius: px2vw(12px);
+			font-size: px2vw(28px);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border: none;
+		}
+
+		.process-action-btn-cancel {
+			background-color: #e0e0e0;
+			color: #333;
+		}
+
+		.process-action-btn-confirm {
+			background-color: #5884f1;
+			color: white;
 		}
 	}
 }
