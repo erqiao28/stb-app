@@ -2,45 +2,48 @@
 	<view class="pre-dispatched-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="goBack"></image>
-			<view class="title">预派工</view>
+			<view class="header-btn-bar">
+				<view class="header-btn" :class="{ active: showProcessPanel }" @click="toggleProcessPanel">岗位工序</view>
+				<view class="header-btn" :class="{ active: showAttendancePanel }" @click="toggleAttendancePanel">员工出勤</view>
+			</view>
 			<view></view>
 		</view>
 
-		<view class="dropdown-panel-overlay" v-if="showDropdownPanel" @click="toggleDropdownPanel"></view>
-		<view class="dropdown-panel-wrapper" :class="{ open: showDropdownPanel }">
-			<view class="dropdown-panel">
-				<view class="dropdown-panel-content">
-					<view class="employee-chart-scroll">
+	<view class="dropdown-panel-overlay" v-if="showAttendancePanel || showProcessPanel" @click="closeAllPanels"></view>
+	<view class="dropdown-panel-wrapper attendance-panel" :class="{ open: showAttendancePanel }">
+		<view class="dropdown-panel">
+			<view class="dropdown-panel-content">
+				<view class="employee-chart-scroll">
+					<view class="employee-chart">
+						<view class="employee-chart-column" v-for="(emp, index) in employeeList" :key="emp.id">
+						<view class="employee-chart-bar attendance-bar" :style="{ height: '100%', backgroundColor: emp.recordedColor }">
+							<view class="attendance-btn attendance-btn-up" @click.stop="handleChartEmployeeSwipeUp(emp)">到</view>
+							<text class="employee-chart-name">{{ emp.name }}</text>
+							<view class="attendance-btn attendance-btn-down" @click.stop="handleChartEmployeeSwipeDown(emp)">缺</view>
+						</view>
+					</view>
+						<view class="employee-chart-empty" v-if="!employeeList.length">
+							<text>暂无员工数据</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		</view>
+	</view>
+
+	<view class="dropdown-panel-wrapper process-panel" :class="{ open: showProcessPanel }">
+		<view class="dropdown-panel">
+			<view class="dropdown-panel-content">
+				<view class="employee-chart-scroll">
 					<view class="employee-chart">
 						<template v-for="(emp, index) in employeeList" :key="emp.id">
 							<view class="employee-chart-column">
-								<view
-									class="employee-chart-bar"
-									:class="{
-										'swipe-up': chartSwipeAnimatingId === emp.id && chartSwipeDirection === 'up',
-										'swipe-down': chartSwipeAnimatingId === emp.id && chartSwipeDirection === 'down'
-									}"
-									:style="{ height: '100%', backgroundColor: emp.recordedColor }"
-									@click="toggleEmployeeExpand(emp)"
-									@touchstart="onChartEmployeeTouchStart(emp, $event)"
-									@touchmove="onChartEmployeeTouchMove(emp, $event)"
-									@touchend="onChartEmployeeTouchEnd(emp, $event)"
-									@mousedown="onChartEmployeeMouseDown(emp, $event)"
-									@mousemove="onChartEmployeeMouseMove(emp, $event)"
-									@mouseup="onChartEmployeeMouseUp(emp, $event)"
-									@mouseleave="onChartEmployeeMouseLeave(emp, $event)"
-								>
+								<view class="employee-chart-bar process-bar" :style="{ height: '100%', backgroundColor: '#5884f1' }" @click="toggleEmployeeExpand(emp)">
 									<text class="employee-chart-name">{{ emp.name }}</text>
 								</view>
 							</view>
 							<view class="employee-expand-panel" v-if="expandedEmployeeId === emp.id">
-								<view
-									class="expand-process-item"
-									:class="{ selected: selectedProcessSeq === n }"
-									v-for="n in 3"
-									:key="n"
-									@click.stop="handleProcessItemClick(emp, n)"
-								>
+								<view class="expand-process-item" :class="{ selected: selectedProcessSeq === n }" v-for="n in 3" :key="n" @click.stop="handleProcessItemClick(emp, n)">
 									<text class="expand-process-seq">{{ n }}</text>
 									<text class="expand-process-name">工序{{ n }}</text>
 								</view>
@@ -50,70 +53,73 @@
 							<text>暂无员工数据</text>
 						</view>
 					</view>
-					</view>
 				</view>
 			</view>
 		</view>
-		<view class="panel-bookmark" :class="{ open: showDropdownPanel }" @click="toggleDropdownPanel">
-			<text class="bookmark-title">员工</text>
-			<text class="bookmark-arrow" :class="{ open: showDropdownPanel }">▼</text>
-		</view>
+	</view>
 
-		<view class="process-dropdown-wrapper" :class="{ open: showProcessDropdownPanel && showDropdownPanel }">
-			<view class="dropdown-panel">
-				<view class="dropdown-panel-content">
-					<view class="employee-chart-scroll">
-						<view class="employee-chart">
-							<view class="employee-chart-column" v-for="(proc, index) in processDropdownList" :key="proc.rowid">
-								<view class="employee-chart-bar process-bar" :style="{ height: '100%' }">
-									<text class="employee-chart-name">{{ proc.processName }}</text>
-								</view>
+	<view class="process-dropdown-wrapper" :class="{ open: showProcessDropdownPanel && showProcessPanel }">
+		<view class="dropdown-panel">
+			<view class="dropdown-panel-content">
+				<view class="employee-chart-scroll">
+					<view class="employee-chart">
+						<view class="employee-chart-column" v-for="(proc, index) in processDropdownList" :key="proc.rowid">
+							<view class="employee-chart-bar process-bar" :style="{ height: '100%' }">
+								<text class="employee-chart-name">{{ proc.processName }}</text>
 							</view>
-							<view class="employee-chart-empty" v-if="!processDropdownList.length">
-								<text>暂无工序数据</text>
-							</view>
+						</view>
+						<view class="employee-chart-empty" v-if="!processDropdownList.length">
+							<text>暂无工序数据</text>
 						</view>
 					</view>
 				</view>
 			</view>
 		</view>
+	</view>
 
 		<view class="main-content">
 			<view class="left-panel">
 				<view class="panel-title">产品列表({{ selectedProductIds.length }}/{{ productList.length }})</view>
 				<scroll-view class="product-list" scroll-y>
-					<view
-						v-for="(product, idx) in productList"
-						:key="product.rowid || ('product-' + idx)"
-						class="product-item"
-						:class="{ 'product-active': selectedProductIds.includes(product.rowid) }"
-						@click="handleProductClick(product)"
-						@longpress="handleLongPress(product)"
-						@mousedown="onMouseDown(product)"
-						@mouseup="onMouseUp"
-						@mouseleave="onMouseUp"
-					>
-						<text class="product-index">{{ idx + 1 }}</text>
-						<view class="product-info">
-							<text class="product-order">{{ product.orderNo || '-' }}</text>
-							<text class="product-name">{{ product.productNameNew || '-' }}</text>
-						</view>
-						<view class="product-btns">
-							<text class="expand-btn" @click.stop="toggleExpand(product.rowid)">{{ expandedIds.includes(product.rowid) ? '▼' : '▲' }}</text>
-							<view class="dispatch-icon" @click.stop="openDispatchModal(product)">
-								<view class="dispatch-icon-line"></view>
-								<view class="dispatch-icon-line"></view>
-								<view class="dispatch-icon-line"></view>
+					<view class="order-group" v-for="(group, gIdx) in groupedProductList" :key="group.orderNo">
+						<view class="order-header" @click="toggleOrderCollapse(group.orderNo)">
+						<text class="order-index">{{ chineseNumberMap[gIdx + 1] || (gIdx + 1) }}</text>
+						<text class="order-no">{{ group.orderNo || '-' }}</text>
+					</view>
+						<view class="order-products" v-show="!isOrderCollapsed(group.orderNo)">
+							<view
+								v-for="(product, idx) in group.products"
+								:key="product.rowid || ('product-' + idx)"
+								class="product-item"
+								:class="{ 'product-active': selectedProductIds.includes(product.rowid) }"
+								@click="handleProductClick(product)"
+								@longpress="handleLongPress(product)"
+								@mousedown="onMouseDown(product)"
+								@mouseup="onMouseUp"
+								@mouseleave="onMouseUp"
+							>
+								<text class="product-index">{{ idx + 1 }}</text>
+								<view class="product-info">
+									<text class="product-name">{{ product.productNameNew || '-' }}</text>
+								</view>
+								<view class="product-btns">
+									<text class="expand-btn" @click.stop="toggleExpand(product.rowid)">{{ expandedIds.includes(product.rowid) ? '▼' : '▲' }}</text>
+									<view class="dispatch-icon" @click.stop="openDispatchModal(product)">
+										<view class="dispatch-icon-line"></view>
+										<view class="dispatch-icon-line"></view>
+										<view class="dispatch-icon-line"></view>
+									</view>
+								</view>
+								<view class="product-spec" v-if="expandedIds.includes(product.rowid)">
+									<text v-if="product.thickness">{{ product.thickness }} |</text>
+									<text v-if="product.guokouSpec">{{ product.guokouSpec }} |</text>
+									<text v-if="product.guokouSizeSpec">{{ product.guokouSizeSpec }} |</text>
+									<text v-if="product.craftSpec">{{ product.craftSpec }} |</text>
+									<text v-if="product.paintSpec">{{ product.paintSpec }} |</text>
+									<text v-if="product.polishSpec">{{ product.polishSpec }} |</text>
+									<text v-if="product.materialSizeSpec">{{ product.materialSizeSpec }}</text>
+								</view>
 							</view>
-						</view>
-						<view class="product-spec" v-if="expandedIds.includes(product.rowid)">
-							<text v-if="product.thickness">{{ product.thickness }} |</text>
-							<text v-if="product.guokouSpec">{{ product.guokouSpec }} |</text>
-							<text v-if="product.guokouSizeSpec">{{ product.guokouSizeSpec }} |</text>
-							<text v-if="product.craftSpec">{{ product.craftSpec }} |</text>
-							<text v-if="product.paintSpec">{{ product.paintSpec }} |</text>
-							<text v-if="product.polishSpec">{{ product.polishSpec }} |</text>
-							<text v-if="product.materialSizeSpec">{{ product.materialSizeSpec }}</text>
 						</view>
 					</view>
 					<view class="empty-wrap" v-if="!productList.length && !loadingProducts">
@@ -617,6 +623,29 @@ const SUMMARY_PAGE_SIZE = 20
 
 const selectedProductIds = ref([])
 const expandedIds = ref([])
+const collapsedOrderIds = ref([])
+const chineseNumberMap = {
+	1: '一',
+	2: '二',
+	3: '三',
+	4: '四',
+	5: '五',
+	6: '六',
+	7: '七',
+	8: '八',
+	9: '九',
+	10: '十',
+	11: '十一',
+	12: '十二',
+	13: '十三',
+	14: '十四',
+	15: '十五',
+	16: '十六',
+	17: '十七',
+	18: '十八',
+	19: '十九',
+	20: '二十'
+}
 const processList = ref([])
 const loadedProductIds = ref([])
 const selectedProcessIds = ref([])
@@ -709,9 +738,8 @@ const processActionModeIndex = ref(0)
 const processActionModeOptions = ['添加', '替换', '删除']
 const processActionLoading = ref(false)
 
-const showDropdownPanel = ref(false)
-const chartSwipeAnimatingId = ref('')
-const chartSwipeDirection = ref('')
+const showAttendancePanel = ref(false)
+const showProcessPanel = ref(false)
 const expandedEmployeeId = ref('')
 
 const showProcessDropdownPanel = ref(false)
@@ -719,139 +747,34 @@ const processDropdownList = ref([])
 const selectedProcessDropdownEmployee = ref(null)
 const selectedProcessSeq = ref(0)
 
-let chartTouchStartY = 0
-let chartTouchStartTime = 0
-let chartCurrentEmployee = null
-
-const getChartEventClientY = (e) => {
-	if (e.changedTouches && e.changedTouches.length > 0) {
-		return e.changedTouches[0].clientY
-	}
-	if (e.touches && e.touches.length > 0) {
-		return e.touches[0].clientY
-	}
-	if (e.clientY != null) {
-		return e.clientY
-	}
-	return 0
-}
-
-const onChartEmployeeTouchStart = (emp, e) => {
-	chartTouchStartY = getChartEventClientY(e)
-	chartTouchStartTime = Date.now()
-	chartCurrentEmployee = emp
-	chartSwipeAnimatingId.value = emp.id
-	chartSwipeDirection.value = ''
-}
-
-const onChartEmployeeTouchMove = (emp, e) => {
-	if (!chartCurrentEmployee || chartCurrentEmployee.id !== emp.id) return
-	const currentY = getChartEventClientY(e)
-	const deltaY = chartTouchStartY - currentY
-	if (deltaY > 0) {
-		chartSwipeDirection.value = 'up'
-	} else if (deltaY < 0) {
-		chartSwipeDirection.value = 'down'
-	}
-}
-
-const onChartEmployeeTouchEnd = (emp, e) => {
-	if (!chartCurrentEmployee || chartCurrentEmployee.id !== emp.id) {
-		chartSwipeAnimatingId.value = ''
-		chartSwipeDirection.value = ''
-		return
-	}
-	const endY = getChartEventClientY(e)
-	const deltaY = chartTouchStartY - endY
-	const minSwipeDistance = 10
-
-	setTimeout(() => {
-		chartSwipeAnimatingId.value = ''
-		chartSwipeDirection.value = ''
-	}, 300)
-
-	if (Math.abs(deltaY) < minSwipeDistance) return
-
-	if (deltaY > 0) {
-		handleChartEmployeeSwipeUp(emp)
-	} else {
-		handleChartEmployeeSwipeDown(emp)
-	}
-}
-
-const onChartEmployeeMouseDown = (emp, e) => {
-	onChartEmployeeTouchStart(emp, e)
-	document.addEventListener('mousemove', onChartDragMouseMove)
-	document.addEventListener('mouseup', onChartDragMouseUp)
-}
-
-const onChartDragMouseMove = (e) => {
-	if (!chartCurrentEmployee) return
-	const currentY = getChartEventClientY(e)
-	const deltaY = chartTouchStartY - currentY
-	if (deltaY > 0) {
-		chartSwipeDirection.value = 'up'
-	} else if (deltaY < 0) {
-		chartSwipeDirection.value = 'down'
-	}
-}
-
-const onChartDragMouseUp = (e) => {
-	document.removeEventListener('mousemove', onChartDragMouseMove)
-	document.removeEventListener('mouseup', onChartDragMouseUp)
-	if (!chartCurrentEmployee) {
-		chartSwipeAnimatingId.value = ''
-		chartSwipeDirection.value = ''
-		return
-	}
-	const endY = getChartEventClientY(e)
-	const deltaY = chartTouchStartY - endY
-	const minSwipeDistance = 10
-
-	setTimeout(() => {
-		chartSwipeAnimatingId.value = ''
-		chartSwipeDirection.value = ''
-	}, 300)
-
-	if (Math.abs(deltaY) < minSwipeDistance) return
-
-	if (deltaY > 0) {
-		handleChartEmployeeSwipeUp(chartCurrentEmployee)
-	} else {
-		handleChartEmployeeSwipeDown(chartCurrentEmployee)
-	}
-}
-
-const onChartEmployeeMouseMove = (emp, e) => {
-	if (!chartCurrentEmployee || chartCurrentEmployee.id !== emp.id) return
-	onChartEmployeeTouchMove(emp, e)
-}
-
-const onChartEmployeeMouseUp = (emp, e) => {
-	onChartEmployeeTouchEnd(emp, e)
-}
-
-const onChartEmployeeMouseLeave = (emp, e) => {
-	if (chartCurrentEmployee) return
-	chartSwipeAnimatingId.value = ''
-	chartSwipeDirection.value = ''
-}
-
 const handleChartEmployeeSwipeUp = (emp) => {
-	console.log('向上滑动', emp.name, emp.id)
-	uni.showToast({ title: `向上滑动: ${emp.name}`, icon: 'none' })
+	console.log('到', emp.name, emp.id)
+	uni.showToast({ title: `到: ${emp.name}`, icon: 'none' })
 }
 
 const handleChartEmployeeSwipeDown = (emp) => {
-	console.log('向下滑动', emp.name, emp.id)
-	uni.showToast({ title: `向下滑动: ${emp.name}`, icon: 'none' })
+	console.log('缺', emp.name, emp.id)
+	uni.showToast({ title: `缺: ${emp.name}`, icon: 'none' })
 }
 
-const toggleDropdownPanel = () => {
-	showDropdownPanel.value = !showDropdownPanel.value
-	if (!showDropdownPanel.value) {
+const toggleAttendancePanel = () => {
+	showAttendancePanel.value = !showAttendancePanel.value
+	if (!showAttendancePanel.value) {
 		closeProcessDropdownPanel()
 	}
+}
+
+const toggleProcessPanel = () => {
+	showProcessPanel.value = !showProcessPanel.value
+	if (!showProcessPanel.value) {
+		closeProcessDropdownPanel()
+	}
+}
+
+const closeAllPanels = () => {
+	showAttendancePanel.value = false
+	showProcessPanel.value = false
+	closeProcessDropdownPanel()
 }
 
 const handleProcessItemClick = (emp, seq) => {
@@ -1575,6 +1498,19 @@ const toggleExpand = (rowid) => {
 	}
 }
 
+const isOrderCollapsed = (orderNo) => {
+	return collapsedOrderIds.value.includes(orderNo)
+}
+
+const toggleOrderCollapse = (orderNo) => {
+	const idx = collapsedOrderIds.value.indexOf(orderNo)
+	if (idx >= 0) {
+		collapsedOrderIds.value.splice(idx, 1)
+	} else {
+		collapsedOrderIds.value.push(orderNo)
+	}
+}
+
 const loadEmployeeDispatchSummary = async () => {
 	try {
 		const allRowids = productList.value.flatMap((p) => p.preDispatchRowids || [])
@@ -1700,6 +1636,18 @@ const getEmployeeCellText = (processes, idx) => {
 	if (span === 1 && names.length > 1) return '多人'
 	return names.join('、')
 }
+
+const groupedProductList = computed(() => {
+	const groups = {}
+	productList.value.forEach((product) => {
+		const key = product.orderNo || '未分类'
+		if (!groups[key]) {
+			groups[key] = { orderNo: key, products: [] }
+		}
+		groups[key].products.push(product)
+	})
+	return Object.values(groups)
+})
 
 const groupedProcessList = computed(() => {
 	const groups = {}
@@ -2262,20 +2210,6 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
-@keyframes swipe-up-anim {
-	0% { transform: translateY(0); opacity: 1; }
-	30% { transform: translateY(-50px); opacity: 0.6; }
-	70% { transform: translateY(-50px); opacity: 0.6; }
-	100% { transform: translateY(0); opacity: 1; }
-}
-
-@keyframes swipe-down-anim {
-	0% { transform: translateY(0); opacity: 1; }
-	30% { transform: translateY(50px); opacity: 0.6; }
-	70% { transform: translateY(50px); opacity: 0.6; }
-	100% { transform: translateY(0); opacity: 1; }
-}
-
 @keyframes panel-slide-in {
 	0% { opacity: 0; transform: translateX(-10px); }
 	100% { opacity: 1; transform: translateX(0); }
@@ -2298,18 +2232,43 @@ onMounted(async () => {
 		flex-shrink: 0;
 		position: relative;
 		z-index: 200;
+		padding: 0 px2vw(20px);
+		box-sizing: border-box;
 
 		image {
-			margin-left: px2vw(20px);
+			margin-right: px2vw(20px);
 			height: px2vw(40px);
 			width: px2vw(40px);
+			flex-shrink: 0;
 		}
 
-		.title {
-			margin-right: px2vw(80px);
-			font-size: px2vw(28px);
-			color: white;
-			font-weight: bold;
+		.header-btn-bar {
+			flex: 1;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			gap: px2vw(16px);
+		}
+
+		.header-btn {
+			flex-shrink: 0;
+			padding: 0 px2vw(32px);
+			height: px2vw(48px);
+			line-height: px2vw(48px);
+			border-radius: px2vw(24px);
+			font-size: px2vw(24px);
+			color: #fff;
+			background-color: rgba(255, 255, 255, 0.2);
+			border: 1px solid rgba(255, 255, 255, 0.3);
+			text-align: center;
+			transition: all 0.2s ease;
+
+			&.active {
+				background-color: #fff;
+				color: #5884f1;
+				border-color: #fff;
+				font-weight: bold;
+			}
 		}
 	}
 
@@ -2520,22 +2479,52 @@ onMounted(async () => {
 						writing-mode: vertical-rl;
 						overflow: hidden;
 
-						&.swipe-up {
-							animation: swipe-up-anim 0.4s ease forwards;
+						&.process-bar {
+							background-color: #5884f1;
 						}
 
-						&.swipe-down {
-							animation: swipe-down-anim 0.4s ease forwards;
+						&.attendance-bar {
+							writing-mode: horizontal-tb;
+							flex-direction: column;
+							justify-content: space-between;
+							padding: px2vw(8px) 0;
 						}
 
 						.employee-chart-name {
-							font-size: px2vw(18px);
+							font-size: px2vw(20px);
 							color: #fff;
+							writing-mode: vertical-rl;
 							white-space: nowrap;
 							overflow: hidden;
 							text-overflow: ellipsis;
 							max-height: 100%;
 							padding: px2vw(8px) 0;
+							flex: 1;
+							min-height: 0;
+							display: flex;
+							align-items: center;
+							justify-content: center;
+						}
+
+						.attendance-btn {
+							flex-shrink: 0;
+							width: px2vw(36px);
+							height: px2vw(36px);
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							border-radius: 50%;
+							font-size: px2vw(18px);
+							font-weight: bold;
+							color: #fff;
+
+							&.attendance-btn-up {
+								background-color: #27ae60;
+							}
+
+							&.attendance-btn-down {
+								background-color: #e74c3c;
+							}
 						}
 					}
 				}
@@ -2602,49 +2591,6 @@ onMounted(async () => {
 						color: #999;
 					}
 				}
-			}
-		}
-	}
-
-	.panel-bookmark {
-		position: absolute;
-		left: px2vw(330px);
-		top: calc(#{px2vw(70px)} + 33vh);
-		transform: translateY(calc(-33vh));
-		transition: transform 0.3s ease;
-		z-index: 101;
-		pointer-events: auto;
-		width: px2vw(100px);
-		height: px2vw(40px);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: px2vw(8px);
-		padding: 0 px2vw(16px);
-		background-color: rgba(255, 255, 255, 0.9);
-		border: 1px solid #eee;
-		border-top: none;
-		border-radius: 0 0 px2vw(12px) px2vw(12px);
-		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-		cursor: pointer;
-
-		&.open {
-			transform: translateY(0);
-		}
-
-		.bookmark-title {
-			font-size: px2vw(20px);
-			color: #333;
-			font-weight: 500;
-		}
-
-		.bookmark-arrow {
-			font-size: px2vw(16px);
-			color: #999;
-			transition: transform 0.3s ease;
-
-			&.open {
-				transform: rotate(180deg);
 			}
 		}
 	}
@@ -2768,41 +2714,6 @@ onMounted(async () => {
 				}
 			}
 		}
-
-		.panel-bookmark {
-			pointer-events: auto;
-			flex-shrink: 0;
-			align-self: center;
-			width: px2vw(100px);
-			height: px2vw(40px);
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			gap: px2vw(8px);
-			padding: 0 px2vw(16px);
-			background-color: rgba(255, 255, 255, 0.9);
-			border: 1px solid #eee;
-			border-top: none;
-			border-radius: 0 0 px2vw(12px) px2vw(12px);
-			box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-			cursor: pointer;
-
-			.bookmark-title {
-				font-size: px2vw(20px);
-				color: #333;
-				font-weight: 500;
-			}
-
-			.bookmark-arrow {
-				font-size: px2vw(16px);
-				color: #999;
-				transition: transform 0.3s ease;
-
-				&.open {
-					transform: rotate(180deg);
-				}
-			}
-		}
 	}
 
 	.main-content {
@@ -2865,18 +2776,70 @@ onMounted(async () => {
 			.product-list {
 				flex: 1;
 				overflow: hidden;
+				background-color: #f8f9fa;
+
+				.order-group {
+					margin: px2vw(12px);
+					background-color: #fff;
+					border-radius: px2vw(12px);
+					box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+					overflow: hidden;
+
+					.order-header {
+						display: flex;
+						flex-direction: row;
+						align-items: center;
+						padding: px2vw(16px) px2vw(20px);
+						background-color: #fff;
+						cursor: pointer;
+
+						&:active {
+							background-color: #f8f9fa;
+						}
+
+						.order-index {
+							padding: px2vw(6px) px2vw(12px);
+							background-color: #e9ecef;
+							border-radius: px2vw(6px);
+							font-size: px2vw(20px);
+							color: #333;
+							font-weight: bold;
+							margin-right: px2vw(12px);
+							flex-shrink: 0;
+						}
+
+						.order-no {
+							flex: 1;
+							font-size: px2vw(22px);
+							color: #333;
+							font-weight: bold;
+							min-width: 0;
+							white-space: nowrap;
+							overflow: hidden;
+							text-overflow: ellipsis;
+						}
+					}
+
+					.order-products {
+						padding: px2vw(8px) 0;
+					}
+				}
 
 				.product-item {
-					padding: px2vw(12px);
-					border-bottom: 1px solid #f0f0f0;
+					padding: px2vw(12px) px2vw(16px);
 					display: flex;
 					flex-direction: row;
 					align-items: center;
 					flex-wrap: wrap;
+					transition: background-color 0.15s ease;
+
+					&:active {
+						background-color: #f8f9fa;
+					}
 
 					&.product-active {
-						background-color: #e8f4ff;
-						border-left: px2vw(6px) solid #3498db;
+						background-color: #e7f5ff;
+						border-left: px2vw(4px) solid #339af0;
 					}
 
 					.product-index {
@@ -2884,11 +2847,13 @@ onMounted(async () => {
 						height: px2vw(36px);
 						line-height: px2vw(36px);
 						text-align: center;
-						background-color: #3498db;
-						color: #fff;
+						background-color: #e9ecef;
+						color: #333;
 						border-radius: 50%;
-						font-size: px2vw(20px);
+						font-size: px2vw(18px);
+						font-weight: bold;
 						flex-shrink: 0;
+						margin: 0 px2vw(4px);
 					}
 
 					.product-info {
@@ -2896,28 +2861,16 @@ onMounted(async () => {
 						display: flex;
 						flex-direction: row;
 						align-items: center;
-						margin-left: px2vw(10px);
-						gap: px2vw(8px);
+						margin-left: px2vw(12px);
 						min-width: 0;
 					}
 
-					.product-order {
-						font-size: px2vw(18px);
-						color: #333;
-						white-space: nowrap;
-						overflow: hidden;
-						text-overflow: ellipsis;
-						flex-shrink: 0;
-					}
-
 					.product-name {
-						font-size: px2vw(18px);
+						font-size: px2vw(20px);
 						color: #333;
 						white-space: nowrap;
 						overflow: hidden;
 						text-overflow: ellipsis;
-						margin-right: px2vw(16px);
-						margin-left: px2vw(16px);
 						flex: 1;
 						min-width: 0;
 					}
@@ -2927,42 +2880,60 @@ onMounted(async () => {
 						flex-direction: row;
 						align-items: center;
 						flex-shrink: 0;
+						gap: px2vw(8px);
 					}
 
 					.expand-btn {
-						font-size: px2vw(20px);
-						color: #999;
-						padding: px2vw(4px) px2vw(8px);
+						width: px2vw(36px);
+						height: px2vw(36px);
+						line-height: px2vw(36px);
+						text-align: center;
+						border-radius: 50%;
+						font-size: px2vw(18px);
+						color: #666;
+						background-color: #f1f3f5;
 						flex-shrink: 0;
+						transition: all 0.15s ease;
+
+						&:active {
+							background-color: #dee2e6;
+						}
 					}
 
 					.dispatch-icon {
-						width: px2vw(28px);
-						height: px2vw(32px);
-						border: 2px solid #999;
-						border-radius: px2vw(4px);
+						width: px2vw(36px);
+						height: px2vw(36px);
+						border-radius: 50%;
+						background-color: #5884f1;
 						display: flex;
 						flex-direction: column;
 						justify-content: center;
 						align-items: center;
-						gap: px2vw(4px);
-						margin-left: px2vw(12px);
+						gap: px2vw(3px);
 						flex-shrink: 0;
+						transition: all 0.15s ease;
+
+						&:active {
+							background-color: #4a73d8;
+						}
 
 						.dispatch-icon-line {
 							width: px2vw(14px);
 							height: px2vw(3px);
-							background-color: #999;
+							background-color: #fff;
 							border-radius: px2vw(2px);
 						}
 					}
 
 					.product-spec {
 						width: 100%;
-						font-size: px2vw(18px);
-						color: #999;
+						background-color: #f1f3f5;
+						border-radius: px2vw(8px);
+						padding: px2vw(10px) px2vw(12px);
+						font-size: px2vw(16px);
+						color: #666;
 						margin-top: px2vw(8px);
-						margin-left: px2vw(46px);
+						margin-left: px2vw(54px);
 					}
 				}
 			}
