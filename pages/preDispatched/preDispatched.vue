@@ -1,4 +1,4 @@
-﻿<template>
+<template>
 	<view class="pre-dispatched-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="goBack"></image>
@@ -600,6 +600,15 @@ const PRE_DISPATCH_SUMMARY_FIELD_MAP = {
 
 const DAILY_WAGE_WORKSHEET_ID = '692112b021066a9f124f5c9f'
 const DAILY_WAGE_EMPLOYEE_NAME_FIELD = '6938db8bda0981f67b352af3'
+
+const DAILY_WAGE_FIELD_MAP = {
+	employeeName: '6938db8bda0981f67b352af3',
+	dispatchDate: '69524e7b7a59e0522d855df6',
+	workshop: '696075d19223cfe3a0c169dc',
+	totalHours: '6a4f304c6d70ffabc67913b8',
+	totalWage: '6a4f304c6d70ffabc67913b9',
+	preDispatch: '6a1e47d727514927ff33cc4f',
+}
 
 const CRAFT_POSITION_WORKSHEET_ID = '6a276f516d70ffabc66285e7'
 const CRAFT_POSITION_FIELD_ID = '6a276ffc6d70ffabc66285f8'
@@ -1526,77 +1535,91 @@ const toggleOrderCollapse = (orderNo) => {
 
 const loadEmployeeDispatchSummary = async () => {
 	try {
-		const allRowids = productList.value.flatMap((p) => p.preDispatchRowids || [])
-		if (allRowids.length === 0) {
-			employeeDispatchSummary.value = []
-			return
-		}
-		const res = await callWorkflowListAPIPaged({
-			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
-			filters: [{
-				controlId: 'rowid',
+		const currentDate = filterDate.value
+		const filters = []
+		if (loginWorkshop.value) {
+			filters.push({
+				controlId: DAILY_WAGE_FIELD_MAP.workshop,
 				dataType: 30,
 				spliceType: 1,
 				filterType: 2,
-				values: allRowids
-			}],
+				values: [loginWorkshop.value]
+			})
+		}
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: DAILY_WAGE_WORKSHEET_ID,
+			filters,
 			pageSize: 500,
 			pageNum: 1,
 			silent: true
 		})
-		const rows = Array.isArray(res?.data) ? res.data.map(mapPreDispatchRow) : []
-		const dailyWageRowids = new Set()
-		rows.forEach((item) => {
-			extractRelationSids(item.dailyWage).forEach((sid) => dailyWageRowids.add(sid))
-		})
-		const dailyWageMap = {}
-		if (dailyWageRowids.size > 0) {
-			const dwRes = await callWorkflowListAPIPaged({
-				worksheetId: DAILY_WAGE_WORKSHEET_ID,
+		let rows = Array.isArray(res?.data) ? res.data : []
+		rows = rows.filter((item) => formatFieldValue(item[DAILY_WAGE_FIELD_MAP.dispatchDate]) === currentDate)
+
+		const dailyWageList = rows.map((item) => ({
+			rowid: item.rowid,
+			employeeName: formatFieldValue(item[DAILY_WAGE_FIELD_MAP.employeeName]) || '-',
+			dispatchDate: formatFieldValue(item[DAILY_WAGE_FIELD_MAP.dispatchDate]),
+			workshop: formatFieldValue(item[DAILY_WAGE_FIELD_MAP.workshop]),
+			totalHours: Number(formatFieldValue(item[DAILY_WAGE_FIELD_MAP.totalHours]) || 0),
+			totalWage: Number(formatFieldValue(item[DAILY_WAGE_FIELD_MAP.totalWage]) || 0),
+			preDispatchSids: extractRelationSids(item[DAILY_WAGE_FIELD_MAP.preDispatch])
+		}))
+
+		const preDispatchRowids = new Set()
+		dailyWageList.forEach((dw) => dw.preDispatchSids.forEach((sid) => preDispatchRowids.add(sid)))
+
+		const preDispatchMap = {}
+		if (preDispatchRowids.size > 0) {
+			const pdRes = await callWorkflowListAPIPaged({
+				worksheetId: PRE_DISPATCH_WORKSHEET_ID,
 				filters: [{
 					controlId: 'rowid',
 					dataType: 30,
 					spliceType: 1,
 					filterType: 2,
-					values: [...dailyWageRowids]
+					values: [...preDispatchRowids]
 				}],
 				pageSize: 500,
 				pageNum: 1,
 				silent: true
 			})
-			const dwRows = Array.isArray(dwRes?.data) ? dwRes.data : []
-			dwRows.forEach((item) => {
-				dailyWageMap[item.rowid] = formatFieldValue(item[DAILY_WAGE_EMPLOYEE_NAME_FIELD]) || '-'
+			const pdRows = Array.isArray(pdRes?.data) ? pdRes.data.map(mapPreDispatchRow) : []
+			pdRows.forEach((pd) => {
+				preDispatchMap[pd.rowid] = pd
 			})
 		}
+
 		const map = new Map()
-		rows.forEach((item) => {
-			const sids = extractRelationSids(item.dailyWage)
-			sids.forEach((sid) => {
-				const employeeName = dailyWageMap[sid] || '-'
-				if (!map.has(employeeName)) {
-					map.set(employeeName, {
-						employeeName,
-						totalWage: 0,
-						totalWorktime: 0,
-						records: []
+		dailyWageList.forEach((dw) => {
+			const employeeName = dw.employeeName
+			if (!map.has(employeeName)) {
+				map.set(employeeName, {
+					employeeName,
+					totalWage: 0,
+					totalWorktime: 0,
+					records: []
+				})
+			}
+			const group = map.get(employeeName)
+			group.totalWage += dw.totalWage
+			group.totalWorktime = Number((group.totalWorktime + dw.totalHours).toFixed(2))
+			dw.preDispatchSids.forEach((sid) => {
+				const pd = preDispatchMap[sid]
+				if (pd) {
+					group.records.push({
+						orderNo: pd.orderNo || '-',
+						productName: pd.productNameNew || pd.productName || '-',
+						dispatchCount: pd.dispatchCount || 0,
+						worktime: pd.worktime || 0,
+						wage: pd.wage || 0
 					})
 				}
-				const group = map.get(employeeName)
-				group.records.push({
-					orderNo: item.orderNo || '-',
-					productName: item.productNameNew || item.productName || '-',
-					dispatchCount: item.dispatchCount || 0,
-					worktime: item.worktime || 0,
-					wage: item.wage || 0
-				})
-				group.totalWage += Number(item.wage || 0)
-				group.totalWorktime = Number((group.totalWorktime + Number(item.worktime || 0)).toFixed(2))
 			})
 		})
 		employeeDispatchSummary.value = [...map.values()].sort((a, b) => b.records.length - a.records.length)
 	} catch (e) {
-		console.error('加载员工预派工汇总失败:', e)
+		console.error('加载员工当日工资汇总失败:', e)
 		employeeDispatchSummary.value = []
 	}
 }
