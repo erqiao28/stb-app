@@ -16,7 +16,7 @@
 				<view class="employee-chart-scroll">
 					<view class="employee-chart">
 						<view class="employee-chart-column" v-for="(emp, index) in employeeList" :key="emp.id">
-						<view class="employee-chart-bar attendance-bar" :style="{ height: '100%', backgroundColor: emp.recordedColor }">
+						<view class="employee-chart-bar attendance-bar" :style="{ height: '100%', backgroundColor: emp.barColor }">
 							<view class="attendance-btn attendance-btn-up" @click.stop="handleChartEmployeeSwipeUp(emp)">到</view>
 							<text class="employee-chart-name">{{ emp.name }}</text>
 							<view class="attendance-btn attendance-btn-down" @click.stop="handleChartEmployeeSwipeDown(emp)">缺</view>
@@ -290,15 +290,11 @@
 							<text class="emp-wage">{{ Number(emp.wage || 0).toFixed(2) }}</text>
 							<view class="emp-bar-container">
 								<view
-									class="emp-bar-recorded"
-									:style="{ height: emp.recordedHeight, backgroundColor: emp.recordedColor }"
+									class="emp-bar"
+									:style="{ height: emp.barHeight, backgroundColor: emp.barColor }"
 								>
-									<text v-if="emp.recordedHours >= 3" class="emp-hours">{{ emp.recordedHours }}</text>
+									<text v-if="emp.totalHours >= 3" class="emp-hours">{{ emp.totalHours }}</text>
 								</view>
-								<view
-									class="emp-bar-unrecorded"
-									:style="{ height: emp.unrecordedHeight }"
-								></view>
 							</view>
 							<text class="emp-name">{{ emp.name }}</text>
 						</view>
@@ -422,7 +418,7 @@
 					<view class="employee-modal-info">
 						<text class="employee-modal-name">{{ emp.name }}</text>
 						<text class="employee-modal-position">岗位: {{ emp.position || '-' }}</text>
-						<text class="employee-modal-hours">未派工时: {{ emp.unrecordedHours || 0 }}h</text>
+						<text class="employee-modal-hours">总工时: {{ emp.totalHours || 0 }}h</text>
 					</view>
 				</view>
 				<view class="employee-modal-empty" v-if="allEmployeeOptions.length === 0">
@@ -474,6 +470,7 @@
 				<view class="employee-task-header">
 					<text class="task-header-cell">订单编号</text>
 					<text class="task-header-cell">产品名称</text>
+					<text class="task-header-cell">工序</text>
 					<text class="task-header-cell">派工数量</text>
 				</view>
 				<view
@@ -483,6 +480,7 @@
 				>
 					<text class="task-cell">{{ task.orderNo }}</text>
 					<text class="task-cell">{{ task.productName }}</text>
+					<text class="task-cell">{{ task.processName }}</text>
 					<text class="task-cell">{{ task.dispatchCount }}</text>
 				</view>
 				<view class="employee-task-empty" v-if="!(selectedEmployeeForPopover?.tasks || []).length">
@@ -676,8 +674,8 @@ const instance = getCurrentInstance()
 
 const employeeSummary = computed(() => {
 	const total = employeeList.value.length
-	const unassigned = employeeList.value.filter((e) => e.recordedHours === 0).length
-	const incomplete = employeeList.value.filter((e) => e.recordedHours > 0 && e.recordedHours < MAX_EMPLOYEE_HOURS).length
+	const unassigned = employeeList.value.filter((e) => e.totalHours === 0).length
+	const incomplete = employeeList.value.filter((e) => e.totalHours > 0 && e.totalHours < MAX_EMPLOYEE_HOURS).length
 	return { total, unassigned, incomplete }
 })
 
@@ -699,8 +697,6 @@ const EMPLOYEE_WORKSHEET_ID = 'yggs'
 const EMPLOYEE_FIELD_MAP = {
 	workshop: '696075d19223cfe3a0c169dc',
 	dispatchDate: '69524e7b7a59e0522d855df6',
-	recordedHours: '697dd01d3b5e707f84ce30c3',
-	unrecordedHours: '697dd01d3b5e707f84ce30c4',
 	totalHours: '6a4f304c6d70ffabc67913b8',
 	wage: '6a4f304c6d70ffabc67913b9',
 	employeeName: '6938db8bda0981f67b352af3',
@@ -1610,6 +1606,7 @@ const loadEmployeeDispatchSummary = async () => {
 					group.records.push({
 						orderNo: pd.orderNo || '-',
 						productName: pd.productNameNew || pd.productName || '-',
+						processName: pd.processName || '-',
 						dispatchCount: pd.dispatchCount || 0,
 						worktime: pd.worktime || 0,
 						wage: pd.wage || 0
@@ -1703,35 +1700,41 @@ const groupedProcessList = computed(() => {
 	return Object.values(groups)
 })
 
-const generateFakeEmployeeTasks = () => {
-	const products = [
-		{ orderNo: '317-001', productName: '24C款煎锅', dispatchCount: 50 },
-		{ orderNo: '317-002', productName: '28C款煎锅', dispatchCount: 30 },
-		{ orderNo: '318-001', productName: '30C款煎锅', dispatchCount: 20 },
-		{ orderNo: '319-001', productName: '32C款煎锅', dispatchCount: 40 }
-	]
-	const count = Math.floor(Math.random() * 3) + 2
-	return products.slice(0, count)
-}
-
-const openEmployeeTaskPopover = (emp, index) => {
-	const tasks = generateFakeEmployeeTasks()
+const openEmployeeTaskPopover = async (emp, index) => {
+	if (employeeDispatchSummary.value.length === 0) {
+		await loadEmployeeDispatchSummary()
+	}
+	const group = employeeDispatchSummary.value.find((g) => g.employeeName === emp.name)
+	const tasks = group
+		? group.records.map((r) => ({
+				orderNo: r.orderNo,
+				productName: r.productName,
+				processName: r.processName,
+				dispatchCount: r.dispatchCount
+		  }))
+		: []
 	selectedEmployeeForPopover.value = { ...emp, tasks }
 	const query = uni.createSelectorQuery().in(instance)
 	query.select('#emp-column-' + index).boundingClientRect((rect) => {
 		if (rect) {
 			const systemInfo = uni.getSystemInfoSync()
 			const windowWidth = systemInfo.windowWidth
+			const windowHeight = systemInfo.windowHeight
 			const popoverWidth = 320
-			const popoverHeight = 220
-			const arrowGap = 16
+			const arrowSize = 16
+			const arrowGap = 20
 			let left = rect.left + rect.width / 2 - popoverWidth / 2
-			let top = rect.top - popoverHeight - arrowGap
 			if (left < 10) left = 10
 			if (left + popoverWidth > windowWidth - 10) left = windowWidth - popoverWidth - 10
-			if (top < 10) top = rect.bottom + arrowGap
-			employeeTaskPopoverStyle.value = { left: left + 'px', top: top + 'px' }
-			employeeTaskArrowStyle.value = { left: (rect.left + rect.width / 2 - left - 8) + 'px' }
+			const bottom = windowHeight - rect.top + arrowGap
+			const tipGap = arrowGap - arrowSize
+			employeeTaskPopoverStyle.value = { left: left + 'px', bottom: bottom + 'px' }
+			// 箭头使用 fixed 定位，直接以视口为基准，避免受 content padding 影响
+			employeeTaskArrowStyle.value = {
+				position: 'fixed',
+				left: (rect.left + rect.width / 2 - arrowSize) + 'px',
+				bottom: (windowHeight - rect.top + tipGap) + 'px'
+			}
 		}
 		showEmployeeTaskPopover.value = true
 	}).exec()
@@ -1847,51 +1850,31 @@ const loadWorkshopEmployees = async () => {
 		})
 		const rows = Array.isArray(res?.data) ? res.data : []
 		const filtered = rows.filter((item) => formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) === currentDate)
-		const mapped = filtered.map((item, index) => {
-			let recordedHours
-			if (index === 0) {
-				recordedHours = Math.round((Math.random() * 5 + 1) * 10) / 10
-			} else if (index === 1) {
-				recordedHours = MAX_EMPLOYEE_HOURS
-			} else if (index === 2 || index === 3) {
-				recordedHours = 0
-			} else {
-				recordedHours = Math.round(Math.random() * 11 * 10) / 10
-			}
-			const unrecordedHours = 0
-			const totalHours = recordedHours + unrecordedHours
-			const wage = Number((recordedHours / MAX_EMPLOYEE_HOURS) * 400).toFixed(2)
+		const mapped = filtered.map((item) => {
+			const totalHours = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.totalHours]) || '0') || 0
+			const wage = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.wage]) || '0') || 0
 			const attendance = formatFieldValue(item[EMPLOYEE_FIELD_MAP.attendance]) || ''
 			return {
 				id: item.rowid || '',
 				name: formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName]) || '-',
-				recordedHours,
-				unrecordedHours,
 				totalHours,
 				wage,
 				attendance
 			}
 		})
 		employeeList.value = mapped.map((e) => {
-			let recordedHeight = (e.recordedHours / MAX_EMPLOYEE_HOURS) * 100
-			let unrecordedHeight = (e.unrecordedHours / MAX_EMPLOYEE_HOURS) * 100
-			if (recordedHeight + unrecordedHeight > 100) {
-				const total = recordedHeight + unrecordedHeight
-				recordedHeight = (recordedHeight / total) * 100
-				unrecordedHeight = (unrecordedHeight / total) * 100
-			}
-			let recordedColor = '#e74c3c'
+			const barHeight = Math.min(100, (e.totalHours / MAX_EMPLOYEE_HOURS) * 100) + '%'
+			let barColor = '#e74c3c'
 			const attendance = String(e.attendance).trim()
 			if (attendance === '上班') {
-				recordedColor = '#27ae60'
+				barColor = '#27ae60'
 			} else if (attendance === '请假') {
-				recordedColor = '#f1c40f'
+				barColor = '#f1c40f'
 			}
 			return {
 				...e,
-				recordedHeight: recordedHeight + '%',
-				unrecordedHeight: unrecordedHeight + '%',
-				recordedColor
+				barHeight,
+				barColor
 			}
 		})
 	} catch (e) {
@@ -2184,15 +2167,13 @@ const loadEmployeeOptions = async () => {
 		})
 		if (res.data && res.data.length > 0) {
 			const mappedEmployees = res.data.map(item => {
-				const dispatchWorkDate = item['69524e7b7a59e0522d855df6'] || ''
-				const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
-				const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
+				const dispatchWorkDate = item[EMPLOYEE_FIELD_MAP.dispatchDate] || ''
+				const totalHoursStr = item[EMPLOYEE_FIELD_MAP.totalHours] || '0'
 				return {
 					id: item['6943bd902161a0fc58bad5ab'] || '',
-					name: item['6938db8bda0981f67b352af3'] || '',
+					name: item[EMPLOYEE_FIELD_MAP.employeeName] || '',
 					position: item['6943bf332161a0fc58bad7a4'] || '',
 					totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
-					unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
 					dispatchWorkDate: dispatchWorkDate
 				}
 			})
@@ -3248,23 +3229,17 @@ onMounted(async () => {
 						justify-content: flex-end;
 						overflow: hidden;
 
-						.emp-bar-recorded {
+						.emp-bar {
 							width: 100%;
 							display: flex;
 							align-items: center;
 							justify-content: center;
+							border-radius: px2vw(4px);
 
 							.emp-hours {
 								font-size: px2vw(16px);
 								color: #333;
 							}
-						}
-
-						.emp-bar-unrecorded {
-							width: 100%;
-							background-color: #bdbdbd;
-							border-bottom-left-radius: px2vw(4px);
-							border-bottom-right-radius: px2vw(4px);
 						}
 					}
 
@@ -3299,12 +3274,13 @@ onMounted(async () => {
 
 		.employee-task-arrow {
 			position: absolute;
-			bottom: -10px;
+			bottom: -16px;
 			width: 0;
 			height: 0;
-			border-left: 10px solid transparent;
-			border-right: 10px solid transparent;
-			border-top: 10px solid #fff;
+			border-left: 16px solid transparent;
+			border-right: 16px solid transparent;
+			border-top: 16px solid #fff;
+			filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.2));
 		}
 
 		.employee-task-list {
