@@ -85,6 +85,7 @@
 						<view class="order-header" @click="toggleOrderCollapse(group.orderNo)">
 						<text class="order-index">{{ chineseNumberMap[gIdx + 1] || (gIdx + 1) }}</text>
 						<text class="order-no">{{ group.orderNo || '-' }}</text>
+						<text class="order-count">({{ group.products.length }})</text>
 					</view>
 						<view class="order-products" v-show="!isOrderCollapsed(group.orderNo)">
 							<view
@@ -522,6 +523,10 @@
 					</view>
 					<view class="process-action-form">
 						<view class="process-action-form-group">
+							<text class="process-action-form-label">生产顺序</text>
+							<input type="number" class="process-action-input" placeholder="请输入顺序" v-model="processActionSequence" step="0.01" />
+						</view>
+						<view class="process-action-form-group">
 							<text class="process-action-form-label">操作方式</text>
 							<picker mode="selector" :range="processActionModeOptions" :value="processActionModeIndex" @change="onProcessActionModeChange" class="process-action-picker">
 								<view class="process-action-picker-value">{{ processActionModeOptions[processActionModeIndex] }}</view>
@@ -545,7 +550,7 @@ import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
-import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, ATTENDANCE_SUBMIT_URL } from '../../utils/api'
+import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, ATTENDANCE_SUBMIT_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL } from '../../utils/api'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -742,6 +747,7 @@ const processActionSelected = ref(null)
 const processActionModeIndex = ref(0)
 const processActionModeOptions = ['添加', '替换', '删除']
 const processActionLoading = ref(false)
+const processActionSequence = ref('')
 
 const showAttendancePanel = ref(false)
 const showProcessPanel = ref(false)
@@ -1771,6 +1777,7 @@ const closeEmployeeTaskPopover = () => {
 }
 
 const openProcessActionModal = (product) => {
+	closeAllPanels()
 	processActionProduct.value = product
 	processActionSearch.value = ''
 	processActionSelected.value = null
@@ -1781,6 +1788,17 @@ const openProcessActionModal = (product) => {
 }
 
 const openProcessActionModalByRowid = (productRowid) => {
+	// 检查是否只选中了一道工序
+	if (selectedProcessIds.value.length !== 1) {
+		uni.showToast({ title: '请先勾选一道工序', icon: 'none' })
+		return
+	}
+	const selectedProcessId = selectedProcessIds.value[0]
+	// 获取选中工序的顺序
+	const selectedProcess = processList.value.find((p) => p.rowid === selectedProcessId)
+	const selectedSeq = selectedProcess ? parseFloat(selectedProcess.sequence) || 0 : 0
+	// 生产顺序默认为选中工序顺序 + 0.01
+	processActionSequence.value = (selectedSeq + 0.01).toFixed(2)
 	const product = productList.value.find((p) => p.rowid === productRowid)
 	openProcessActionModal(product || { rowid: productRowid, productName: '' })
 }
@@ -1792,6 +1810,7 @@ const closeProcessActionModal = () => {
 	processActionSelected.value = null
 	processActionModeIndex.value = 0
 	processActionList.value = []
+	processActionSequence.value = ''
 }
 
 const handleProcessActionSearch = () => {
@@ -1844,11 +1863,70 @@ const onProcessActionModeChange = (e) => {
 	processActionModeIndex.value = Number(e.detail.value) || 0
 }
 
-const confirmProcessAction = () => {
+const confirmProcessAction = async () => {
 	const mode = processActionModeOptions[processActionModeIndex.value]
-	const selected = processActionSelected.value?.processName || '-'
-	uni.showToast({ title: `${mode}：${selected}`, icon: 'none' })
-	closeProcessActionModal()
+	const selected = processActionSelected.value
+	const product = processActionProduct.value
+
+	if (!selected) {
+		uni.showToast({ title: '请选择工序', icon: 'none' })
+		return
+	}
+
+	if (mode === '删除') {
+		// 调用删除工序接口，删除勾选的那道工序
+		const processRowid = selectedProcessIds.value[0] || ''
+		if (!processRowid) {
+			uni.showToast({ title: '工序ID不存在', icon: 'none' })
+			return
+		}
+		try {
+			uni.showLoading({ title: '删除中...' })
+			const result = await http.post(DELETE_PROCESS_URL, { rowid: processRowid })
+			uni.hideLoading()
+			if (result.status === 1) {
+				uni.showToast({ title: result.message || '删除失败', icon: 'none' })
+			} else {
+				uni.showToast({ title: '删除成功', icon: 'success' })
+				closeProcessActionModal()
+			}
+		} catch (e) {
+			uni.hideLoading()
+			console.error('删除工序失败:', e)
+			uni.showToast({ title: '删除失败', icon: 'none' })
+		}
+	} else {
+		// 添加或替换模式：调用 OPERATE_PROCESS_URL
+		const productionCode = product?.productionCode || ''
+		if (!productionCode) {
+			uni.showToast({ title: '缺少产品编号', icon: 'none' })
+			return
+		}
+		const params = {
+			processName: selected.processName || '',
+			sequence: parseFloat(processActionSequence.value) || 0,
+			modifyMode: mode,
+			selectedProcessId: selectedProcessIds.value[0] || '',
+			productionCode: productionCode,
+			workshop: loginWorkshop.value || ''
+		}
+		try {
+			uni.showLoading({ title: '提交中...', mask: true })
+			const res = await http.post(OPERATE_PROCESS_URL, params)
+			uni.hideLoading()
+			if (res && (res.status === 0 || res.success === true || res.code === 200 || res.data)) {
+				uni.showToast({ title: '操作成功', icon: 'success' })
+				closeProcessActionModal()
+				loadProducts(true)
+			} else {
+				uni.showToast({ title: res?.message || res?.msg || '操作失败', icon: 'none' })
+			}
+		} catch (e) {
+			uni.hideLoading()
+			console.error('操作工序失败:', e)
+			uni.showToast({ title: '操作失败', icon: 'none' })
+		}
+	}
 }
 
 const loadWorkshopEmployees = async () => {
@@ -2852,6 +2930,14 @@ onMounted(async () => {
 							white-space: nowrap;
 							overflow: hidden;
 							text-overflow: ellipsis;
+						}
+
+						.order-count {
+							margin-left: px2vw(8px);
+							font-size: px2vw(20px);
+							color: #888;
+							font-weight: normal;
+							flex-shrink: 0;
 						}
 					}
 
@@ -3966,40 +4052,41 @@ onMounted(async () => {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	z-index: 1002;
+	z-index: 300;
 	padding: px2vw(30px);
 
 	.process-action-content {
-		width: 100%;
-		max-width: px2vw(1200px);
-		height: 85vh;
+		width: 90%;
+		max-width: px2vw(800px);
+		max-height: 70vh;
 		background-color: #fff;
 		border-radius: px2vw(16px);
+		box-shadow: 0 px2vw(8px) px2vw(32px) rgba(0, 0, 0, 0.2);
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
 	}
 
 	.process-action-header {
-		height: px2vw(100px);
+		height: px2vw(84px);
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 0 px2vw(30px);
+		padding: 0 px2vw(24px);
 		background-color: #5884f1;
 		flex-shrink: 0;
 
 		.process-action-title {
-			font-size: px2vw(35px);
-			color: white;
+			font-size: px2vw(30px);
+			color: #fff;
 			font-weight: bold;
 		}
 
 		.process-action-close {
-			font-size: px2vw(50px);
-			color: white;
+			font-size: px2vw(40px);
+			color: #fff;
 			line-height: 1;
-			padding: px2vw(10px);
+			padding: px2vw(8px);
 		}
 	}
 
@@ -4009,13 +4096,13 @@ onMounted(async () => {
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
-		padding: px2vw(20px);
+		padding: px2vw(16px);
 
 		.process-action-filter {
 			display: flex;
 			align-items: center;
-			gap: px2vw(15px);
-			margin-bottom: px2vw(15px);
+			gap: px2vw(12px);
+			margin-bottom: px2vw(12px);
 			flex-shrink: 0;
 
 			.process-action-search {
@@ -4024,17 +4111,17 @@ onMounted(async () => {
 				align-items: center;
 				background-color: #fff;
 				border: 1px solid #e0e0e0;
-				border-radius: px2vw(12px);
-				padding: 0 px2vw(20px);
-				height: px2vw(80px);
+				border-radius: px2vw(10px);
+				padding: 0 px2vw(16px);
+				height: px2vw(64px);
 				min-width: 0;
 
 				input {
 					width: 100%;
-					height: px2vw(80px);
+					height: px2vw(64px);
 					border: none;
 					outline: none;
-					font-size: px2vw(28px);
+					font-size: px2vw(26px);
 					background: transparent;
 				}
 			}
@@ -4062,10 +4149,10 @@ onMounted(async () => {
 						display: flex;
 						align-items: center;
 						justify-content: center;
-						min-height: px2vw(80px);
-						background-color: #b0b0b0;
+						min-height: px2vw(64px);
+						background-color: #5884f1;
 						font-weight: bold;
-						font-size: px2vw(28px);
+						font-size: px2vw(24px);
 						color: #fff;
 					}
 
@@ -4073,40 +4160,46 @@ onMounted(async () => {
 						display: flex;
 						align-items: center;
 						justify-content: center;
-						min-height: px2vw(80px);
-						font-size: px2vw(26px);
-						border-bottom: 1px solid #e0e0e0;
+						min-height: px2vw(64px);
+						font-size: px2vw(24px);
+						border-bottom: 1px solid #e8e8e8;
+						transition: background-color 0.15s ease;
 
 						&:nth-of-type(odd) {
-							background-color: #f5f5f5;
+							background-color: #f8f9ff;
 						}
 
 						&:nth-of-type(even) {
-							background-color: white;
+							background-color: #fff;
+						}
+
+						&:active {
+							background-color: #e3e9fb;
 						}
 
 						&.selected {
-							background-color: #007AFF !important;
-							color: white !important;
+							background-color: #5884f1 !important;
+							color: #fff !important;
 						}
 					}
 
 					.process-action-empty {
-						padding: px2vw(60px) 0;
+						padding: px2vw(48px) 0;
 						text-align: center;
-						font-size: px2vw(24px);
+						font-size: px2vw(22px);
 						color: #999;
 					}
 				}
 			}
 
 			.process-action-form {
-				flex: 0 0 px2vw(400px);
+				flex: 0 0 px2vw(280px);
 				display: flex;
 				flex-direction: column;
-				gap: px2vw(15px);
-				padding: px2vw(20px);
-				background-color: #f5f5f5;
+				gap: px2vw(12px);
+				padding: px2vw(16px);
+				background-color: #f8f9ff;
+				border: 1px solid #e3e9fb;
 				border-radius: px2vw(12px);
 
 				.process-action-form-group {
@@ -4115,7 +4208,7 @@ onMounted(async () => {
 					gap: px2vw(8px);
 
 					.process-action-form-label {
-						font-size: px2vw(26px);
+						font-size: px2vw(24px);
 						font-weight: bold;
 						color: #333;
 					}
@@ -4125,15 +4218,27 @@ onMounted(async () => {
 					}
 
 					.process-action-picker-value {
-						height: px2vw(70px);
-						padding: 0 px2vw(20px);
-						border: 1px solid #e0e0e0;
+						height: px2vw(64px);
+						padding: 0 px2vw(16px);
+						border: 1px solid #d0d8f0;
 						border-radius: px2vw(10px);
-						font-size: px2vw(26px);
+						font-size: px2vw(24px);
 						background-color: #fff;
 						display: flex;
 						align-items: center;
 						color: #333;
+						box-shadow: 0 1px 3px rgba(88, 132, 241, 0.08);
+					}
+
+					.process-action-input {
+						height: px2vw(64px);
+						padding: 0 px2vw(16px);
+						border: 1px solid #d0d8f0;
+						border-radius: px2vw(10px);
+						font-size: px2vw(24px);
+						background-color: #fff;
+						color: #333;
+						box-shadow: 0 1px 3px rgba(88, 132, 241, 0.08);
 					}
 				}
 			}
@@ -4141,35 +4246,43 @@ onMounted(async () => {
 	}
 
 	.process-action-footer {
-		height: px2vw(120px);
+		height: px2vw(96px);
 		display: flex;
 		align-items: center;
 		justify-content: flex-end;
-		gap: px2vw(20px);
-		padding: 0 px2vw(30px);
-		border-top: 1px solid #e0e0e0;
+		gap: px2vw(16px);
+		padding: 0 px2vw(24px);
+		border-top: 1px solid #e8e8e8;
 		flex-shrink: 0;
 
 		.process-action-btn-cancel,
 		.process-action-btn-confirm {
-			height: px2vw(80px);
-			padding: 0 px2vw(50px);
-			border-radius: px2vw(12px);
-			font-size: px2vw(28px);
+			height: px2vw(64px);
+			padding: 0 px2vw(40px);
+			border-radius: px2vw(10px);
+			font-size: px2vw(26px);
 			display: flex;
 			align-items: center;
 			justify-content: center;
 			border: none;
+			box-shadow: 0 px2vw(3px) px2vw(8px) rgba(0, 0, 0, 0.1);
+			transition: all 0.15s ease;
+
+			&:active {
+				opacity: 0.9;
+				transform: translateY(px2vw(2px));
+				box-shadow: 0 px2vw(1px) px2vw(4px) rgba(0, 0, 0, 0.1);
+			}
 		}
 
 		.process-action-btn-cancel {
-			background-color: #e0e0e0;
-			color: #333;
+			background-color: #f1f3f5;
+			color: #555;
 		}
 
 		.process-action-btn-confirm {
 			background-color: #5884f1;
-			color: white;
+			color: #fff;
 		}
 	}
 }
