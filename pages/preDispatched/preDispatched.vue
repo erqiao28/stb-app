@@ -545,7 +545,7 @@ import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
-import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL } from '../../utils/api'
+import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, ATTENDANCE_SUBMIT_URL } from '../../utils/api'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -752,14 +752,37 @@ const processDropdownList = ref([])
 const selectedProcessDropdownEmployee = ref(null)
 const selectedProcessSeq = ref(0)
 
+const submitAttendance = async (status, emp) => {
+	if (!emp.id) {
+		uni.showToast({ title: '缺少员工ID', icon: 'none' })
+		return
+	}
+	try {
+		uni.showLoading({ title: '提交中...', mask: true })
+		const resp = await http.post(ATTENDANCE_SUBMIT_URL, {
+			rowid: emp.id,
+			status
+		})
+		uni.hideLoading()
+		if (resp.status === 1) {
+			uni.showToast({ title: resp.message || resp.msg || '提交失败', icon: 'none' })
+			return
+		}
+		uni.showToast({ title: `${status}打卡成功`, icon: 'success' })
+		loadWorkshopEmployees()
+	} catch (e) {
+		uni.hideLoading()
+		console.error('出勤提交失败:', e)
+		uni.showToast({ title: '提交失败', icon: 'none' })
+	}
+}
+
 const handleChartEmployeeSwipeUp = (emp) => {
-	console.log('到', emp.name, emp.id)
-	uni.showToast({ title: `到: ${emp.name}`, icon: 'none' })
+	submitAttendance('到', emp)
 }
 
 const handleChartEmployeeSwipeDown = (emp) => {
-	console.log('缺', emp.name, emp.id)
-	uni.showToast({ title: `缺: ${emp.name}`, icon: 'none' })
+	submitAttendance('缺', emp)
 }
 
 const toggleAttendancePanel = () => {
@@ -1864,13 +1887,8 @@ const loadWorkshopEmployees = async () => {
 		})
 		employeeList.value = mapped.map((e) => {
 			const barHeight = Math.min(100, (e.totalHours / MAX_EMPLOYEE_HOURS) * 100) + '%'
-			let barColor = '#e74c3c'
 			const attendance = String(e.attendance).trim()
-			if (attendance === '上班') {
-				barColor = '#27ae60'
-			} else if (attendance === '请假') {
-				barColor = '#f1c40f'
-			}
+			const barColor = attendance === '上班' ? '#27ae60' : '#e74c3c'
 			return {
 				...e,
 				barHeight,

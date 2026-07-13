@@ -128,3 +128,6 @@ export const PRE_DISPATCH_ADD_URL = apiUrl('/api/workflow/hooks/NmEzYzkxMTYzN2Mw
 
 /** 确认派工：将预派工转为正式派工（预派工rowid数组） */
 export const PRE_DISPATCH_CONFIRM_URL = apiUrl('/api/workflow/hooks/NmEzY2I3OTEzN2MwOTg0NTBhYWE3ZWEw')
+
+/** 员工出勤到/缺提交 */
+export const ATTENDANCE_SUBMIT_URL = apiUrl('/api/workflow/hooks/NmE1NGE1MzkzN2MwOTg0NTBhNjE2N2Jm')
