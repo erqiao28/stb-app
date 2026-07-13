@@ -758,16 +758,31 @@ const handleChartEmployeeSwipeDown = (emp) => {
 }
 
 const toggleAttendancePanel = () => {
-	showAttendancePanel.value = !showAttendancePanel.value
-	if (!showAttendancePanel.value) {
+	if (showAttendancePanel.value) {
+		showAttendancePanel.value = false
 		closeProcessDropdownPanel()
+	} else if (showProcessPanel.value) {
+		showProcessPanel.value = false
+		closeProcessDropdownPanel()
+		setTimeout(() => {
+			showAttendancePanel.value = true
+		}, 300)
+	} else {
+		showAttendancePanel.value = true
 	}
 }
 
 const toggleProcessPanel = () => {
-	showProcessPanel.value = !showProcessPanel.value
-	if (!showProcessPanel.value) {
+	if (showProcessPanel.value) {
+		showProcessPanel.value = false
 		closeProcessDropdownPanel()
+	} else if (showAttendancePanel.value) {
+		showAttendancePanel.value = false
+		setTimeout(() => {
+			showProcessPanel.value = true
+		}, 300)
+	} else {
+		showProcessPanel.value = true
 	}
 }
 
@@ -2519,11 +2534,11 @@ onMounted(async () => {
 							color: #fff;
 
 							&.attendance-btn-up {
-								background-color: #27ae60;
+								background-color: rgba(0, 0, 0, 0.3);
 							}
 
 							&.attendance-btn-down {
-								background-color: #e74c3c;
+								background-color: rgba(0, 0, 0, 0.3);
 							}
 						}
 					}
