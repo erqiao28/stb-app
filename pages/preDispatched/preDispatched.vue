@@ -153,18 +153,18 @@
 							<view class="grid-label-cell" style="grid-row: 6; grid-column: 2">派工数量</view>
 						<view class="grid-label-cell" style="grid-row: 7; grid-column: 2">员工</view>
 							<template v-for="(p, idx) in group.processes" :key="p.rowid">
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 1, gridColumn: 3 + idx }">
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 1, gridColumn: 3 + idx }">
 								<checkbox :checked="selectedProcessIds.includes(p.rowid)" @click="toggleProcessSelection(p)" />
 							</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 2, gridColumn: 3 + idx }">{{ p.sequence || '-' }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 3, gridColumn: 3 + idx }">{{ p.processName || '-' }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 4, gridColumn: 3 + idx }">{{ p.orderCount || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.dailyOutput || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ productDispatchCounts[p.productRowid] || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 2, gridColumn: 3 + idx }">{{ p.sequence || '-' }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 3, gridColumn: 3 + idx }">{{ p.processName || '-' }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 4, gridColumn: 3 + idx }">{{ p.orderCount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.dailyOutput || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ productDispatchCounts[p.productRowid] || 0 }}</view>
 							<view
 								v-if="isEmployeeGroupStart(group.processes, idx)"
 								class="grid-cell employee-cell"
-								:class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }"
+								:class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }"
 								:style="getEmployeeCellStyle(group.processes, idx)"
 							>{{ getEmployeeCellText(group.processes, idx) }}</view>
 						</template>
@@ -1481,8 +1481,6 @@ const loadProductProcesses = async (product) => {
 				employeeNames
 			}
 		}).sort((a, b) => (parseFloat(a.sequence) || 0) - (parseFloat(b.sequence) || 0))
-		const associatedIds = newProcesses.filter((p) => p.isAssociated).map((p) => p.rowid)
-		selectedProcessIds.value.push(...associatedIds.filter((id) => !selectedProcessIds.value.includes(id)))
 		processList.value.push(...newProcesses)
 	} catch (e) {
 		console.error('加载工序失败:', e)
@@ -2794,7 +2792,7 @@ onMounted(async () => {
 				background-color: #f8f9fa;
 
 				.order-group {
-					margin: px2vw(12px);
+					margin: px2vw(6px) px2vw(12px);
 					background-color: #fff;
 					border-radius: px2vw(12px);
 					box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
@@ -2804,7 +2802,7 @@ onMounted(async () => {
 						display: flex;
 						flex-direction: row;
 						align-items: center;
-						padding: px2vw(16px) px2vw(20px);
+						padding: px2vw(10px) px2vw(16px);
 						background-color: #fff;
 						cursor: pointer;
 
@@ -2813,10 +2811,10 @@ onMounted(async () => {
 						}
 
 						.order-index {
-							padding: px2vw(6px) px2vw(12px);
+							padding: px2vw(4px) px2vw(10px);
 							background-color: #e9ecef;
 							border-radius: px2vw(6px);
-							font-size: px2vw(20px);
+							font-size: px2vw(18px);
 							color: #333;
 							font-weight: bold;
 							margin-right: px2vw(12px);
@@ -2836,12 +2834,13 @@ onMounted(async () => {
 					}
 
 					.order-products {
-						padding: px2vw(8px) 0;
+						border-top: 1px solid #f1f3f5;
+						padding: px2vw(2px) 0;
 					}
 				}
 
 				.product-item {
-					padding: px2vw(12px) px2vw(16px);
+					padding: px2vw(8px) px2vw(16px);
 					display: flex;
 					flex-direction: row;
 					align-items: center;
@@ -2858,14 +2857,14 @@ onMounted(async () => {
 					}
 
 					.product-index {
-						width: px2vw(36px);
-						height: px2vw(36px);
-						line-height: px2vw(36px);
+						width: px2vw(32px);
+						height: px2vw(32px);
+						line-height: px2vw(32px);
 						text-align: center;
 						background-color: #e9ecef;
 						color: #333;
 						border-radius: 50%;
-						font-size: px2vw(18px);
+						font-size: px2vw(16px);
 						font-weight: bold;
 						flex-shrink: 0;
 						margin: 0 px2vw(4px);
@@ -2881,7 +2880,7 @@ onMounted(async () => {
 					}
 
 					.product-name {
-						font-size: px2vw(20px);
+						font-size: px2vw(22px);
 						color: #333;
 						white-space: nowrap;
 						overflow: hidden;
@@ -2899,9 +2898,9 @@ onMounted(async () => {
 					}
 
 					.expand-btn {
-						width: px2vw(36px);
-						height: px2vw(36px);
-						line-height: px2vw(36px);
+						width: px2vw(32px);
+						height: px2vw(32px);
+						line-height: px2vw(32px);
 						text-align: center;
 						border-radius: 50%;
 						font-size: px2vw(18px);
@@ -2916,8 +2915,8 @@ onMounted(async () => {
 					}
 
 					.dispatch-icon {
-						width: px2vw(36px);
-						height: px2vw(36px);
+						width: px2vw(32px);
+						height: px2vw(32px);
 						border-radius: 50%;
 						background-color: #5884f1;
 						display: flex;
@@ -2944,11 +2943,11 @@ onMounted(async () => {
 						width: 100%;
 						background-color: #f1f3f5;
 						border-radius: px2vw(8px);
-						padding: px2vw(10px) px2vw(12px);
+						padding: px2vw(8px) px2vw(12px);
 						font-size: px2vw(16px);
 						color: #666;
 						margin-top: px2vw(8px);
-						margin-left: px2vw(54px);
+						margin-left: px2vw(50px);
 					}
 				}
 			}
@@ -3118,8 +3117,12 @@ onMounted(async () => {
 							background-color: #d4edda;
 						}
 
+						&.associated-column {
+							background-color: #fff;
+						}
+
 						&.disabled-column {
-							background-color: #f7f7f7;
+							background-color: #fafafa;
 							color: #999;
 						}
 
