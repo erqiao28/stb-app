@@ -143,7 +143,11 @@
 							:style="{ gridTemplateColumns: 'min-content min-content repeat(' + group.processes.length + ', min-content)' }"
 						>
 							<view class="grid-product-name" style="grid-row: 1 / span 7; grid-column: 1">
-							<view class="grid-product-action" @click.stop="openProcessActionModalByRowid(group.productRowid)">操作</view>
+							<view
+							class="grid-product-action"
+							:style="{ backgroundColor: selectedProcessIds.length === 1 ? '#5884f1' : '#999' }"
+							@click.stop="openProcessActionModalByRowid(group.productRowid)"
+						>操作</view>
 							<view class="grid-product-name-text">{{ group.productName }}</view>
 						</view>
 							<view class="grid-label-cell" style="grid-row: 1; grid-column: 2">选中</view>
@@ -3144,9 +3148,12 @@ onMounted(async () => {
 				}
 
 				.employee-chart-scroll {
-					flex: 1;
-					height: 100%;
-				}
+				flex: 1;
+				height: 100%;
+				overflow-x: auto;
+				overflow-y: hidden;
+				white-space: nowrap;
+			}
 			}
 
 			.process-list {
