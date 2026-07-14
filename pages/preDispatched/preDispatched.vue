@@ -1848,11 +1848,12 @@ const loadEmployeeDispatchSummary = async () => {
 					group.records.push({
 						orderNo: pd.orderNo || '-',
 						productName: pd.productNameNew || pd.productName || '-',
-						processName: pd.processName || '-',
+						processName: (pd.processDetail?.length || 0) > 1 ? (pd.craftPosition || '-') : pd.processName || '-',
 						dispatchCount: pd.dispatchCount || 0,
 						worktime: pd.worktime || 0,
 						wage: pd.wage || 0
 					})
+					console.log('[任务工序] orderNo:', pd.orderNo, 'processDetail长度:', pd.processDetail?.length, 'processName:', pd.processName, 'craftPosition:', pd.craftPosition)
 				}
 			})
 		})
