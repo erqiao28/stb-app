@@ -131,3 +131,6 @@ export const PRE_DISPATCH_CONFIRM_URL = apiUrl('/api/workflow/hooks/NmEzY2I3OTEz
 
 /** 员工出勤到/缺提交 */
 export const ATTENDANCE_SUBMIT_URL = apiUrl('/api/workflow/hooks/NmE1NGE1MzkzN2MwOTg0NTBhNjE2N2Jm')
+
+/** 岗位工序：员工选择工序提交 */
+export const POSITION_PROCESS_SELECT_URL = apiUrl('/api/workflow/hooks/NmE1NWEzYjgzN2MwOTg0NTBhNjY4ODA5')

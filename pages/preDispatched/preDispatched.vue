@@ -43,12 +43,18 @@
 								</view>
 							</view>
 							<view class="employee-expand-panel" v-if="expandedEmployeeId === emp.id">
-								<view class="expand-process-item" :class="{ selected: selectedProcessSeq === n }" v-for="n in 3" :key="n" @click.stop="handleProcessItemClick(emp, n)">
-									<text class="expand-process-seq">{{ n }}</text>
-									<text class="expand-process-name">工序{{ n }}</text>
-								</view>
+							<view
+								class="expand-process-item"
+								:class="{ selected: selectedProcessSeq === idx + 1 }"
+								v-for="(processName, idx) in emp.processNames"
+								:key="idx"
+								@click.stop="handleProcessItemClick(emp, idx + 1)"
+							>
+								<text class="expand-process-seq">{{ idx + 1 }}</text>
+								<text class="expand-process-name">{{ processName }}</text>
 							</view>
-						</template>
+						</view>
+					</template>
 						<view class="employee-chart-empty" v-if="!positionProcessEmployeeList.length">
 							<text>暂无员工数据</text>
 						</view>
@@ -63,7 +69,12 @@
 			<view class="dropdown-panel-content">
 				<view class="employee-chart-scroll">
 					<view class="employee-chart">
-						<view class="employee-chart-column" v-for="(proc, index) in processDropdownList" :key="proc.rowid">
+						<view
+							class="employee-chart-column"
+							v-for="(proc, index) in processDropdownList"
+							:key="proc.rowid"
+							@click="handleProcessDropdownItemClick(proc)"
+						>
 							<view class="employee-chart-bar process-bar" :style="{ height: '100%' }">
 								<text class="employee-chart-name">{{ proc.processName }}</text>
 							</view>
@@ -554,7 +565,7 @@ import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
-import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, ATTENDANCE_SUBMIT_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL } from '../../utils/api'
+import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, ATTENDANCE_SUBMIT_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, POSITION_PROCESS_SELECT_URL } from '../../utils/api'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -721,6 +732,14 @@ const EMPLOYEE_FIELD_MAP = {
 
 const MAX_EMPLOYEE_HOURS = 11
 
+// 岗位工序匹配表中员工所属工序字段映射
+const POSITION_PROCESS_FIELD_MAP = {
+	stretchAndPolish: ['6a55c3db6d70ffabc67ae835', '6a55c3db6d70ffabc67ae837', '6a55c3db6d70ffabc67ae839'],
+	assembly: ['6a55d98e6d70ffabc67afbe1', '6a55d98e6d70ffabc67afbe3', '6a55d98e6d70ffabc67afbe5']
+}
+const ASSEMBLY_POSITION_WORKSHEET_ID = '6a55c4956d70ffabc67ae898'
+const ASSEMBLY_POSITION_FIELD_ID = '6a276ffc6d70ffabc66285f8'
+
 const RECORD_BG_COLORS = ['#e8f4f8', '#f2f0e6', '#f9f0f4', '#eaf6ea', '#fff6e6']
 
 const showVoidModal = ref(false)
@@ -870,8 +889,60 @@ const closeProcessDropdownPanel = () => {
 	selectedProcessSeq.value = 0
 }
 
+const handleProcessDropdownItemClick = async (proc) => {
+	const emp = selectedProcessDropdownEmployee.value
+	if (!emp || !emp.id) {
+		uni.showToast({ title: '缺少员工信息', icon: 'none' })
+		return
+	}
+	if (!proc.rowid) {
+		uni.showToast({ title: '缺少工序信息', icon: 'none' })
+		return
+	}
+	try {
+		uni.showLoading({ title: '提交中...', mask: true })
+		const params = {
+			employeeRowid: emp.id,
+			processSeq: selectedProcessSeq.value,
+			processRowid: proc.rowid,
+			workshop: loginWorkshop.value || ''
+		}
+		const resp = await http.post(POSITION_PROCESS_SELECT_URL, params)
+		uni.hideLoading()
+		if (resp.status === 1) {
+			uni.showToast({ title: resp.message || '提交失败', icon: 'none' })
+			return
+		}
+		uni.showToast({ title: '提交成功', icon: 'success' })
+		closeProcessDropdownPanel()
+		loadPositionProcessEmployees()
+	} catch (e) {
+		uni.hideLoading()
+		console.error('岗位工序选择提交失败:', e)
+		uni.showToast({ title: '提交失败', icon: 'none' })
+	}
+}
+
 const loadProcessDropdownList = async (emp) => {
 	try {
+		const wsFilter = employeeWorkshopFilter.value
+
+		if (wsFilter === '组装车间') {
+			const res = await callWorkflowListAPIPaged({
+				worksheetId: ASSEMBLY_POSITION_WORKSHEET_ID,
+				filters: [],
+				pageSize: 500,
+				pageNum: 1,
+				silent: true
+			})
+			const rows = Array.isArray(res?.data) ? res.data : []
+			processDropdownList.value = rows.map((item) => ({
+				rowid: item.rowid || '',
+				processName: formatFieldValue(item[ASSEMBLY_POSITION_FIELD_ID]) || '-'
+			}))
+			return
+		}
+
 		const filters = [
 			{ controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
 			{ controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
@@ -2021,13 +2092,17 @@ const loadPositionProcessEmployees = async () => {
 			silent: true
 		})
 		const rows = Array.isArray(res?.data) ? res.data : []
+		const processFieldIds = wsFilter === '组装车间'
+			? POSITION_PROCESS_FIELD_MAP.assembly
+			: POSITION_PROCESS_FIELD_MAP.stretchAndPolish
 		const mapped = rows.map((item) => ({
 			id: item.rowid || '',
 			name: formatFieldValue(item['6695dc2a2503723eec1aa766']) || '-',
 			totalHours: 0,
 			wage: 0,
 			barHeight: '0%',
-			barColor: '#5884f1'
+			barColor: '#5884f1',
+			processNames: processFieldIds.map((fieldId) => formatFieldValue(item[fieldId]) || '-')
 		}))
 		positionProcessEmployeeList.value = mapped
 	} catch (e) {
