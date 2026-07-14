@@ -36,7 +36,7 @@
 			<view class="dropdown-panel-content">
 				<view class="employee-chart-scroll">
 					<view class="employee-chart">
-						<template v-for="(emp, index) in employeeList" :key="emp.id">
+						<template v-for="(emp, index) in positionProcessEmployeeList" :key="emp.id">
 							<view class="employee-chart-column">
 								<view class="employee-chart-bar process-bar" :style="{ height: '100%', backgroundColor: '#5884f1' }" @click="toggleEmployeeExpand(emp)">
 									<text class="employee-chart-name">{{ emp.name }}</text>
@@ -49,7 +49,7 @@
 								</view>
 							</view>
 						</template>
-						<view class="employee-chart-empty" v-if="!employeeList.length">
+						<view class="employee-chart-empty" v-if="!positionProcessEmployeeList.length">
 							<text>暂无员工数据</text>
 						</view>
 					</view>
@@ -58,7 +58,7 @@
 		</view>
 	</view>
 
-	<view class="process-dropdown-wrapper" :class="{ open: showProcessDropdownPanel && showProcessPanel }">
+<view class="process-dropdown-wrapper" :class="{ open: showProcessDropdownPanel && showProcessPanel }">
 		<view class="dropdown-panel">
 			<view class="dropdown-panel-content">
 				<view class="employee-chart-scroll">
@@ -566,6 +566,12 @@ const loginWorkshop = computed(() => {
 	return workshopOptions.includes(lim) ? lim : ''
 })
 
+// 员工相关数据查询车间：喷涂车间员工合并到组装车间
+const employeeWorkshopFilter = computed(() => {
+	const ws = loginWorkshop.value
+	return ws === '喷涂车间' ? '组装车间' : ws
+})
+
 const PRE_DISPATCH_WORKSHEET_ID = '6a1e468d27514927ff33cbae'
 const PRE_DISPATCH_SUMMARY_WORKSHEET_ID = '6a3a172c6d70ffabc66e5d97'
 
@@ -666,6 +672,7 @@ const processList = ref([])
 const loadedProductIds = ref([])
 const selectedProcessIds = ref([])
 const employeeList = ref([])
+const positionProcessEmployeeList = ref([])
 const employeeDispatchSummary = ref([])
 
 const productDispatchCounts = ref({})
@@ -818,9 +825,11 @@ const toggleProcessPanel = () => {
 		showAttendancePanel.value = false
 		setTimeout(() => {
 			showProcessPanel.value = true
+			loadPositionProcessEmployees()
 		}, 300)
 	} else {
 		showProcessPanel.value = true
+		loadPositionProcessEmployees()
 	}
 }
 
@@ -864,13 +873,14 @@ const closeProcessDropdownPanel = () => {
 const loadProcessDropdownList = async (emp) => {
 	try {
 		const filters = [
-			{ controlId: '66bc55673f78a8b841f28f1b', dataType: 2, spliceType: 1, filterType: 2, values: ['在职'] },
-			{ controlId: '66bc55b83f78a8b841f28f3c', dataType: 2, spliceType: 1, filterType: 2, values: ['是'] }
+			{ controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
+			{ controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
+			{ controlId: '6a324e7d6d70ffabc66cbe5f', dataType: 30, spliceType: 1, filterType: 2, values: ['1'] }
 		]
 		if (loginWorkshop.value) {
 			filters.push({
-				controlId: '6960707f9223cfe3a0c16678',
-				dataType: 2,
+				controlId: '691e8522d50c894e2e798d03',
+				dataType: 30,
 				spliceType: 1,
 				filterType: 2,
 				values: [loginWorkshop.value]
@@ -878,7 +888,7 @@ const loadProcessDropdownList = async (emp) => {
 		}
 
 		const res = await callWorkflowListAPIPaged({
-			worksheetId: '68f6f149c729de3f57a0a358',
+			worksheetId: 'shujuzidian',
 			filters,
 			pageSize: 500,
 			pageNum: 1,
@@ -887,7 +897,7 @@ const loadProcessDropdownList = async (emp) => {
 		const rows = Array.isArray(res?.data) ? res.data : []
 		processDropdownList.value = rows.map((item) => ({
 			rowid: item.rowid || '',
-			processName: formatFieldValue(item['6695dc2a2503723eec1aa766']) || '-'
+			processName: item['Name'] || '-'
 		}))
 	} catch (e) {
 		console.error('加载工序抽屉数据失败:', e)
@@ -1565,14 +1575,15 @@ const toggleOrderCollapse = (orderNo) => {
 const loadEmployeeDispatchSummary = async () => {
 	try {
 		const currentDate = filterDate.value
+		const wsFilter = employeeWorkshopFilter.value
 		const filters = []
-		if (loginWorkshop.value) {
+		if (wsFilter) {
 			filters.push({
 				controlId: DAILY_WAGE_FIELD_MAP.workshop,
 				dataType: 30,
 				spliceType: 1,
 				filterType: 2,
-				values: [loginWorkshop.value]
+				values: [wsFilter]
 			})
 		}
 		const res = await callWorkflowListAPIPaged({
@@ -1936,14 +1947,15 @@ const confirmProcessAction = async () => {
 const loadWorkshopEmployees = async () => {
 	try {
 		const currentDate = filterDate.value
+		const wsFilter = employeeWorkshopFilter.value
 		const filters = []
-		if (loginWorkshop.value) {
+		if (wsFilter) {
 			filters.push({
 				controlId: EMPLOYEE_FIELD_MAP.workshop,
 				dataType: 30,
 				spliceType: 1,
 				filterType: 2,
-				values: [loginWorkshop.value]
+				values: [wsFilter]
 			})
 		}
 
@@ -1981,6 +1993,46 @@ const loadWorkshopEmployees = async () => {
 	} catch (e) {
 		console.error('加载员工数据失败:', e)
 		employeeList.value = []
+	}
+}
+
+const loadPositionProcessEmployees = async () => {
+	try {
+		const wsFilter = employeeWorkshopFilter.value
+		const filters = [
+			{ controlId: '66bc55673f78a8b841f28f1b', dataType: 2, spliceType: 1, filterType: 2, values: ['在职'] },
+			{ controlId: '66bc55b83f78a8b841f28f3c', dataType: 2, spliceType: 1, filterType: 2, values: ['是'] }
+		]
+		if (wsFilter) {
+			filters.push({
+				controlId: '6960707f9223cfe3a0c16678',
+				dataType: 2,
+				spliceType: 1,
+				filterType: 2,
+				values: [wsFilter]
+			})
+		}
+
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: '68f6f149c729de3f57a0a358',
+			filters,
+			pageSize: 500,
+			pageNum: 1,
+			silent: true
+		})
+		const rows = Array.isArray(res?.data) ? res.data : []
+		const mapped = rows.map((item) => ({
+			id: item.rowid || '',
+			name: formatFieldValue(item['6695dc2a2503723eec1aa766']) || '-',
+			totalHours: 0,
+			wage: 0,
+			barHeight: '0%',
+			barColor: '#5884f1'
+		}))
+		positionProcessEmployeeList.value = mapped
+	} catch (e) {
+		console.error('加载岗位工序员工数据失败:', e)
+		positionProcessEmployeeList.value = []
 	}
 }
 
@@ -2245,19 +2297,20 @@ function getTomorrowDate() {
 const loadEmployeeOptions = async () => {
 	try {
 		const currentDate = filterDate.value
+		const wsFilter = employeeWorkshopFilter.value
 		const filters = [{
 			controlId: '6943bd902161a0fc58bad5ab',
 			dataType: 30,
 			spliceType: 1,
 			filterType: 8
 		}]
-		if (loginWorkshop.value) {
+		if (wsFilter) {
 			filters.unshift({
 				controlId: '696075d19223cfe3a0c169dc',
 				dataType: 30,
 				spliceType: 1,
 				filterType: 2,
-				values: [loginWorkshop.value]
+				values: [wsFilter]
 			})
 		}
 		const res = await callWorkflowListAPIPaged({
