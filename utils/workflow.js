@@ -11,24 +11,15 @@ import { useUserStore } from '../store/user.store'
  */
 export const callWorkflowAPI = async (params = {}, delaySeconds = 0) => {
   try {
-    console.log(
-      `callWorkflowAPI 被调用 - params:`,
-      params,
-      `delaySeconds: ${delaySeconds}`
-    )
-
     // 显示加载动画
     uni.showLoading({
       title: '处理中...',
       mask: true,
     })
-    console.log('加载动画已显示')
 
     // 如果指定了延迟时间，先等待
     if (delaySeconds > 0) {
-      console.log(`开始等待 ${delaySeconds} 秒...`)
       await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000))
-      console.log(`等待 ${delaySeconds} 秒完成`)
     }
 
     // 合并用户信息到参数中
@@ -36,19 +27,15 @@ export const callWorkflowAPI = async (params = {}, delaySeconds = 0) => {
       ...params,
     }
 
-    console.log('开始调用工作流API...')
     const res = await http.post(config.WORKFLOW_API.TRIGGER_URL, requestParams)
-    console.log('工作流API调用响应:', res)
 
     // 隐藏加载动画
     uni.hideLoading()
-    console.log('加载动画已隐藏')
 
     return JSON.parse(res.data)
   } catch (error) {
     // 隐藏加载动画
     uni.hideLoading()
-    console.log('加载动画已隐藏（错误处理）')
     console.error('工作流API调用失败:', error)
     throw error
   }
@@ -99,11 +86,7 @@ export const callWorkflowListAPI = async (
         const responseData = JSON.parse(res.data)
         total = responseData.total || 0
 
-        console.log('total值:', total)
-        console.log('rows数据:', responseData.rows)
-
         if (responseData.rows && Array.isArray(responseData.rows)) {
-          console.log('添加到allData的数据条数:', responseData.rows.length)
           allData = allData.concat(responseData.rows)
         }
 
@@ -172,9 +155,7 @@ export const callWorkflowListAPIPaged = async (
       })
     }
 
-    console.log('[callWorkflowListAPIPaged] 请求参数:', JSON.parse(JSON.stringify(params)))
     const res = await http.post(config.WORKFLOW_API.LIST_URL, params)
-    console.log('[callWorkflowListAPIPaged] 原始响应:', res)
 
     if (res && res.data != null) {
       // 兼容两种返回格式：
@@ -188,8 +169,6 @@ export const callWorkflowListAPIPaged = async (
       } else {
         throw new Error('未知的返回数据格式：' + String(res.data))
       }
-
-      console.log('[callWorkflowListAPIPaged] 解析后响应数据:', JSON.parse(JSON.stringify(responseData)))
 
       // 检测 HAP 后端是否把异常信息包装在 data/msg 中返回（此时通常没有 rows）
       if (responseData.msg && !responseData.rows) {

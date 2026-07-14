@@ -864,21 +864,21 @@ const closeProcessDropdownPanel = () => {
 const loadProcessDropdownList = async (emp) => {
 	try {
 		const filters = [
-			{ controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
-			{ controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
-			{ controlId: '6a324e7d6d70ffabc66cbe5f', dataType: 30, spliceType: 1, filterType: 2, values: ['1'] }
+			{ controlId: '66bc55673f78a8b841f28f1b', dataType: 2, spliceType: 1, filterType: 2, values: ['在职'] },
+			{ controlId: '66bc55b83f78a8b841f28f3c', dataType: 2, spliceType: 1, filterType: 2, values: ['是'] }
 		]
 		if (loginWorkshop.value) {
 			filters.push({
-				controlId: '691e8522d50c894e2e798d03',
-				dataType: 30,
+				controlId: '6960707f9223cfe3a0c16678',
+				dataType: 2,
 				spliceType: 1,
 				filterType: 2,
 				values: [loginWorkshop.value]
 			})
 		}
+
 		const res = await callWorkflowListAPIPaged({
-			worksheetId: 'shujuzidian',
+			worksheetId: '68f6f149c729de3f57a0a358',
 			filters,
 			pageSize: 500,
 			pageNum: 1,
@@ -887,7 +887,7 @@ const loadProcessDropdownList = async (emp) => {
 		const rows = Array.isArray(res?.data) ? res.data : []
 		processDropdownList.value = rows.map((item) => ({
 			rowid: item.rowid || '',
-			processName: item['Name'] || '-'
+			processName: formatFieldValue(item['6695dc2a2503723eec1aa766']) || '-'
 		}))
 	} catch (e) {
 		console.error('加载工序抽屉数据失败:', e)
@@ -1946,6 +1946,7 @@ const loadWorkshopEmployees = async () => {
 				values: [loginWorkshop.value]
 			})
 		}
+
 		const res = await callWorkflowListAPIPaged({
 			worksheetId: EMPLOYEE_WORKSHEET_ID,
 			filters,
