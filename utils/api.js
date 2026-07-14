@@ -134,3 +134,6 @@ export const ATTENDANCE_SUBMIT_URL = apiUrl('/api/workflow/hooks/NmE1NGE1MzkzN2M
 
 /** 岗位工序：员工选择工序提交 */
 export const POSITION_PROCESS_SELECT_URL = apiUrl('/api/workflow/hooks/NmE1NWEzYjgzN2MwOTg0NTBhNjY4ODA5')
+
+/** 岗位工序：删除员工所属工序 */
+export const POSITION_PROCESS_DELETE_URL = apiUrl('/api/workflow/hooks/NmE1NWRlNjYzN2MwOTg0NTBhNjlkMWI1')

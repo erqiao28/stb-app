@@ -52,6 +52,7 @@
 							>
 								<text class="expand-process-seq">{{ idx + 1 }}</text>
 								<text class="expand-process-name">{{ processName }}</text>
+								<text class="expand-process-delete" @click.stop="handleProcessDelete(emp, idx + 1)">×</text>
 							</view>
 						</view>
 					</template>
@@ -565,7 +566,7 @@ import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
-import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, ATTENDANCE_SUBMIT_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, POSITION_PROCESS_SELECT_URL } from '../../utils/api'
+import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, ATTENDANCE_SUBMIT_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, POSITION_PROCESS_SELECT_URL, POSITION_PROCESS_DELETE_URL } from '../../utils/api'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -920,6 +921,33 @@ const handleProcessDropdownItemClick = async (proc) => {
 		uni.hideLoading()
 		console.error('岗位工序选择提交失败:', e)
 		uni.showToast({ title: '提交失败', icon: 'none' })
+	}
+}
+
+const handleProcessDelete = async (emp, seq) => {
+	if (!emp || !emp.id) {
+		uni.showToast({ title: '缺少员工信息', icon: 'none' })
+		return
+	}
+	try {
+		uni.showLoading({ title: '删除中...', mask: true })
+		const params = {
+			employeeId: emp.id,
+			processSeq: seq,
+			workshop: loginWorkshop.value || ''
+		}
+		const resp = await http.post(POSITION_PROCESS_DELETE_URL, params)
+		uni.hideLoading()
+		if (resp.status === 1) {
+			uni.showToast({ title: resp.message || '删除失败', icon: 'none' })
+			return
+		}
+		uni.showToast({ title: '删除成功', icon: 'success' })
+		loadPositionProcessEmployees()
+	} catch (e) {
+		uni.hideLoading()
+		console.error('岗位工序删除失败:', e)
+		uni.showToast({ title: '删除失败', icon: 'none' })
 	}
 }
 
@@ -2823,6 +2851,17 @@ onMounted(async () => {
 							flex: 1;
 							white-space: nowrap;
 							font-size: px2vw(20px);
+						}
+
+						.expand-process-delete {
+							width: px2vw(36px);
+							height: px2vw(36px);
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							font-size: px2vw(24px);
+							color: #e74c3c;
+							margin-left: px2vw(8px);
 						}
 					}
 				}
