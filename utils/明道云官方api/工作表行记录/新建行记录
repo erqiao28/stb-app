@@ -1,0 +1,126 @@
+新建行记录
+新建行记录
+
+path Parameters
+worksheet_id
+required
+string
+工作表ID
+
+header Parameters
+HAP-Appkey
+required
+string
+appkey
+
+HAP-Sign
+required
+string
+签名
+
+Request Body schema: application/json
+fields
+required
+Array of objects (field)
+字段数据
+
+Array 
+id
+required
+string
+字段 id
+
+value
+required
+any
+字段值
+
+type=Attachment时示例传参：[{"name":"文件名称，带后缀","url":" url/base64"}]
+
+updateType	
+string
+Default: "0"
+Enum: "0" "1" "2"
+字段值更新类型（新增时不用传），默认为 0
+
+• 0=覆盖
+
+• 1=新增
+
+• 2=减少（Attachment 附件类型时，value 里直接传文件 ID，不存在则移除失败）
+
+适用字段类型：Attachment 附件｜MultipleSelect 多选｜Collaborator 成员｜Department 部门｜Relation 关联｜SubTable 子表｜OrgRole 组织角色
+
+allowNewOptions	
+boolean
+Default: false
+当选择值不在选项范围内时，是否允许新增选项
+
+• true：允许增加选项
+
+• false：不增加选项
+
+适用字段类型：SingleSelect 单选｜MultipleSelect 多选
+
+triggerWorkflow	
+boolean
+Default: true
+是否触发工作流
+
+Responses
+200
+成功创建记录
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object (recordIdResponse)
+记录ID返回结果
+
+id	
+string
+行记录 ID
+
+
+post
+/v3/app/worksheets/{worksheet_id}/rows
+Request samples
+Payload
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"triggerWorkflow": true,
+"fields": [
+{
+"id": "6847f2a1e66b4b2aa67b1467",
+"value": "HHHH"
+}
+]
+}
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"id": "67890abcdef"
+},
+"success": true
+}

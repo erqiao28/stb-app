@@ -1,0 +1,197 @@
+新建工作表
+创建工作表，目前支持字段类型有Text|Number|SingleSelect|MultipleSelect|Date|DateTime|Collaborator|Relation|Attachment
+
+header Parameters
+HAP-Appkey
+required
+string
+appkey
+
+HAP-Sign
+required
+string
+签名
+
+Request Body schema: application/json
+name
+required
+string
+工作表名称
+
+alias	
+string
+工作表别名
+
+remark	
+string
+工作表描述
+
+sectionId	
+string
+分组 id
+
+fields
+required
+Array of objects
+工作表字段信息
+
+Array 
+name
+required
+string
+字段名称
+
+alias	
+string
+字段别名
+
+remark	
+string
+字段描述
+
+type
+required
+string
+字段类型
+
+isTitle	
+boolean
+是否是标题字段
+
+required
+required
+boolean
+是否必填
+
+isHidden	
+boolean
+是否隐藏
+
+isReadOnly	
+boolean
+是否只读
+
+isHiddenOnCreate	
+boolean
+是否新增记录时隐藏
+
+isUnique	
+boolean
+是否唯一
+
+precision	
+integer
+type=Number时，表示保留小数位（0-14）
+
+subType	
+string
+type=Collaborator时，表示成员数量，填入规则 0：单选,1：多选 type=Relation时，表示关联记录数量，填入规则 1：单条 2：多条 type=Time时，表示时间1：时.分 ，6：时.分.秒 type=Date|DateTime时，表示日期：5：年 4：年月 3：年月日 2：年月日时 1：年月日时分 6：年月日时分秒
+
+options	
+Array of any (options)
+type=SingleSelect|MultipleSelect时传入， 11:单选,10:多选时填入
+
+max	
+integer
+type=Rating时传入，表示等级最大值，填入规则（0-10）
+
+dataSource	
+string
+type=Relation时传入关联表 id，表示关联表 id
+
+relation	
+object
+type=Relation时传入，关联字段字段 配置项
+
+showFields	
+Array of strings
+展示字段
+
+bidirectional	
+boolean
+是否为双向关联 true：双向，false：单向
+
+Responses
+200
+成功创建工作表
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object (worksheetInfo)
+工作表创建结果
+
+worksheetId	
+string
+工作表ID
+
+
+post
+/v3/app/worksheets
+Request samples
+Payload
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"name": "测试新建工作表",
+"sectionId": "",
+"fields": [
+{
+"name": "文本",
+"alias": "",
+"type": "2",
+"required": true,
+"isTitle": true
+},
+{
+"name": "数值",
+"alias": "",
+"type": "6",
+"precision": 2,
+"required": true
+},
+{
+"name": "单选",
+"alias": "",
+"type": "11",
+"options": [
+{
+"value": "选项名称1",
+"index": 1
+},
+{
+"value": "选项名称2",
+"index": 2
+}
+],
+"required": true
+}
+]
+}
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"worksheetId": "worksheet123"
+},
+"success": true
+}

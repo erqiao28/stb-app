@@ -1,0 +1,281 @@
+获取行记录讨论
+获取行记录讨论
+
+path Parameters
+worksheet_id
+required
+string
+工作表ID
+
+row_id
+required
+string
+行记录ID
+
+query Parameters
+pageIndex	
+integer >= 1
+Default: 1
+页码
+
+pageSize	
+integer [ 1 .. 100 ]
+Default: 20
+每页大小
+
+search	
+string
+搜索关键词
+
+onlyWithAttachments	
+boolean
+Default: false
+是否只返回包含附件的讨论
+
+responseFormat	
+string
+Default: "json"
+Enum: "json" "md"
+Example: responseFormat=json
+响应格式：json - 返回 JSON，md - 返回 Markdown 文本(更省 token，仅返回部分重要字段)
+
+header Parameters
+HAP-Appkey
+required
+string
+appkey
+
+HAP-Sign
+required
+string
+签名
+
+Responses
+200
+成功获取讨论列表
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object (discussionListResult)
+讨论列表查询结果
+
+discussions	
+Array of objects (discussionItem)
+讨论列表
+
+Array 
+id
+required
+string
+讨论 id
+
+message
+required
+string
+讨论内容
+
+_createdAt
+required
+string
+创建时间
+
+_createdBy
+required
+object (user)
+用户信息
+
+id
+required
+string
+人员 id
+
+name
+required
+string
+名称
+
+avatar
+required
+string
+头像地址
+
+isPortal
+required
+boolean
+是否为门户用户
+
+status
+required
+integer
+状态
+
+accountId	
+string
+人员 id (兼容字段)
+
+fullname	
+string
+名称 (兼容字段)
+
+replyToAuthor
+required
+object (user)
+用户信息
+
+id
+required
+string
+人员 id
+
+name
+required
+string
+名称
+
+avatar
+required
+string
+头像地址
+
+isPortal
+required
+boolean
+是否为门户用户
+
+status
+required
+integer
+状态
+
+accountId	
+string
+人员 id (兼容字段)
+
+fullname	
+string
+名称 (兼容字段)
+
+replyToId
+required
+Array of strings
+被回复的讨论 id 列表
+
+mentions
+required
+Array of objects (user)
+提及的用户列表
+
+Array 
+id
+required
+string
+人员 id
+
+name
+required
+string
+名称
+
+avatar
+required
+string
+头像地址
+
+isPortal
+required
+boolean
+是否为门户用户
+
+status
+required
+integer
+状态
+
+accountId	
+string
+人员 id (兼容字段)
+
+fullname	
+string
+名称 (兼容字段)
+
+attachments
+required
+Array of objects
+附件信息
+
+Array 
+originalFilename	
+string
+文件名称
+
+ext
+required
+string
+文件类型
+
+filesize
+required
+string
+文件大小
+
+downloadUrl
+required
+string
+下载地址
+
+
+get
+/v3/app/worksheets/{worksheet_id}/rows/{row_id}/discussions
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"discussions": [
+{
+"id": "187f3fd4-411d-42fe-8bd0-2af79d35807b",
+"message": "？",
+"_createdAt": "2025-07-15 22:28:21",
+"_createdBy": {
+"id": "e2453de8-1a6a-4d4f-ba36-87fdff880a20",
+"name": "卜佳菲",
+"avatar": "https://dn-mdpic.example.com/UserAvatar/fUdk9QeS4D2QcJ3edmfrdP6ydYadd4fy8ZdDaJbNdr8Sdq151MbW7oeZ8ld7194Z.png?imageView2/1/w/48/h/48/q/90",
+"isPortal": false,
+"status": 1
+},
+"replyToAuthor": {
+"id": "e2453de8-1a6a-4d4f-ba36-87fdff880a20",
+"name": "卜佳菲",
+"avatar": "https://dn-mdpic.example.com/UserAvatar/fUdk9QeS4D2QcJ3edmfrdP6ydYadd4fy8ZdDaJbNdr8Sdq151MbW7oeZ8ld7194Z.png?imageView2/1/w/48/h/48/q/90",
+"isPortal": false,
+"status": 1
+},
+"replyId": "fbf1ff76-5a4a-49b5-b51f-e879d058142d",
+"projectId": "fe288386-3d26-4eab-b5d2-51eeab82a7f9",
+"replyToId": [ ],
+"mentions": [ ],
+"attachments": [
+{}
+]
+}
+]
+},
+"success": true
+}

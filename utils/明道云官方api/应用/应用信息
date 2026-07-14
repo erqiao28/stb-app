@@ -1,0 +1,169 @@
+获取应用信息
+获取应用信息，包含应用下分组、工作表、自定义页面信息
+
+header Parameters
+HAP-Appkey
+required
+string
+appkey
+
+HAP-Sign
+required
+string
+签名
+
+Responses
+200
+成功获取应用信息
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object (appInfo)
+应用详细信息
+
+organizationId	
+string
+组织 id
+
+appId	
+string
+应用ID
+
+name	
+string
+应用名称
+
+iconUrl	
+string
+图标地址
+
+color	
+string
+颜色
+
+desc	
+string
+应用说明
+
+remark	
+string
+应用描述
+
+sections	
+Array of objects (appSection)
+分组信息
+
+Array 
+id
+required
+string
+应用分组id
+
+name
+required
+string
+分组名称
+
+items
+required
+Array of objects (appItem)
+分组下应用项信息
+
+Array 
+id
+required
+string
+应用项id
+
+name
+required
+string
+应用项名称
+
+type
+required
+integer
+应用项类型，0:工作表、1:自定义页面、2：子分组
+
+iconUrl
+required
+string
+应用项图标地址
+
+status
+required
+integer
+状态
+
+alias
+required
+string
+别名
+
+notes
+required
+string
+开发者备注
+
+childSections
+required
+Array of objects or null
+子分组信息
+
+Array 
+id
+required
+string
+子分组id
+
+name
+required
+string
+子分组名称
+
+items
+required
+Array of objects (appItem)
+
+get
+/v3/app
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"organizationId": "28447959-cf7f-4ae9-XXXXXXXXXXXXXXX",
+"appId": "b55d6ceb-b69a-44f0-a011-XXXXXXXXXXXXXXX",
+"name": "客户关系管理",
+"iconUrl": "https://fp1.example.cn/customIcon/sys_13_1_shop.svg",
+"color": "#3054EB",
+"desc": "",
+"sections": [
+{
+"id": "676910ae3e6f2583f5d3edd5",
+"name": "驾驶舱",
+"items": [
+{}
+],
+"childSections": [ ]
+}
+]
+},
+"success": true
+}

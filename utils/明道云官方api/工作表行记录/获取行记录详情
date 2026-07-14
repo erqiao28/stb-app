@@ -1,0 +1,224 @@
+获取行记录详情
+获取记录详情信息，包括创建者、拥有者、字段信息、根据字段数据类型生成示例值
+
+path Parameters
+worksheet_id
+required
+string
+工作表ID
+
+row_id
+required
+string
+行记录ID
+
+query Parameters
+includeSystemFields	
+boolean
+Default: false
+Example: includeSystemFields=false
+是否获取系统字段
+
+responseFormat	
+string
+Default: "json"
+Enum: "json" "md"
+Example: responseFormat=json
+响应格式：json - 返回 JSON，md - 返回 Markdown 文本(更省 token，返回工作表结构+记录详情)
+
+header Parameters
+HAP-Appkey
+required
+string
+appkey
+
+HAP-Sign
+required
+string
+签名
+
+Responses
+200
+成功获取记录详情
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object (recordDetail)
+行记录详情信息
+
+id	
+string
+行记录 ID
+
+{field}	
+string
+动态字段值，键为字段ID或别名
+
+_createdAt	
+string
+创建时间
+
+_createdBy	
+object (user)
+用户信息
+
+id
+required
+string
+人员 id
+
+name
+required
+string
+名称
+
+avatar
+required
+string
+头像地址
+
+isPortal
+required
+boolean
+是否为门户用户
+
+status
+required
+integer
+状态
+
+accountId	
+string
+人员 id (兼容字段)
+
+fullname	
+string
+名称 (兼容字段)
+
+_updatedAt	
+string
+更新时间
+
+_updatedBy	
+object (user)
+用户信息
+
+id
+required
+string
+人员 id
+
+name
+required
+string
+名称
+
+avatar
+required
+string
+头像地址
+
+isPortal
+required
+boolean
+是否为门户用户
+
+status
+required
+integer
+状态
+
+accountId	
+string
+人员 id (兼容字段)
+
+fullname	
+string
+名称 (兼容字段)
+
+_owner	
+object (user)
+用户信息
+
+id
+required
+string
+人员 id
+
+name
+required
+string
+名称
+
+avatar
+required
+string
+头像地址
+
+isPortal
+required
+boolean
+是否为门户用户
+
+status
+required
+integer
+状态
+
+accountId	
+string
+人员 id (兼容字段)
+
+fullname	
+string
+名称 (兼容字段)
+
+
+get
+/v3/app/worksheets/{worksheet_id}/rows/{row_id}
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"id": "67890abcdef12345",
+"6847f2a1e66b4b2aa67b1467": "示例值",
+"_createdAt": "2024-03-25 15:52:58",
+"_createdBy": {
+"accountId": "user123",
+"fullname": "张三",
+"avatar": "https://example.com/avatar.jpg",
+"status": "1"
+},
+"_updatedAt": "2024-03-25 15:52:58",
+"_updatedBy": {
+"accountId": "user123",
+"fullname": "张三",
+"avatar": "https://example.com/avatar.jpg",
+"status": "1"
+},
+"_owner": {
+"accountId": "user123",
+"fullname": "张三",
+"avatar": "https://example.com/avatar.jpg",
+"status": "1"
+}
+},
+"success": true
+}

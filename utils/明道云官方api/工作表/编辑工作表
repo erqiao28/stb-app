@@ -1,0 +1,372 @@
+编辑工作表
+编辑工作表结构，包括新增、编辑、删除字段
+
+path Parameters
+worksheet_id
+required
+string
+工作表ID
+
+header Parameters
+HAP-Appkey
+required
+string
+HAP应用密钥
+
+HAP-Sign
+required
+string
+HAP签名
+
+Request Body schema: application/json
+required
+name	
+string
+工作表名称
+
+alias	
+string
+工作表别名
+
+remark	
+string
+工作表描述
+
+sectionId	
+string
+分组ID
+
+addFields	
+Array of objects (fieldDefinition)
+新增的字段
+
+Array 
+name
+required
+string
+字段名称
+
+type
+required
+integer
+字段类型
+
+alias	
+string
+字段别名
+
+remark	
+string
+字段描述
+
+desc	
+string
+字段说明
+
+required	
+boolean
+Default: false
+是否必填
+
+isTitle	
+boolean
+Default: false
+是否为标题字段
+
+isHidden	
+boolean
+Default: false
+是否隐藏
+
+isReadOnly	
+boolean
+Default: false
+是否只读
+
+isHiddenOnCreate	
+boolean
+Default: false
+是否新增记录时隐藏
+
+isUnique	
+boolean
+Default: false
+是否唯一
+
+precision	
+integer [ 0 .. 14 ]
+保留小数位（0-14），字段类型为Number时传入
+
+subType	
+string
+子类型配置：
+
+type=Collaborator时：成员数量，0：单选，1：多选
+type=Relation时：关联记录数量，1：单条，2：多条
+type=Time时：时间格式，1：时.分，6：时.分.秒
+type=Date|DateTime时：日期格式，5：年，4：年月，3：年月日，2：年月日时，1：年月日时分，6：年月日时分秒
+options	
+Array of objects
+选项信息，type=SingleSelect/MultipleSelect时填入
+
+Array 
+value
+required
+string
+选项名称
+
+index
+required
+integer
+选项排序
+
+relation	
+object
+type=Relation时传入，关联字段字段 配置项
+
+showFields	
+Array of strings
+关联表展示字段
+
+bidirectional	
+boolean
+是否为双向关联 true：双向，false：单向
+
+max	
+integer [ 0 .. 10 ]
+等级最大值（0-10），type=Rating时传入
+
+dataSource	
+string
+关联表ID，type=Relation时传入
+
+sourceField	
+string
+关联字段 ID ，适用于与dataSource表中已存在的单向关联字段创建双向关联。当 type=Relation 且dataSource不为空时传入，创建新关联时不需要传入
+
+editFields	
+Array of objects
+编辑的字段
+
+Array 
+id
+required
+string
+字段ID/别名
+
+name	
+string
+字段名称
+
+type	
+integer
+字段类型
+
+alias	
+string
+字段别名
+
+remark	
+string
+字段描述
+
+desc	
+string
+字段说明
+
+required	
+boolean
+Default: false
+是否必填
+
+isTitle	
+boolean
+Default: false
+是否为标题字段
+
+isHidden	
+boolean
+Default: false
+是否隐藏
+
+isReadOnly	
+boolean
+Default: false
+是否只读
+
+isHiddenOnCreate	
+boolean
+Default: false
+是否新增记录时隐藏
+
+isUnique	
+boolean
+Default: false
+是否唯一
+
+precision	
+integer [ 0 .. 14 ]
+保留小数位（0-14），type=Number时传入
+
+subType	
+string
+type=Collaborator时：成员数量，0：单选，1：多选
+type=Relation时：关联记录数量，1：单条，2：多条
+type=Time时：时间格式，1：时.分，6：时.分.秒
+type=Date|DateTime时：日期格式，5：年，4：年月，3：年月日，2：年月日时，1：年月日时分，6：年月日时分秒
+options	
+Array of objects
+选项信息，type=SingleSelect/MultipleSelect时填入
+
+Array 
+value
+required
+string
+选项名称
+
+index
+required
+integer
+选项排序
+
+relation	
+object
+type=Relation时传入，关联字段字段 配置项
+
+showFields	
+Array of strings
+关联表展示字段
+
+max	
+integer [ 0 .. 10 ]
+等级最大值（0-10），type=Rating时传入
+
+dataSource	
+string
+关联表ID，type=Relation时传入
+
+sourceField	
+string
+关联字段 ID ，适用于与dataSource表中已存在的单向关联字段创建双向关联。当 type=Relation 且dataSource不为空时传入，创建新关联时不需要传入
+
+removeFields	
+Array of strings
+删除的字段ID列表
+
+Responses
+200
+成功编辑工作表
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object
+空数据对象
+
+
+post
+/v3/app/worksheets/{worksheet_id}
+Request samples
+Payload
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"name": "string",
+"alias": "string",
+"remark": "string",
+"sectionId": "string",
+"addFields": [
+{
+"name": "string",
+"type": 0,
+"alias": "string",
+"remark": "string",
+"desc": "string",
+"required": false,
+"isTitle": false,
+"isHidden": false,
+"isReadOnly": false,
+"isHiddenOnCreate": false,
+"isUnique": false,
+"precision": 14,
+"subType": "string",
+"options": [
+{
+"value": "string",
+"index": 0
+}
+],
+"relation": {
+"showFields": [
+"string"
+],
+"bidirectional": true
+},
+"max": 10,
+"dataSource": "string",
+"sourceField": "string"
+}
+],
+"editFields": [
+{
+"id": "string",
+"name": "string",
+"type": 0,
+"alias": "string",
+"remark": "string",
+"desc": "string",
+"required": false,
+"isTitle": false,
+"isHidden": false,
+"isReadOnly": false,
+"isHiddenOnCreate": false,
+"isUnique": false,
+"precision": 14,
+"subType": "string",
+"options": [
+{
+"value": "string",
+"index": 0
+}
+],
+"relation": {
+"showFields": [
+"string"
+]
+},
+"max": 10,
+"dataSource": "string",
+"sourceField": "string"
+}
+],
+"removeFields": [
+"string"
+]
+}
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"success": true,
+"error_code": 0,
+"error_msg": "string",
+"data": { }
+}

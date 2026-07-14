@@ -1,0 +1,52 @@
+字段类型对照表
+Type	Code	描述	允许API创建	允许API查询
+Text	2	文本	✓	✓
+PhoneNumber	3	手机	-	✓
+LandlinePhone	4	座机	-	✓
+Email	5	邮箱	-	✓
+Number	6	数值	✓	✓
+Certificate	7	证件	-	✓
+Currency	8	金额	-	✓
+SingleSelect	9	单选	✓	✓
+MultipleSelect	10	多选	✓	✓
+Dropdown	11	下拉	-	✓
+Attachment	14	附件	✓	✓
+Date	15	日期	✓	✓
+DateTime	16	时间	✓	✓
+Region	19/23/24	地区	-	✓
+DynamicLink	21	自由链接	-	✓
+Divider	22	分段	-	-
+AmountInWords	25	大写金额	-	✓
+Collaborator	26	成员	✓	✓
+Department	27	部门	-	✓
+Rating	28	等级	-	✓
+Relation	29	关联记录	✓	✓
+Lookup	30	他表字段	-	✓
+Formula	31	公式	-	✓
+Concatenate	32	文本拼接	-	✓
+AutoNumber	33	自动编号	-	✓
+SubTable	34	子表	-	✓
+CascadingSelect	35	级联选择	-	✓
+Checkbox	36	检查框	-	✓
+Rollup	37	汇总	-	✓
+DateFormula	38	公式（日期）	-	✓
+CodeScan	39	扫码	-	✓
+Location	40	定位	-	✓
+RichText	41	富文本	-	✓
+Signature	42	签名	-	✓
+OCR	43	文字识别	-	✓
+Role	44	角色	-	✓
+Embed	45	嵌入	-	-
+Time	46	时间	✓	✓
+Barcode	47	条码	-	✓
+OrgRole	48	组织角色	-	✓
+Button	49	API查询(按钮)	-	-
+APIQuery	50	API查询(下拉)	-	-
+QueryRecord	51	查询记录	-	-
+Section	52	标签页	-	-
+FunctionFormula	53	函数公式	-	✓
+CustomField	54	自定义字段	-	-
+Array	10000003	数组 (工作流)	-	-
+Object	10000006	对象 (工作流)	-	-
+SimpleArray	10000007	普通数组 (工作流)	-	-
+ObjectArray	10000008	对象数组 (工作流)	-	

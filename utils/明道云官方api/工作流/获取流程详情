@@ -1,0 +1,186 @@
+获取流程详情
+获取流程详情，包含流程请求参数，响应参数
+
+path Parameters
+process_id
+required
+string
+流程ID
+
+header Parameters
+HAP-Appkey
+required
+string
+appkey
+
+HAP-Sign
+required
+string
+签名
+
+Responses
+200
+成功获取流程详情
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object (processDetail)
+流程详情信息
+
+id	
+string
+流程ID
+
+name	
+string
+流程名称
+
+description	
+string
+流程描述
+
+inputParameters	
+Array of objects (inputParameter)
+输入参数列表
+
+Array 
+id	
+string
+字段ID
+
+name	
+string
+字段名称
+
+alias
+required
+string
+别名
+
+type
+required
+integer
+字段类型
+
+description
+required
+string
+描述
+
+required
+required
+boolean
+是否必填
+
+options	
+Array of objects
+选项集,字段类型为选项时，返回选项名称数组
+
+Array 
+key
+required
+string
+选项键
+
+value
+required
+string
+选项值
+
+items	
+Array of objects (inputParameter)
+如果参数是对象数组，这是对象数组的子字段结构
+
+outputParameters	
+Array of objects (outputParameter)
+输出参数列表
+
+Array 
+id	
+string
+字段ID
+
+name	
+string
+字段名称
+
+alias
+required
+string
+别名
+
+type
+required
+integer
+字段类型
+
+description
+required
+string
+描述
+
+items	
+Array of objects (outputParameter)
+如果参数是对象数组，这是子字段结构
+
+
+get
+/v3/app/workflow/processes/{process_id}
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"id": "681b8934ec9191462c08417a",
+"name": "新增线索",
+"description": "新增线索的描述",
+"inputParameters": [
+{
+"field": "681b8190ec9191462c08283b",
+"fieldname": "名称",
+"alias": "",
+"description": "",
+"type": 2,
+"required": false
+},
+{
+"field": "681b8190ec9191462c08111",
+"fieldname": "渠道",
+"description": "",
+"alias": "",
+"type": 9,
+"options": [
+{},
+{}
+],
+"required": false
+}
+],
+"outputParameters": [
+{
+"field": "681b8190ec9191462c082222",
+"fieldname": "id",
+"alias": "",
+"description": "",
+"type": 2
+}
+]
+},
+"success": true
+}

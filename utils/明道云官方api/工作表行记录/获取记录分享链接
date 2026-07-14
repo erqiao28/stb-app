@@ -1,0 +1,62 @@
+获取记录分享链接
+获取记录分享链接
+
+path Parameters
+worksheet_id
+required
+string
+工作表ID
+
+row_id
+required
+string
+行记录ID
+
+header Parameters
+HAP-Appkey
+required
+string
+HAP应用密钥
+
+HAP-Sign
+required
+string
+HAP签名
+
+Request Body schema: application/json
+required
+visibleFields	
+Array of strings
+可见字段ID集合
+
+expiredIn	
+integer >= 0
+过期时间，单位秒，不传或传0表示永久有效
+
+password	
+string
+访问密码，为空表示不需要密码
+
+Responses
+200
+成功生成分享链接
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object
+url
+required
+string
+分享链接地址

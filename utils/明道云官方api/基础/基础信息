@@ -1,0 +1,10 @@
+概述
+应用开放接口文档提供了一个简单的方法来实现实现应用数据和任何外部数据的集成。API 严格遵循 REST 语义，使用 JSON 编码对象，并依赖标准 HTTP 代码来指示操作结果。
+
+请求格式
+对于 GET 请求，所有参数通过拼接在 URL 之后传递。
+对于 POST / PUT / PATCH / DELETE 请求，请求的主体必须是 JSON 格式，而且 HTTP header 的 Content-Type 需要设置为 application/json。
+响应格式
+所有响应的 HTTP 状态码都是 200。
+响应的 Content-Type 为 application/json。
+响应的 body 是 JSON 格式。

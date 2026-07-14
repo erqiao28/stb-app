@@ -1,0 +1,112 @@
+添加角色成员
+添加角色成员信息 数据包括：添加用户、职位、部门
+
+path Parameters
+role_id
+required
+string
+角色ID
+
+header Parameters
+HAP-Appkey
+required
+string
+appkey
+
+HAP-Sign
+required
+string
+签名
+
+Request Body schema: application/json
+userIds	
+Array of strings
+用户ID合集
+
+departmentIds	
+Array of strings
+部门ID合集
+
+departmentTreeIds	
+Array of strings
+部门树ID合集（包含子部门）
+
+jobIds	
+Array of strings
+职位ID合集
+
+projectOrganizeIds	
+Array of strings
+组织角色ID合集
+
+Responses
+200
+成功添加角色成员
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object (addMemberResult)
+空对象
+
+
+post
+/v3/app/roles/{role_id}/members
+Request samples
+Payload
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"userIds": [
+"user123",
+"user456"
+],
+"departmentIds": [
+"dept123"
+],
+"departmentTreeIds": [
+"deptTree123"
+],
+"jobIds": [
+"job123",
+"job456"
+],
+"projectOrganizeIds": [
+"org123"
+]
+}
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"addedCount": 5,
+"successUsers": [
+"user123",
+"user456"
+],
+"successDepartments": [
+"dept123"
+],
+"failedItems": [ ]
+},
+"success": true
+}

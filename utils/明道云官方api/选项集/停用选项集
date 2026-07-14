@@ -1,0 +1,42 @@
+停用选项集
+停用选项集
+
+path Parameters
+optionset_id
+required
+string
+选项集ID
+
+header Parameters
+HAP-Appkey
+required
+string
+appkey
+
+HAP-Sign
+required
+string
+签名
+
+Responses
+200
+成功停用选项集
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object
+
+delete
+/v3/app/optionsets/{optionset_id}

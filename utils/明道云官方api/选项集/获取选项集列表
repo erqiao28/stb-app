@@ -1,0 +1,138 @@
+获取选项集列表
+获取应用下选项集列表
+
+header Parameters
+HAP-Appkey
+required
+string
+appkey
+
+HAP-Sign
+required
+string
+签名
+
+Responses
+200
+成功获取选项集列表
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object (optionSetListResult)
+选项集列表查询结果
+
+optionsets	
+Array of objects (optionSetListItem)
+选项集列表
+
+Array 
+id
+required
+string
+选项集ID
+
+name
+required
+string
+选项集名称
+
+accountId
+required
+string
+账户ID
+
+worksheetIds
+required
+Array of strings
+引用选项集的工作表列表
+
+options
+required
+Array of objects
+选项列表
+
+Array 
+key
+required
+string
+选项id
+
+value
+required
+string
+选项值，不允许重复
+
+index
+required
+integer
+选项排序值: 必须为整数，越小越靠前
+
+isDeleted
+required
+boolean
+该选项是否已被删除
+
+color
+required
+string
+颜色值
+
+score
+required
+integer
+选项分值
+
+enableColor
+required
+boolean
+启用彩色
+
+enableScore
+required
+boolean
+启用分值
+
+
+get
+/v3/app/optionsets
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"optionsets": [
+{
+"id": "optionset123",
+"name": "状态选项集",
+"accountId": "account123",
+"worksheetIds": [
+"worksheet123",
+"worksheet456"
+],
+"options": [
+{},
+{}
+],
+"enableColor": true,
+"enableScore": true
+}
+]
+},
+"success": true
+}

@@ -1,0 +1,123 @@
+创建选项集
+创建选项集信息 数据包括：选项集名称、选项集信息（选项值、排序、颜色、分值）
+
+header Parameters
+HAP-Appkey
+required
+string
+appkey
+
+HAP-Sign
+required
+string
+签名
+
+Request Body schema: application/json
+name
+required
+string
+选项集名称
+
+options
+required
+Array of objects
+选项集
+
+Array 
+value
+required
+string
+选项值，不允许重复
+
+index
+required
+integer
+选项排序值: 必须为整数，越小越靠前
+
+color
+required
+string
+颜色值: colorful为true时生效，参考值 #C0E6FC , #C3F2F2 , #00C345 , #FAD714 , #FF9300 , #F52222 , #EB2F96 , #7500EA , #2D46C4 , #484848 , #C9E6FC , #C3F2F2
+
+score
+required
+number
+分值，enableScore为true时生效，允许小数和正负值
+
+enableColor
+required
+boolean
+启用彩色
+
+enableScore
+required
+boolean
+启用分值
+
+Responses
+200
+成功创建选项集
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object (optionSetInfo)
+选项集创建结果
+
+optionsetId	
+string
+选项集 ID
+
+
+post
+/v3/app/optionsets
+Request samples
+Payload
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"name": "状态选项集",
+"options": [
+{
+"value": "进行中",
+"index": 1,
+"color": "#2196F3",
+"score": 50
+},
+{
+"value": "已完成",
+"index": 2,
+"color": "#4CAF50",
+"score": 100
+}
+],
+"enableColor": true,
+"enableScore": true
+}
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"optionsetId": "option_set_123"
+},
+"success": true
+}

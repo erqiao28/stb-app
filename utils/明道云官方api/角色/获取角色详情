@@ -1,0 +1,338 @@
+获取角色详情
+获取角色详情
+
+path Parameters
+role_id
+required
+string
+角色ID
+
+header Parameters
+HAP-Appkey
+required
+string
+appkey
+
+HAP-Sign
+required
+string
+签名
+
+Responses
+200
+成功获取角色详情
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object (roleDetail)
+角色详情信息
+
+id	
+string
+角色 id
+
+name	
+string
+角色名称
+
+description	
+string
+角色描述
+
+permissionScope	
+string
+分发所有应用项, 80：可查看、编辑、删除所有记录; 60：可查看所有记录，但只能编辑、删除自己拥有的记录; 30：可查看加入的，只能编辑、删除自己拥有的记录; 20：对所有记录只有查看权限; 0：分发有权限应用项
+
+type	
+string
+角色类型 0：自定义角色
+
+hideAppForMembers	
+string
+是否对成员隐藏应用,true：隐藏，false：不隐藏
+
+globalPermissions	
+object (globalPermissions)
+全局权限配置
+
+addRecord
+required
+boolean
+添加记录权限，true 有权限，false 无权限
+
+share
+required
+boolean
+视图和记录的公开分享权限，true 有权限，false 无权限
+
+import
+required
+boolean
+导入权限，true 有权限，false 无权限
+
+export
+required
+boolean
+导出权限，true 有权限，false 无权限
+
+discuss
+required
+boolean
+讨论权限，true 有权限，false 无权限
+
+systemPrint
+required
+boolean
+系统打印，true 有权限，false 无权限
+
+attachmentDownload
+required
+boolean
+附件下载，true 有权限，false 无权限
+
+log
+required
+boolean
+日志，true 有权限，false 无权限
+
+worksheetPermissions	
+Array of objects (worksheetPermissions)
+工作表权限明细，仅在permissionScope为0时生效
+
+Array 
+id	
+string
+工作表Id
+
+recordDataScope
+required
+object
+行记录的数据权限范围
+
+read
+required
+integer
+查看权限范围 0：未授权 20：仅我拥有的 30：我的及下属的 100：全部的
+
+edit
+required
+integer
+编辑权限范围 0：未授权 20：仅我拥有的 30：我的及下属的 100：全部的
+
+delete
+required
+integer
+删除权限范围 0：未授权 20：仅我拥有的 30：我的及下属的 100：全部的
+
+worksheetActions
+required
+object
+工作表动作权限
+
+shareView
+required
+boolean
+公开分享视图权限
+
+import
+required
+boolean
+工作表导入权限
+
+export
+required
+boolean
+工作表导出权限
+
+discuss
+required
+boolean
+工作表讨论权限
+
+batchOperation
+required
+boolean
+工作表批量操作权限
+
+paymentActions
+required
+object
+支付权限
+
+pay
+required
+string
+工作表中付款权限
+
+recordActions
+required
+object
+行记录动作权限
+
+add
+required
+boolean
+添加记录权限
+
+share
+required
+boolean
+公开分享记录权限
+
+discuss
+required
+boolean
+记录讨论权限
+
+systemPrint
+required
+boolean
+记录系统打印权限
+
+attachmentDownload
+required
+boolean
+记录附件下载权限
+
+log
+required
+boolean
+记录日志权限
+
+recordPermissionInViews
+required
+Array of objects
+在视图下的行记录权限
+
+Array 
+viewId
+required
+string
+视图ID
+
+read
+required
+boolean
+查看行记录权限
+
+edit
+required
+boolean
+编辑行记录权限
+
+delete
+required
+boolean
+删除行记录权限
+
+fieldPermissions
+required
+Array of objects
+字段权限
+
+Array 
+id
+required
+string
+字段ID
+
+add
+required
+boolean
+新增字段权限
+
+read
+required
+boolean
+查看字段权限
+
+edit
+required
+boolean
+编辑字段权限
+
+decrypt	
+boolean
+解密字段权限
+
+pagePermissions	
+Array of objects (pagePermissions)
+自定义页面权限明细，仅在permissionScope为0时生效
+
+Array 
+id
+required
+string
+自定义页面ID
+
+enable
+required
+boolean
+是否可以查看自定义页面
+
+
+get
+/v3/app/roles/{role_id}
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"id": "role123",
+"name": "管理员",
+"description": "系统管理员角色",
+"permissionScope": "80",
+"type": "0",
+"hideAppForMembers": "false",
+"globalPermissions": {
+"addRecord": true,
+"share": true,
+"import": true,
+"export": true,
+"discuss": true,
+"systemPrint": true,
+"attachmentDownload": true,
+"log": true
+},
+"worksheetPermissions": [
+{
+"id": "worksheet123",
+"recordDataScope": {
+"read": 100,
+"edit": 100,
+"delete": 100
+},
+"worksheetActions": {
+"shareView": true,
+"import": true,
+"export": true,
+"discuss": true,
+"batchOperation": true
+}
+}
+],
+"pagePermissions": [
+{
+"id": "page123",
+"enable": true
+}
+]
+},
+"success": true
+}

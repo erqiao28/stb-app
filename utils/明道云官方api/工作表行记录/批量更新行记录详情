@@ -1,0 +1,128 @@
+批量更新行记录详情
+批量更新行记录
+
+path Parameters
+worksheet_id
+required
+string
+工作表ID
+
+header Parameters
+HAP-Appkey
+required
+string
+appkey
+
+HAP-Sign
+required
+string
+签名
+
+Request Body schema: application/json
+rowIds
+required
+Array of strings
+要更新的记录ID列表
+
+fields
+required
+Array of objects
+要更新的字段列表，会应用到所有指定的记录上
+
+Array 
+id
+required
+string
+字段 id
+
+value
+required
+any
+字段值
+
+type=Attachment时示例传参：[{"name":"文件名称，带后缀","url":" url/base64"}]
+
+type	
+integer
+type=SingleSelect/MultipleSelect 时， 1=不增量选项，2=允许增加选项，默认为1
+
+type=Attachment时 0=覆盖，1=新增，默认为 0
+
+triggerWorkflow	
+boolean
+Default: true
+是否触发工作流
+
+Responses
+200
+成功批量更新记录
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object (batchUpdateResult)
+批量更新记录结果
+
+failedRowIds	
+Array of strings
+失败的记录ID列表
+
+successfulRowIds	
+Array of strings
+成功更新的记录ID列表
+
+
+patch
+/v3/app/worksheets/{worksheet_id}/rows/batch
+Request samples
+Payload
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"rowIds": [
+"row1",
+"row2"
+],
+"fields": [
+{
+"id": "field1",
+"value": "新值1"
+},
+{
+"id": "field2",
+"value": "新值2"
+}
+],
+"triggerWorkflow": true
+}
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"failedRowIds": [ ],
+"successfulRowIds": [
+"row1",
+"row2"
+]
+},
+"success": true
+}

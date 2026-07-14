@@ -1,0 +1,166 @@
+获取关联记录
+获取关联记录列表，包括关联记录来源工作表信息，行记录信息，行记录详细信息，创建者信息
+
+path Parameters
+worksheet_id
+required
+string
+工作表ID
+
+row_id
+required
+string
+行记录ID
+
+field
+required
+string
+关联字段ID
+
+query Parameters
+pageSize	
+integer
+Default: 20
+每页数量
+
+pageIndex	
+integer
+Default: 1
+页码
+
+isReturnSystemFields	
+boolean
+Default: false
+是否获取系统字段
+
+header Parameters
+HAP-Appkey
+required
+string
+HAP应用密钥
+
+HAP-Sign
+required
+string
+HAP签名
+
+Responses
+200
+成功获取关联记录
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object
+rows
+required
+Array of objects (relationRecord)
+关联记录列表
+
+Array 
+id	
+string
+行记录ID
+
+_createAt	
+string <date-time>
+创建时间 (格式：yyyy-MM-dd HH:mm:ss)
+
+_updatedAt	
+string <date-time>
+更新时间 (格式：yyyy-MM-dd HH:mm:ss)
+
+_owner	
+object (user)
+用户信息
+
+id
+required
+string
+人员 id
+
+name
+required
+string
+名称
+
+avatar
+required
+string
+头像地址
+
+isPortal
+required
+boolean
+是否为门户用户
+
+status
+required
+integer
+状态
+
+accountId	
+string
+人员 id (兼容字段)
+
+fullname	
+string
+名称 (兼容字段)
+
+property name*
+additional property
+any
+动态字段，字段ID/别名对应的值
+
+total
+required
+integer
+总条数
+
+
+get
+/v3/app/worksheets/{worksheet_id}/rows/{row_id}/relations/{field}
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"success": true,
+"error_code": 0,
+"error_msg": "string",
+"data": {
+"rows": [
+{
+"id": "string",
+"_createAt": "2019-08-24T14:15:22Z",
+"_updatedAt": "2019-08-24T14:15:22Z",
+"_owner": {
+"id": "string",
+"name": "string",
+"avatar": "string",
+"isPortal": true,
+"status": 0,
+"accountId": "string",
+"fullname": "string"
+},
+"property1": null,
+"property2": null
+}
+],
+"total": 0
+}
+}

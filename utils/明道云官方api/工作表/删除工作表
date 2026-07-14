@@ -1,0 +1,43 @@
+删除工作表
+删除工作表
+
+path Parameters
+worksheet_id
+required
+string
+工作表ID
+
+header Parameters
+HAP-Appkey
+required
+string
+HAP应用密钥
+
+HAP-Sign
+required
+string
+HAP签名
+
+Responses
+200
+成功删除工作表
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object
+空数据对象
+
+delete
+/v3/app/worksheets/{worksheet_id}

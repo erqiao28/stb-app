@@ -1,0 +1,93 @@
+获取工作表列表
+获取应用下的所有工作表或者指定的工作表列表
+
+header Parameters
+HAP-Appkey
+required
+string
+HAP应用密钥
+
+HAP-Sign
+required
+string
+HAP签名
+
+Request Body schema: application/json
+required
+responseFormat	
+string
+Default: "json"
+Enum: "json" "md"
+json：返回 JSON，md：返回 md 文本(更省 token)。默认为 json
+
+worksheets	
+Array of strings
+指定返回工作表 id，填入后返回数据中只包含这些工作表信息
+
+Responses
+200
+成功获取工作表列表
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+Array of objects (worksheetList)
+Array 
+id	
+string
+工作表ID
+
+name	
+string
+工作表名称
+
+remark	
+string
+工作表备注
+
+
+post
+/v3/app/worksheets/list
+Request samples
+Payload
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"responseFormat": "json",
+"worksheets": [
+"string"
+]
+}
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"success": true,
+"error_code": 0,
+"error_msg": "string",
+"data": [
+{
+"id": "string",
+"name": "string",
+"remark": "string"
+}
+]
+}

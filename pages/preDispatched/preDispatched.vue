@@ -3,13 +3,14 @@
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="goBack"></image>
 			<view class="header-btn-bar">
-				<view class="header-btn" :class="{ active: showProcessPanel }" @click="toggleProcessPanel">岗位工序</view>
-				<view class="header-btn" :class="{ active: showAttendancePanel }" @click="toggleAttendancePanel">员工出勤</view>
-			</view>
+			<view class="header-btn" :class="{ active: showProcessPanel }" @click="toggleProcessPanel">岗位工序</view>
+			<view class="header-btn" :class="{ active: showAttendancePanel }" @click="toggleAttendancePanel">员工出勤</view>
+			<view class="header-btn" :class="{ active: showSprayPanel }" @click="toggleSprayPanel">喷涂工序</view>
+		</view>
 			<view></view>
 		</view>
 
-	<view class="dropdown-panel-overlay" v-if="showAttendancePanel || showProcessPanel" @click="closeAllPanels"></view>
+	<view class="dropdown-panel-overlay" v-if="showAttendancePanel || showProcessPanel || showSprayPanel" @click="closeAllPanels"></view>
 	<view class="dropdown-panel-wrapper attendance-panel" :class="{ open: showAttendancePanel }">
 		<view class="dropdown-panel">
 			<view class="dropdown-panel-content">
@@ -82,6 +83,47 @@
 						</view>
 						<view class="employee-chart-empty" v-if="!processDropdownList.length">
 							<text>暂无工序数据</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		</view>
+	</view>
+
+	<view class="dropdown-panel-wrapper spray-panel" :class="{ open: showSprayPanel }">
+		<view class="dropdown-panel">
+			<view class="dropdown-panel-content">
+				<view class="spray-grid">
+					<view
+						class="spray-item"
+						:class="{ expanded: sprayExpandedId === item.id }"
+						v-for="item in sprayProcessList"
+						:key="item.id"
+						@click="toggleSprayItemExpand(item)"
+					>
+						<view class="spray-half spray-left">{{ item.processName }}</view>
+						<view class="spray-half spray-right">{{ item.employeeName }}</view>
+					</view>
+					<view class="employee-chart-empty" v-if="!sprayProcessList.length">
+						<text>暂无喷涂工序数据</text>
+					</view>
+				</view>
+			</view>
+		</view>
+	</view>
+
+	<view class="spray-process-dropdown-wrapper" :class="{ open: showSprayPanel && sprayExpandedId }">
+		<view class="dropdown-panel">
+			<view class="dropdown-panel-content">
+				<view class="employee-chart-scroll">
+					<view class="employee-chart">
+						<view class="employee-chart-column" v-for="(emp, index) in sprayEmployeeList" :key="emp.id">
+							<view class="employee-chart-bar process-bar" :style="{ height: '100%', backgroundColor: '#f5c842' }">
+								<text class="employee-chart-name">{{ emp.name }}</text>
+							</view>
+						</view>
+						<view class="employee-chart-empty" v-if="!sprayEmployeeList.length">
+							<text>暂无员工数据</text>
 						</view>
 					</view>
 				</view>
@@ -741,6 +783,12 @@ const POSITION_PROCESS_FIELD_MAP = {
 const ASSEMBLY_POSITION_WORKSHEET_ID = '6a55c4956d70ffabc67ae898'
 const ASSEMBLY_POSITION_FIELD_ID = '6a276ffc6d70ffabc66285f8'
 
+const SPRAY_PROCESS_WORKSHEET_ID = '6a3cd2a06d70ffabc66fd87f'
+const SPRAY_PROCESS_FIELD_MAP = {
+	processName: '6a5599736d70ffabc67ad331',
+	employeeName: '6a3cd2e76d70ffabc66fd8ac'
+}
+
 const RECORD_BG_COLORS = ['#e8f4f8', '#f2f0e6', '#f9f0f4', '#eaf6ea', '#fff6e6']
 
 const showVoidModal = ref(false)
@@ -789,6 +837,11 @@ const processDropdownList = ref([])
 const selectedProcessDropdownEmployee = ref(null)
 const selectedProcessSeq = ref(0)
 
+const showSprayPanel = ref(false)
+const sprayProcessList = ref([])
+const sprayExpandedId = ref('')
+const sprayEmployeeList = ref([])
+
 const submitAttendance = async (status, emp) => {
 	if (!emp.id) {
 		uni.showToast({ title: '缺少员工ID', icon: 'none' })
@@ -826,36 +879,60 @@ const toggleAttendancePanel = () => {
 	if (showAttendancePanel.value) {
 		showAttendancePanel.value = false
 		closeProcessDropdownPanel()
-	} else if (showProcessPanel.value) {
-		showProcessPanel.value = false
-		closeProcessDropdownPanel()
-		setTimeout(() => {
-			showAttendancePanel.value = true
-		}, 300)
-	} else {
-		showAttendancePanel.value = true
+		return
 	}
+	showProcessPanel.value = false
+	showSprayPanel.value = false
+	sprayExpandedId.value = ''
+	closeProcessDropdownPanel()
+	setTimeout(() => {
+		showAttendancePanel.value = true
+	}, 300)
 }
 
 const toggleProcessPanel = () => {
 	if (showProcessPanel.value) {
 		showProcessPanel.value = false
 		closeProcessDropdownPanel()
-	} else if (showAttendancePanel.value) {
-		showAttendancePanel.value = false
-		setTimeout(() => {
-			showProcessPanel.value = true
-			loadPositionProcessEmployees()
-		}, 300)
-	} else {
+		return
+	}
+	showAttendancePanel.value = false
+	showSprayPanel.value = false
+	sprayExpandedId.value = ''
+	closeProcessDropdownPanel()
+	setTimeout(() => {
 		showProcessPanel.value = true
 		loadPositionProcessEmployees()
+	}, 300)
+}
+
+const toggleSprayPanel = () => {
+	if (showSprayPanel.value) {
+		showSprayPanel.value = false
+		sprayExpandedId.value = ''
+	} else {
+		showAttendancePanel.value = false
+		showProcessPanel.value = false
+		closeProcessDropdownPanel()
+		showSprayPanel.value = true
+		loadSprayProcessList()
+		loadSprayEmployees()
+	}
+}
+
+const toggleSprayItemExpand = (item) => {
+	if (sprayExpandedId.value === item.id) {
+		sprayExpandedId.value = ''
+	} else {
+		sprayExpandedId.value = item.id
 	}
 }
 
 const closeAllPanels = () => {
 	showAttendancePanel.value = false
 	showProcessPanel.value = false
+	showSprayPanel.value = false
+	sprayExpandedId.value = ''
 	closeProcessDropdownPanel()
 }
 
@@ -2139,6 +2216,66 @@ const loadPositionProcessEmployees = async () => {
 	}
 }
 
+const loadSprayProcessList = async () => {
+	try {
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: SPRAY_PROCESS_WORKSHEET_ID,
+			filters: [],
+			pageSize: 500,
+			pageNum: 1,
+			silent: true
+		})
+		const rows = Array.isArray(res?.data) ? res.data : []
+		sprayProcessList.value = rows.map((item) => ({
+			id: item.rowid || '',
+			processName: formatFieldValue(item[SPRAY_PROCESS_FIELD_MAP.processName]) || '-',
+			employeeName: formatFieldValue(item[SPRAY_PROCESS_FIELD_MAP.employeeName]) || '-'
+		}))
+	} catch (e) {
+		console.error('加载喷涂员工工序表失败:', e)
+		sprayProcessList.value = []
+	}
+}
+
+const loadSprayEmployees = async () => {
+	try {
+		const wsFilter = employeeWorkshopFilter.value
+		const filters = [
+			{ controlId: '66bc55673f78a8b841f28f1b', dataType: 2, spliceType: 1, filterType: 2, values: ['在职'] },
+			{ controlId: '66bc55b83f78a8b841f28f3c', dataType: 2, spliceType: 1, filterType: 2, values: ['是'] }
+		]
+		if (wsFilter) {
+			filters.push({
+				controlId: '6960707f9223cfe3a0c16678',
+				dataType: 2,
+				spliceType: 1,
+				filterType: 2,
+				values: [wsFilter]
+			})
+		}
+
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: '68f6f149c729de3f57a0a358',
+			filters,
+			pageSize: 500,
+			pageNum: 1,
+			silent: true
+		})
+		const rows = Array.isArray(res?.data) ? res.data : []
+		sprayEmployeeList.value = rows.map((item) => ({
+			id: item.rowid || '',
+			name: formatFieldValue(item['6695dc2a2503723eec1aa766']) || '-',
+			totalHours: 0,
+			wage: 0,
+			barHeight: '0%',
+			barColor: '#5884f1'
+		}))
+	} catch (e) {
+		console.error('加载喷涂人事档案数据失败:', e)
+		sprayEmployeeList.value = []
+	}
+}
+
 const handleItemClick = (item) => {
 	const processDetailSids = Array.isArray(item.processDetail) ? item.processDetail : []
 	const dailyWageSids = Array.isArray(item.dailyWage) ? item.dailyWage : []
@@ -2697,6 +2834,24 @@ onMounted(async () => {
 			pointer-events: auto;
 		}
 
+		&.spray-panel {
+			height: 25vh;
+			transform: translateY(calc(-25vh));
+
+			&.open {
+				transform: translateY(0);
+			}
+
+			.dropdown-panel {
+				height: 25vh;
+
+				.dropdown-panel-content {
+					display: flex;
+					flex-direction: column;
+				}
+			}
+		}
+
 		.dropdown-panel {
 			width: 100%;
 			height: 33vh;
@@ -2715,6 +2870,77 @@ onMounted(async () => {
 				padding: px2vw(20px);
 				overflow: hidden;
 				background-color: #fff;
+			}
+
+			.spray-grid {
+				width: 100%;
+				flex: 1;
+				display: flex;
+				flex-wrap: wrap;
+				align-content: flex-start;
+				gap: px2vw(16px);
+				overflow-y: auto;
+				padding: px2vw(10px);
+
+				.spray-item {
+					width: px2vw(140px);
+					height: px2vw(140px);
+					display: flex;
+					flex-direction: row;
+					border: 1px solid #ddd;
+					border-radius: px2vw(8px);
+					overflow: hidden;
+					background-color: #fff;
+
+					&.expanded {
+						border-color: #5884f1;
+						box-shadow: 0 0 px2vw(8px) rgba(88, 132, 241, 0.3);
+					}
+
+					.spray-half {
+						flex: 1;
+						display: flex;
+						align-items: center;
+						justify-content: center;
+						padding: px2vw(8px);
+						font-size: px2vw(20px);
+						color: #333;
+						writing-mode: vertical-rl;
+						text-orientation: upright;
+						letter-spacing: px2vw(4px);
+						word-break: break-all;
+					}
+
+					.spray-left {
+						background-color: #e8f4f8;
+						border-right: 1px solid #ddd;
+					}
+
+					.spray-right {
+						background-color: #fff;
+					}
+				}
+			}
+
+			.spray-expand-panel {
+				width: 100%;
+				height: px2vw(220px);
+				margin-top: px2vw(16px);
+				padding: px2vw(10px);
+				background-color: #f9f9f9;
+				border-radius: px2vw(8px);
+				overflow: hidden;
+
+				.spray-expand-title {
+					font-size: px2vw(22px);
+					color: #333;
+					font-weight: bold;
+					margin-bottom: px2vw(10px);
+				}
+
+				.employee-chart-scroll {
+					height: calc(100% - #{px2vw(40px)});
+				}
 			}
 
 			.employee-chart-scroll {
@@ -2978,6 +3204,112 @@ onMounted(async () => {
 							.employee-chart-name {
 							font-size: px2vw(18px);
 							color: #fff;
+							white-space: nowrap;
+							overflow: hidden;
+							text-overflow: ellipsis;
+							max-height: 100%;
+							padding: px2vw(8px) 0;
+						}
+					}
+				}
+
+				.employee-chart-empty {
+					padding: px2vw(40px) 0;
+					text-align: center;
+					width: 100%;
+
+					text {
+						font-size: px2vw(22px);
+						color: #999;
+					}
+				}
+			}
+		}
+	}
+
+	.spray-process-dropdown-wrapper {
+		position: absolute;
+		left: 0;
+		right: 0;
+		top: px2vw(70px);
+		height: calc(25vh + #{px2vw(40px)});
+		transform: translateY(calc(-25vh));
+		transition: transform 0.3s ease;
+		z-index: 102;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		pointer-events: none;
+
+		&.open {
+			transform: translateY(25vh);
+			pointer-events: auto;
+		}
+
+		.dropdown-panel {
+			width: 100%;
+			height: 25vh;
+			flex: 0 0 auto;
+			min-height: 0;
+			background-color: #fff;
+			border-bottom: 1px solid #eee;
+			overflow: hidden;
+			display: flex;
+			flex-direction: column;
+			pointer-events: auto;
+
+			.dropdown-panel-content {
+				width: 100%;
+				flex: 1;
+				padding: px2vw(20px);
+				overflow: hidden;
+				background-color: #fff;
+			}
+
+			.employee-chart-scroll {
+				width: 100%;
+				height: 100%;
+				overflow-x: auto;
+				overflow-y: hidden;
+				white-space: nowrap;
+			}
+
+			.employee-chart {
+				height: calc(100% - #{px2vw(30px)});
+				display: inline-flex;
+				align-items: flex-end;
+				gap: px2vw(24px);
+				padding: px2vw(30px) px2vw(10px) px2vw(10px);
+				min-width: 100%;
+				box-sizing: content-box;
+
+				.employee-chart-column {
+					flex: 0 0 auto;
+					width: px2vw(52px);
+					height: 100%;
+					display: inline-flex;
+					flex-direction: column;
+					align-items: center;
+					justify-content: flex-end;
+
+					.employee-chart-bar {
+						width: 100%;
+						min-height: px2vw(40px);
+						display: flex;
+						align-items: center;
+						justify-content: center;
+						border-radius: px2vw(8px) px2vw(8px) 0 0;
+						writing-mode: vertical-rl;
+						overflow: hidden;
+
+						&.process-bar {
+							background-color: #5884f1;
+						}
+
+						.employee-chart-name {
+							font-size: px2vw(20px);
+							color: #fff;
+							writing-mode: vertical-rl;
 							white-space: nowrap;
 							overflow: hidden;
 							text-overflow: ellipsis;

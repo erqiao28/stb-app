@@ -1,0 +1,120 @@
+筛选器使用指南
+筛选器结构
+基本语法
+Filter = {
+  type: 'group' | 'condition';
+  // 当 type 为 'group' 时的字段
+  logic?: 'AND' | 'OR';
+  children?: Filter[]; // 只能全是group或全是condition，不能混合使用。最多只能使用两层children
+  // 当 type 为 'condition' 时的字段
+  field?: string; // 字段ID或别名
+  operator?: FilterOperator; // 运算符
+  value?: any; // 值（字符串、数值、数组）
+}
+支持的运算符
+比较运算符
+运算符	描述	示例值
+eq	等于	"Beijing" 或 ["<targetid>"]
+ne	不等于	"London" 或 ["<targetid>"]
+gt	大于	20 或 "2025-02-06 00:00:00"
+ge	大于等于	10
+lt	小于	20
+le	小于等于	100
+in	是其中一个	["value1", "value2"]
+notin	不是任意一个	["value1", "value2"]
+contains	包含	"Ch" 或 ["销售部", "市场部"]
+notcontains	不包含	"Ch" 或 ["销售部", "市场部"]
+concurrent	同时包含	["<id1>", "<id2>"]
+belongsto	属于	["<departmentid>"]
+notbelongsto	不属于	["<departmentid>"]
+startswith	开头是	"张"
+notstartswith	开头不是	"李"
+endswith	结尾是	"公司"
+notendswith	结尾不是	"有限公司"
+between	在范围内	["2025-01-01", "2025-01-31"]
+notbetween	不在范围内	["10", "20"]
+为空运算符
+运算符	描述	备注
+isempty	为空	不需要 value 字段
+isnotempty	不为空	不需要 value 字段
+特殊AccountID
+ID	说明
+user-self	当前用户
+user-sub	下属
+user-workflow	工作流
+user-api	API
+使用示例
+示例 1: 筛选条件
+查询所有1月份入职的姓"张"的职员：
+
+{
+  "type": "group",
+  "logic": "AND",
+  "children": [
+    {
+      "type": "condition",
+      "field": "name",
+      "operator": "startswith",
+      "value": "张"
+    },
+    {
+      "type": "condition",
+      "field": "onboard_date",
+      "operator": "between",
+      "value": ["2025-01-01", "2025-01-31"]
+    }
+  ]
+}
+示例 2: 条件组
+查询华北区市场部和销售部所有1月份入职的姓"张"的职员：
+
+{
+  "type": "group",
+  "logic": "AND",
+  "children": [
+    {
+      "type": "group", 
+      "logic": "AND",
+      "children": [
+        {
+          "type": "condition",
+          "field": "name",
+          "operator": "startswith",
+          "value": "张"
+        },
+        {
+          "type": "condition",
+          "field": "onboard_date",
+          "operator": "between",
+          "value": ["2025-01-01", "2025-01-31"]
+        }
+      ]
+    },
+    {
+      "type": "group",
+      "logic": "OR",
+      "children": [
+        {
+          "type": "condition",
+          "field": "department_name",
+          "operator": "contains",
+          "value": ["销售部", "市场部"]
+        },
+        {
+          "type": "condition",
+          "field": "department_id",
+          "operator": "belongsto",
+          "value": ["华北区ID"]
+        }
+      ]
+    }
+  ]
+}
+注意事项
+嵌套限制: 最多支持两层嵌套（group -> group -> condition）
+children 类型一致性: 一个group的children只能全是group或全是condition，不能混合
+logic 必需: 当type为group时，logic字段必须指定为AND或OR
+为空运算符: 使用isempty和isnotempty时不需要提供value字段
+数组值: 某些运算符需要数组形式的值（如between、in、contains、concurrent、belongsto等）
+选项型字段: 所有的选项型字段（单选、多选）需要把对应option的key值放到数组中作为value，使用数组值运算符
+关联记录: 关联的记录的筛选需要先查询到对应的record_id，再以数组值规则进行筛选

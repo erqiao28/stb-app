@@ -1,0 +1,136 @@
+批量新增行记录
+批量新建行记录
+
+path Parameters
+worksheet_id
+required
+string
+工作表ID
+
+header Parameters
+HAP-Appkey
+required
+string
+appkey
+
+HAP-Sign
+required
+string
+签名
+
+Request Body schema: application/json
+rows
+required
+Array of objects
+批量创建的记录数据
+
+Array 
+fields
+required
+Array of objects
+字段列表
+
+Array 
+id
+required
+string
+字段ID/别名
+
+value
+required
+string
+字段值
+
+type=Attachment时示例传参：[{"name":"文件名称，带后缀","url":" url/base64"}]
+
+type	
+integer
+type=SingleSelect/MultipleSelect 时， 1=不增量选项，2=允许增加选项，默认为1
+
+type=Attachment时 0=覆盖，1=新增，默认为 0
+
+triggerWorkflow	
+boolean
+Default: true
+是否触发工作流
+
+Responses
+200
+成功批量创建记录
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object (batchCreateResult)
+批量创建记录结果
+
+rowIds	
+Array of strings
+成功创建的记录ID列表
+
+
+post
+/v3/app/worksheets/{worksheet_id}/rows/batch
+Request samples
+Payload
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"rows": [
+{
+"fields": [
+{
+"id": "field1",
+"value": "值1"
+},
+{
+"id": "field2",
+"value": "值2"
+}
+]
+},
+{
+"fields": [
+{
+"id": "field1",
+"value": "值3"
+},
+{
+"id": "field2",
+"value": "值4"
+}
+]
+}
+],
+"triggerWorkflow": true
+}
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"rowIds": [
+"row1",
+"row2"
+]
+},
+"success": true
+}

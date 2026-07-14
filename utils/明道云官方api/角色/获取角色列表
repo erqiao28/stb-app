@@ -1,0 +1,186 @@
+获取角色列表
+获取应用下角色列表
+
+header Parameters
+HAP-Appkey
+required
+string
+appkey
+
+HAP-Sign
+required
+string
+签名
+
+Responses
+200
+成功获取角色列表
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object (roleListResult)
+角色列表查询结果
+
+roles	
+Array of objects (roleListItem)
+角色列表
+
+Array 
+id
+required
+string
+角色Id
+
+name
+required
+string
+角色名称
+
+roleType
+required
+string
+角色类型
+
+description
+required
+string
+角色描述
+
+accounts
+required
+Array of objects (user)
+用户列表
+
+Array 
+id
+required
+string
+人员 id
+
+name
+required
+string
+名称
+
+avatar
+required
+string
+头像地址
+
+isPortal
+required
+boolean
+是否为门户用户
+
+status
+required
+integer
+状态
+
+accountId	
+string
+人员 id (兼容字段)
+
+fullname	
+string
+名称 (兼容字段)
+
+departmentTrees	
+Array of objects
+部门树列表
+
+Array 
+id
+required
+string
+部门 id
+
+name
+required
+string
+部门名称
+
+departments
+required
+Array of objects
+部门列表
+
+Array 
+id
+required
+string
+部门 id
+
+name
+required
+string
+部门名称
+
+jobs
+required
+Array of objects
+职位列表
+
+Array 
+id
+required
+string
+职位 id
+
+name
+required
+string
+职位名称
+
+orgRoleIds
+required
+Array of strings
+组织角色ID列表
+
+
+get
+/v3/app/roles
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"data": {
+"roles": [
+{
+"id": "角色Id",
+"name": "角色名称",
+"roleType": "角色类型",
+"description": "角色描述",
+"accounts": [
+{}
+],
+"departments": [
+{}
+],
+"jobs": [
+{}
+],
+"orgRoleIds": [
+"组织角色ID"
+]
+}
+]
+},
+"success": true
+}

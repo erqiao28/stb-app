@@ -1,0 +1,103 @@
+移除角色成员
+移出角色下成员
+
+path Parameters
+role_id
+required
+string
+角色ID
+
+header Parameters
+HAP-Appkey
+required
+string
+HAP应用密钥
+
+HAP-Sign
+required
+string
+HAP签名
+
+Request Body schema: application/json
+required
+userIds	
+Array of strings
+用户ID列表
+
+departmentIds	
+Array of strings
+部门ID列表
+
+departmentTreeIds	
+Array of strings
+部门树ID列表
+
+jobIds	
+Array of strings
+职位ID列表
+
+orgRoleIds	
+Array of strings
+组织角色ID列表
+
+Responses
+200
+成功移除角色成员
+
+Response Schema: application/json
+success	
+boolean
+是否调用成功
+
+error_code	
+integer
+错误代码
+
+error_msg	
+string
+错误消息
+
+data	
+object
+空数据对象
+
+
+delete
+/v3/app/roles/{role_id}/members
+Request samples
+Payload
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"userIds": [
+"string"
+],
+"departmentIds": [
+"string"
+],
+"departmentTreeIds": [
+"string"
+],
+"jobIds": [
+"string"
+],
+"orgRoleIds": [
+"string"
+]
+}
+Response samples
+200
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"success": true,
+"error_code": 0,
+"error_msg": "string",
+"data": { }
+}
