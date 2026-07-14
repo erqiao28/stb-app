@@ -137,3 +137,6 @@ export const POSITION_PROCESS_SELECT_URL = apiUrl('/api/workflow/hooks/NmE1NWEzY
 
 /** 岗位工序：删除员工所属工序 */
 export const POSITION_PROCESS_DELETE_URL = apiUrl('/api/workflow/hooks/NmE1NWRlNjYzN2MwOTg0NTBhNjlkMWI1')
+
+/** 喷涂工序员工 */
+export const SPRAY_PROCESS_EMPLOYEE_URL = apiUrl('/api/workflow/hooks/NmE1NWYwOGYzN2MwOTg0NTBhNmI1ZjZl')

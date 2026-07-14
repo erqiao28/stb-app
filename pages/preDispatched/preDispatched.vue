@@ -5,7 +5,7 @@
 			<view class="header-btn-bar">
 			<view class="header-btn" :class="{ active: showProcessPanel }" @click="toggleProcessPanel">岗位工序</view>
 			<view class="header-btn" :class="{ active: showAttendancePanel }" @click="toggleAttendancePanel">员工出勤</view>
-			<view class="header-btn" :class="{ active: showSprayPanel }" @click="toggleSprayPanel">喷涂工序</view>
+			<view class="header-btn" v-if="loginWorkshop === '喷涂车间'" :class="{ active: showSprayPanel }" @click="toggleSprayPanel">喷涂工序</view>
 		</view>
 			<view></view>
 		</view>
@@ -118,7 +118,7 @@
 				<view class="employee-chart-scroll">
 					<view class="employee-chart">
 						<view class="employee-chart-column" v-for="(emp, index) in sprayEmployeeList" :key="emp.id">
-							<view class="employee-chart-bar process-bar" :style="{ height: '100%', backgroundColor: '#f5c842' }">
+							<view class="employee-chart-bar process-bar" :style="{ height: '100%', backgroundColor: '#f5c842' }" @click="handleSprayEmployeeClick(emp)">
 								<text class="employee-chart-name">{{ emp.name }}</text>
 							</view>
 						</view>
@@ -608,7 +608,7 @@ import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
-import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, ATTENDANCE_SUBMIT_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, POSITION_PROCESS_SELECT_URL, POSITION_PROCESS_DELETE_URL } from '../../utils/api'
+import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, ATTENDANCE_SUBMIT_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, POSITION_PROCESS_SELECT_URL, POSITION_PROCESS_DELETE_URL, SPRAY_PROCESS_EMPLOYEE_URL } from '../../utils/api'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -1025,6 +1025,28 @@ const handleProcessDelete = async (emp, seq) => {
 		uni.hideLoading()
 		console.error('岗位工序删除失败:', e)
 		uni.showToast({ title: '删除失败', icon: 'none' })
+	}
+}
+
+const handleSprayEmployeeClick = async (emp) => {
+	try {
+		uni.showLoading({ title: '提交中...', mask: true })
+		const params = {
+			sprayProcessId: sprayExpandedId.value,
+			employeeId: emp.id
+		}
+		const resp = await http.post(SPRAY_PROCESS_EMPLOYEE_URL, params)
+		uni.hideLoading()
+		if (resp.status === 1) {
+			uni.showToast({ title: resp.message || '提交失败', icon: 'none' })
+			return
+		}
+		uni.showToast({ title: '提交成功', icon: 'success' })
+		loadSprayProcessList()
+	} catch (e) {
+		uni.hideLoading()
+		console.error('喷涂工序员工提交失败:', e)
+		uni.showToast({ title: '提交失败', icon: 'none' })
 	}
 }
 
@@ -2659,10 +2681,14 @@ onMounted(async () => {
 			justify-content: center;
 			align-items: center;
 			gap: px2vw(16px);
+			overflow: visible;
 		}
 
 		.header-btn {
 			flex-shrink: 0;
+			display: flex;
+			align-items: center;
+			justify-content: center;
 			padding: 0 px2vw(32px);
 			height: px2vw(48px);
 			line-height: px2vw(48px);
