@@ -1,5 +1,6 @@
 import http from './request'
 import config from './config'
+import { API_BASE } from './api'
 import { useUserStore } from '../store/user.store'
 
 /**
@@ -205,8 +206,75 @@ export const callWorkflowListAPIPaged = async (
   }
 }
 
+/**
+ * 获取工作表结构（字段定义）
+ * @param {string} worksheetId - 工作表ID
+ * @returns {Promise} - 返回工作表结构对象
+ */
+export const getWorksheetStructure = async (worksheetId) => {
+  try {
+    console.log('调用 getWorksheetStructure, worksheetId:', worksheetId)
+    const url = `${API_BASE}/api/worksheets/${worksheetId}`
+    console.log('请求URL:', url)
+    const res = await http.get(url)
+    console.log('getWorksheetStructure 返回原始:', res)
+    if (res) {
+      // 检查返回结构
+      if (res.data) {
+        console.log('res.data 存在:', typeof res.data === 'object' ? res.data : '字符串需要解析')
+        return typeof res.data === 'object' ? res.data : JSON.parse(res.data)
+      }
+      return res
+    }
+    return null
+  } catch (error) {
+    console.error('获取工作表结构失败:', error)
+    return null
+  }
+}
+
+/**
+ * 根据 sid 数组和字段 key 获取标签名称数组
+ * @param {string} worksheetId - 工作表ID
+ * @param {string} fieldKey - 字段key（如 6a276ffc6d70ffabc66285f9）
+ * @param {string[]} sids - sid 数组
+ * @returns {Promise<string[]>} - 标签名称数组
+ */
+export const getLabelsBySids = async (worksheetId, fieldKey, sids) => {
+  if (!sids || sids.length === 0) return []
+  
+  try {
+    const structure = await getWorksheetStructure(worksheetId)
+    console.log('getLabelsBySids - structure:', structure)
+    if (!structure || !structure.fields) {
+      console.log('structure 或 fields 不存在')
+      return []
+    }
+    
+    const field = structure.fields.find(f => f.id === fieldKey)
+    console.log('getLabelsBySids - field:', field)
+    if (!field || !field.options) {
+      console.log('field 或 options 不存在')
+      return []
+    }
+    
+    console.log('getLabelsBySids - options:', field.options)
+    const optionMap = new Map()
+    field.options.forEach(opt => {
+      optionMap.set(opt.key, opt.value)
+    })
+    
+    return sids.map(sid => optionMap.get(sid) || '').filter(Boolean)
+  } catch (error) {
+    console.error('获取标签名称失败:', error)
+    return []
+  }
+}
+
 export default {
   callWorkflowAPI,
   callWorkflowListAPI,
   callWorkflowListAPIPaged,
+  getWorksheetStructure,
+  getLabelsBySids,
 }
