@@ -7,7 +7,7 @@
 			<view class="header-btn" :class="{ active: showAttendancePanel }" @click="toggleAttendancePanel">员工出勤</view>
 			<view class="header-btn" v-if="loginWorkshop === '喷涂车间'" :class="{ active: showSprayPanel }" @click="toggleSprayPanel">喷涂工序</view>
 		</view>
-			<view></view>
+			<view class="header-config-btn" @click="goToProcessConfig">工艺配置</view>
 		</view>
 
 	<view class="dropdown-panel-overlay" v-if="showAttendancePanel || showProcessPanel || showSprayPanel" @click="closeAllPanels"></view>
@@ -1318,6 +1318,12 @@ const goBack = () => {
 	})
 }
 
+const goToProcessConfig = () => {
+	uni.navigateTo({
+		url: '/pages/processConfig/processConfig'
+	})
+}
+
 const formatFieldValue = (v) => {
 	if (v == null || v === '') return ''
 	if (typeof v === 'string') {
@@ -1447,7 +1453,6 @@ const DICTIONARY_PROCESS_STATUS_FIELD = '6a324e7d6d70ffabc66cbe5f'
 const DICTIONARY_WORKSHOP_FIELD = '691e8522d50c894e2e798d03'
 const DICTIONARY_NAME_FIELD = 'Name'
 
-/** 获取工序数据字典 sid -> name 映射 */
 const loadProcessDictionaryMap = async () => {
 	try {
 		const res = await callWorkflowListAPIPaged({
@@ -1493,9 +1498,7 @@ const loadCraftPositionList = async () => {
 		// 构建 Map：工序归类名称 -> 工序名称列表
 		const newMap = new Map()
 		const craftPositions = rows.map(item => {
-			// 类别名称
 			const name = formatFieldValue(item[CRAFT_POSITION_NAME_FIELD]) || ''
-			// 关联工序（可能是 JSON 字符串或数组）
 			let sids = item[CRAFT_POSITION_RELATED_PROCESS_FIELD]
 			if (typeof sids === 'string') {
 				try {
@@ -1517,7 +1520,6 @@ const loadCraftPositionList = async () => {
 		
 		craftPositionList.value = craftPositions
 		craftPositionMap.value = newMap
-		console.log('工序归类数据:', Object.fromEntries(newMap))
 	} catch (e) {
 		console.error('获取工序归类表失败:', e)
 	}
@@ -2401,7 +2403,37 @@ const toggleProcessSelection = (process) => {
 			uni.showToast({ title: '产品已完成该工序', icon: 'none' })
 		}
 		selectedProcessIds.value.push(process.rowid)
+		
+		// 工序归类联动：如果该工序属于某个归类，则勾选同归类下的所有工序
+		autoSelectRelatedProcesses(process)
 	}
+}
+
+// 根据工序归类自动勾选同类别工序
+const autoSelectRelatedProcesses = (process) => {
+	if (!process.processName || !craftPositionMap.value || craftPositionMap.value.size === 0) return
+	
+	// 查找该工序所属的归类名称
+	let craftPositionName = ''
+	craftPositionMap.value.forEach((processNames, name) => {
+		if (processNames.includes(process.processName)) {
+			craftPositionName = name
+		}
+	})
+	
+	if (!craftPositionName) return
+	
+	// 获取该归类下的所有工序名称
+	const relatedProcessNames = craftPositionMap.value.get(craftPositionName) || []
+	
+	// 在当前已加载的产品工序中，找出同归类的工序并勾选
+	processList.value.forEach(p => {
+		if (p.rowid && p.productRowid === process.productRowid && relatedProcessNames.includes(p.processName)) {
+			if (!selectedProcessIds.value.includes(p.rowid)) {
+				selectedProcessIds.value.push(p.rowid)
+			}
+		}
+	})
 }
 
 const toggleExpand = (rowid) => {
@@ -3508,6 +3540,27 @@ onMounted(async () => {
 				color: #5884f1;
 				border-color: #fff;
 				font-weight: bold;
+			}
+		}
+
+		.header-config-btn {
+			flex-shrink: 0;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 0 px2vw(24px);
+			height: px2vw(48px);
+			line-height: px2vw(48px);
+			border-radius: px2vw(24px);
+			font-size: px2vw(24px);
+			color: #5884f1;
+			background-color: #fff;
+			border: 1px solid #fff;
+			text-align: center;
+			transition: all 0.2s ease;
+
+			&:active {
+				background-color: rgba(255, 255, 255, 0.8);
 			}
 		}
 	}
