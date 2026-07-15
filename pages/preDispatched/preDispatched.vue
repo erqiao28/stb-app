@@ -183,7 +183,7 @@
 				</scroll-view>
 				<view class="left-bottom-btns">
 					<view class="left-btn left-btn-add">添加产品</view>
-					<view class="left-btn left-btn-confirm">确认派工</view>
+					<view class="left-btn left-btn-confirm" @click="handleConfirmDispatch">确认派工</view>
 				</view>
 			</view>
 
@@ -1328,7 +1328,9 @@ const handleAddPreDispatch = () => {
 }
 
 const handleConfirmDispatch = () => {
+	// 只获取选中产品的预派工 rowid
 	const rowids = productList.value
+		.filter(item => selectedProductIds.value.includes(item.rowid))
 		.flatMap(item => item.preDispatchRowids || [item.rowid])
 		.filter(Boolean)
 	if (rowids.length === 0) {
