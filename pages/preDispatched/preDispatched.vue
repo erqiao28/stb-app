@@ -221,11 +221,12 @@
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.dailyOutput || 0 }}</view>
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ productDispatchCounts[p.productRowid] || 0 }}</view>
 							<view
-								v-if="isEmployeeGroupStart(group.processes, idx)"
-								class="grid-cell employee-cell"
-								:class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }"
-								:style="getEmployeeCellStyle(group.processes, idx)"
-							>{{ getEmployeeCellText(group.processes, idx) }}</view>
+							v-if="isEmployeeGroupStart(group.processes, idx)"
+							class="grid-cell employee-cell"
+							:class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }"
+							:style="getEmployeeCellStyle(group.processes, idx)"
+							@click="openEmployeeEditModal(group.processes, idx)"
+						>{{ getEmployeeCellText(group.processes, idx) }}</view>
 						</template>
 						</view>
 						<view class="empty-wrap" v-if="!processList.length && !loadingProducts">
@@ -476,14 +477,58 @@
 					</view>
 					<view class="employee-modal-info">
 						<text class="employee-modal-name">{{ emp.name }}</text>
-						<text class="employee-modal-position">岗位: {{ emp.position || '-' }}</text>
-						<text class="employee-modal-hours">总工时: {{ emp.totalHours || 0 }}h</text>
+						<text class="employee-modal-hours">{{ emp.totalHours || 0 }}</text>
+						<text class="employee-modal-wage">{{ emp.wage || 0 }}</text>
 					</view>
 				</view>
 				<view class="employee-modal-empty" v-if="allEmployeeOptions.length === 0">
 					<text>暂无员工</text>
 				</view>
 			</scroll-view>
+		</view>
+	</view>
+
+	<!-- 员工编辑弹窗 -->
+	<view class="employee-edit-modal" v-if="showEmployeeEditModal" @click.self="closeEmployeeEditModal">
+		<view class="employee-edit-modal-content" @click.stop>
+			<view class="employee-edit-modal-header">
+				<text class="employee-edit-modal-title">编辑员工</text>
+				<view class="employee-edit-modal-close" @click="closeEmployeeEditModal">×</view>
+			</view>
+			<view class="employee-edit-modal-body">
+				<view class="edit-info-row">
+					<view class="info-item">
+						<text class="info-label">工序：</text>
+						<text class="info-value">{{ employeeEditData.processName || '-' }}</text>
+					</view>
+				</view>
+				<view class="employee-tags-section">
+					<view class="section-title">
+						<text>已选员工</text>
+						<text class="section-count">{{ employeeEditData.selectedEmployeeNames.length }}人</text>
+					</view>
+					<view class="employee-tags-container">
+						<view
+							v-for="(name, idx) in employeeEditData.selectedEmployeeNames"
+							:key="idx"
+							class="employee-tag-item"
+						>
+							<text class="tag-name">{{ name }}</text>
+							<view class="tag-delete" @click="removeEmployeeFromEdit(idx)">×</view>
+						</view>
+						<view v-if="employeeEditData.selectedEmployeeNames.length === 0" class="no-employee-tip">
+							<text>暂无选择员工</text>
+						</view>
+						<view class="add-employee-btn" @click="openEmployeeSelectorForEdit">
+							<text class="add-btn-icon">+</text>
+						</view>
+					</view>
+				</view>
+			</view>
+			<view class="employee-edit-modal-footer">
+				<view class="edit-btn-cancel" @click="closeEmployeeEditModal">取消</view>
+				<view class="edit-btn-confirm" @click="confirmEmployeeEdit">确认</view>
+			</view>
 		</view>
 	</view>
 
@@ -686,7 +731,7 @@ const filterCraft = ref('')
 const filterInnerPaint = ref('')
 const filterPolish = ref('')
 const filterGuokou = ref('')
-const filterDate = ref(getCurrentDate())
+const filterDate = ref(getYesterdayDate())
 
 const productList = ref([])
 const summaryList = ref([])
@@ -815,6 +860,17 @@ const editData = ref({
 	worktime: '',
 	wage: ''
 })
+
+// 员工编辑弹窗
+const showEmployeeEditModal = ref(false)
+const employeeEditData = ref({
+	processName: '',
+	processRowid: '',
+	preDispatchRowid: '',
+	selectedEmployeeIds: [],
+	selectedEmployeeNames: []
+})
+
 const showEmployeeSelector = ref(false)
 const allEmployeeOptions = ref([])
 
@@ -1252,7 +1308,7 @@ const handleReset = () => {
 	filterInnerPaint.value = ''
 	filterPolish.value = ''
 	filterGuokou.value = ''
-	filterDate.value = getCurrentDate()
+	filterDate.value = getYesterdayDate()
 	selectedProductIds.value = []
 	processList.value = []
 	loadedProductIds.value = []
@@ -1649,7 +1705,9 @@ const loadAssociatedProcessDetails = async (product) => {
 			})
 		}
 		const nameSetMap = new Map()
+		const preDispatchRowidMap = new Map()
 		preDispatchRows.forEach((item) => {
+			const pdRowid = item.rowid
 			const processSids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail])
 			const dailyWageSids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.dailyWage])
 			const names = dailyWageSids
@@ -1660,11 +1718,27 @@ const loadAssociatedProcessDetails = async (product) => {
 					nameSetMap.set(sid, new Set())
 				}
 				names.forEach((name) => nameSetMap.get(sid).add(name))
+				// 每道工序只关联一条预派工
+				if (!preDispatchRowidMap.has(sid)) {
+					preDispatchRowidMap.set(sid, pdRowid)
+				}
 			})
 		})
 		const resultMap = new Map()
+		// 获取预派工的 craftPosition
+		const craftPositionMap = new Map()
+		preDispatchRows.forEach((item) => {
+			const pdRowid = item.rowid
+			const craftPosition = formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.craftPosition]) || '工序归类表'
+			craftPositionMap.set(pdRowid, craftPosition)
+		})
 		nameSetMap.forEach((names, sid) => {
-			resultMap.set(sid, names.size > 0 ? [...names] : [])
+			const pdRowid = preDispatchRowidMap.get(sid) || ''
+			resultMap.set(sid, {
+				employeeNames: names.size > 0 ? [...names] : [],
+				preDispatchRowid: pdRowid,
+				craftPosition: craftPositionMap.get(pdRowid) || '工序归类表'
+			})
 		})
 		return resultMap
 	} catch (e) {
@@ -1712,7 +1786,7 @@ const loadProductProcesses = async (product) => {
 		const newProcesses = rows.map((item) => {
 			const seq = parseFloat(formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.sequence])) || 0
 			const isAssociated = associatedRowids.has(item.rowid)
-			const employeeNames = associatedMap.get(item.rowid) || []
+			const associatedInfo = associatedMap.get(item.rowid) || { employeeNames: [], preDispatchRowid: '', craftPosition: '工序归类表' }
 			return {
 				rowid: item.rowid || '',
 				productRowid: product.rowid,
@@ -1724,7 +1798,9 @@ const loadProductProcesses = async (product) => {
 				isAssociated,
 				isBeforeAssociated: !isAssociated && seq <= maxAssociatedSequence,
 				isAfterAssociated: !isAssociated && seq > maxAssociatedSequence,
-				employeeNames
+				employeeNames: associatedInfo.employeeNames,
+				preDispatchRowid: associatedInfo.preDispatchRowid,
+				craftPosition: associatedInfo.craftPosition
 			}
 		}).sort((a, b) => (parseFloat(a.sequence) || 0) - (parseFloat(b.sequence) || 0))
 		processList.value.push(...newProcesses)
@@ -1853,7 +1929,6 @@ const loadEmployeeDispatchSummary = async () => {
 						worktime: pd.worktime || 0,
 						wage: pd.wage || 0
 					})
-					console.log('[任务工序] orderNo:', pd.orderNo, 'processDetail长度:', pd.processDetail?.length, 'processName:', pd.processName, 'craftPosition:', pd.craftPosition)
 				}
 			})
 		})
@@ -2540,6 +2615,138 @@ const confirmEdit = async () => {
 	}
 }
 
+// 打开员工编辑弹窗
+const openEmployeeEditModal = async (processes, idx) => {
+	const process = processes[idx]
+	if (!process) return
+
+	// 获取该员工组起始位置的工序信息
+	const groupStartIdx = getEmployeeGroupStart(processes, idx)
+	const groupStartProcess = processes[groupStartIdx]
+	const groupSpan = getEmployeeGroupSpan(processes, groupStartIdx)
+
+	// 判断显示工序名称还是工序归类表
+	const processDisplay = groupSpan > 1
+		? (process.craftPosition || '')
+		: (groupStartProcess.processName || '')
+
+	// 设置编辑数据
+	employeeEditData.value = {
+		processName: processDisplay,
+		processRowid: process.rowid || '',
+		preDispatchRowid: process.preDispatchRowid || '',
+		selectedEmployeeIds: [],
+		selectedEmployeeNames: []
+	}
+
+	// 加载员工列表
+	await loadEmployeeOptions()
+
+	// 匹配当前员工
+	const currentNames = groupStartProcess.employeeNames || []
+	if (currentNames.length > 0 && allEmployeeOptions.value.length > 0) {
+		const matchedIds = []
+		const matchedNames = []
+		allEmployeeOptions.value.forEach(emp => {
+			if (currentNames.includes(emp.name)) {
+				matchedIds.push(emp.id)
+				matchedNames.push(emp.name)
+			}
+		})
+		employeeEditData.value.selectedEmployeeIds = matchedIds
+		employeeEditData.value.selectedEmployeeNames = matchedNames
+	}
+
+	showEmployeeEditModal.value = true
+}
+
+// 关闭员工编辑弹窗
+const closeEmployeeEditModal = () => {
+	showEmployeeEditModal.value = false
+	showEmployeeSelector.value = false  // 关闭编辑框时同时关闭选择器
+	employeeEditData.value = {
+		processName: '',
+		processRowid: '',
+		preDispatchRowid: '',
+		selectedEmployeeIds: [],
+		selectedEmployeeNames: []
+	}
+}
+
+// 为员工编辑弹窗打开员工选择器
+const openEmployeeSelectorForEdit = () => {
+	// 同步已选员工到 editData
+	editData.value.selectedEmployeeIds = [...employeeEditData.value.selectedEmployeeIds]
+	editData.value.selectedEmployeeNames = [...employeeEditData.value.selectedEmployeeNames]
+	showEmployeeSelector.value = true
+}
+
+// 从员工编辑中移除员工
+const removeEmployeeFromEdit = (idx) => {
+	employeeEditData.value.selectedEmployeeIds.splice(idx, 1)
+	employeeEditData.value.selectedEmployeeNames.splice(idx, 1)
+}
+
+// 确认员工编辑
+const confirmEmployeeEdit = async () => {
+	const preDispatchRowid = employeeEditData.value.preDispatchRowid
+	const selectedEmployeeIds = employeeEditData.value.selectedEmployeeIds
+	if (!preDispatchRowid) {
+		uni.showToast({ title: '缺少预派工记录', icon: 'none' })
+		return
+	}
+
+	const requestData = {
+		rowid: preDispatchRowid,
+		employees: selectedEmployeeIds
+	}
+	console.log('员工编辑请求参数:', requestData)
+
+	try {
+		uni.showLoading({ title: '保存中...' })
+		const resp = await http.post('/api/workflow/hooks/NmEzYjc5NzIzN2MwOTg0NTBhOTIzMjYw', requestData)
+		uni.hideLoading()
+		// 响应可能是字符串 "调整成功" 或对象 {status: 1, message: '...'}
+		const isSuccess = resp === '调整成功' || resp?.status === 1
+		if (isSuccess) {
+			uni.showToast({ title: '保存成功', icon: 'success' })
+
+			// 先关闭编辑弹窗
+			closeEmployeeEditModal()
+
+			// 延迟刷新，等待后端数据更新完成
+			setTimeout(async () => {
+				// 刷新工序列表的员工数据：清除缓存并重新加载当前选中产品的工序
+				const targetProduct = productList.value.find(p =>
+					p.preDispatchRowids && p.preDispatchRowids.includes(preDispatchRowid)
+				)
+				if (targetProduct) {
+					// 清除该产品的工序缓存
+					const idx = loadedProductIds.value.indexOf(targetProduct.rowid)
+					if (idx > -1) loadedProductIds.value.splice(idx, 1)
+					// 从 processList 中移除该产品的旧工序
+					processList.value = processList.value.filter(p => p.productRowid !== targetProduct.rowid)
+					// 重新加载工序
+					await loadProductProcesses(targetProduct)
+				}
+
+				// 刷新底部员工列表
+				loadWorkshopEmployees()
+
+				// 刷新汇总
+				loadSummaries(true)
+				loadEmployeeDispatchSummary()
+			}, 500)
+		} else {
+			uni.showToast({ title: resp.message || '保存失败', icon: 'none' })
+		}
+	} catch (e) {
+		uni.hideLoading()
+		console.error('保存员工编辑失败:', e)
+		uni.showToast({ title: '保存失败', icon: 'none' })
+	}
+}
+
 function getCurrentDate() {
 	const now = new Date()
 	const year = now.getFullYear()
@@ -2554,6 +2761,15 @@ function getTomorrowDate() {
 	const year = tomorrow.getFullYear()
 	const month = String(tomorrow.getMonth() + 1).padStart(2, '0')
 	const day = String(tomorrow.getDate()).padStart(2, '0')
+	return `${year}-${month}-${day}`
+}
+
+function getYesterdayDate() {
+	const yesterday = new Date()
+	yesterday.setDate(yesterday.getDate() - 1)
+	const year = yesterday.getFullYear()
+	const month = String(yesterday.getMonth() + 1).padStart(2, '0')
+	const day = String(yesterday.getDate()).padStart(2, '0')
 	return `${year}-${month}-${day}`
 }
 
@@ -2586,11 +2802,13 @@ const loadEmployeeOptions = async () => {
 			const mappedEmployees = res.data.map(item => {
 				const dispatchWorkDate = item[EMPLOYEE_FIELD_MAP.dispatchDate] || ''
 				const totalHoursStr = item[EMPLOYEE_FIELD_MAP.totalHours] || '0'
+				const wageStr = item[EMPLOYEE_FIELD_MAP.wage] || '0'
 				return {
 					id: item['6943bd902161a0fc58bad5ab'] || '',
 					name: item[EMPLOYEE_FIELD_MAP.employeeName] || '',
 					position: item['6943bf332161a0fc58bad7a4'] || '',
 					totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
+					wage: wageStr === '' ? 0 : parseFloat(wageStr) || 0,
 					dispatchWorkDate: dispatchWorkDate
 				}
 			})
@@ -2625,6 +2843,9 @@ const toggleEmployee = (emp) => {
 		ids.push(emp.id)
 		names.push(emp.name)
 	}
+	// 同步到员工编辑数据
+	employeeEditData.value.selectedEmployeeIds = [...ids]
+	employeeEditData.value.selectedEmployeeNames = [...names]
 	// sync single employee field (first selected)
 	if (ids.length > 0) {
 		editData.value.employeeId = ids[0]
@@ -4457,10 +4678,10 @@ onMounted(async () => {
 	top: 0;
 	right: 0;
 	bottom: 0;
-	width: px2vw(400px);
+	width: px2vw(440px);
 	background-color: #fff;
 	box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
-	z-index: 1001;
+	z-index: 1003;
 	transform: translateX(100%);
 	transition: transform 0.3s ease;
 
@@ -4504,7 +4725,7 @@ onMounted(async () => {
 			display: flex;
 			flex-direction: row;
 			align-items: center;
-			padding: px2vw(20px);
+			padding: px2vw(12px) px2vw(16px);
 			border-bottom: 1px solid #f0f0f0;
 
 			&.active {
@@ -4512,18 +4733,18 @@ onMounted(async () => {
 			}
 
 			.employee-modal-check {
-				width: px2vw(48px);
-				height: px2vw(48px);
+				width: px2vw(28px);
+				height: px2vw(28px);
 				border: 2px solid #ddd;
-				border-radius: px2vw(8px);
+				border-radius: px2vw(6px);
 				display: flex;
 				align-items: center;
 				justify-content: center;
 				flex-shrink: 0;
-				margin-right: px2vw(16px);
+				margin-right: px2vw(12px);
 
 				.check-icon {
-					font-size: px2vw(28px);
+					font-size: px2vw(18px);
 					color: #3498db;
 					font-weight: bold;
 				}
@@ -4541,26 +4762,25 @@ onMounted(async () => {
 			.employee-modal-info {
 				flex: 1;
 				display: flex;
-				flex-direction: column;
-				align-items: flex-start;
+				flex-direction: row;
+				align-items: center;
 			}
 
 			.employee-modal-name {
-				font-size: px2vw(28px);
-				color: #333;
-				font-weight: 600;
-				margin-bottom: px2vw(8px);
-			}
-
-			.employee-modal-position {
 				font-size: px2vw(22px);
-				color: #666;
-				margin-bottom: px2vw(4px);
+				color: #333;
+				margin-right: px2vw(16px);
 			}
 
 			.employee-modal-hours {
 				font-size: px2vw(22px);
-				color: #999;
+				color: #f1c40f;
+				margin-right: px2vw(16px);
+			}
+
+			.employee-modal-wage {
+				font-size: px2vw(22px);
+				color: #27ae60;
 			}
 		}
 
@@ -4572,6 +4792,218 @@ onMounted(async () => {
 				font-size: px2vw(24px);
 				color: #999;
 			}
+		}
+	}
+}
+
+// 员工编辑弹窗样式
+.employee-edit-modal {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.5);
+	z-index: 1002;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+
+	.employee-edit-modal-content {
+		width: px2vw(800px);
+		max-height: 85vh;
+		background-color: #fff;
+		border-radius: px2vw(20px);
+		overflow: hidden;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.employee-edit-modal-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: px2vw(20px) px2vw(30px);
+		border-bottom: 1px solid #eee;
+		flex-shrink: 0;
+
+		.employee-edit-modal-title {
+			font-size: px2vw(28px);
+			font-weight: bold;
+			color: #333;
+		}
+
+		.employee-edit-modal-close {
+			font-size: px2vw(36px);
+			color: #999;
+			line-height: 1;
+		}
+	}
+
+	.employee-edit-modal-body {
+		flex: 1;
+		overflow-y: auto;
+		padding: px2vw(24px);
+
+		.edit-info-row {
+			display: flex;
+			gap: px2vw(24px);
+			margin-bottom: px2vw(24px);
+
+			.info-item {
+				flex: 1;
+				background-color: #f8f9fa;
+				border-radius: px2vw(12px);
+				padding: px2vw(12px) px2vw(16px);
+				display: flex;
+				flex-direction: row;
+				align-items: center;
+				gap: px2vw(8px);
+
+				.info-label {
+					font-size: px2vw(22px);
+					color: #999;
+				}
+
+				.info-value {
+					font-size: px2vw(24px);
+					color: #333;
+					font-weight: 600;
+				}
+			}
+		}
+
+		.employee-tags-section {
+			background-color: #f8f9fa;
+			border-radius: px2vw(16px);
+			padding: px2vw(20px);
+
+			.section-title {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				margin-bottom: px2vw(16px);
+
+				text {
+					font-size: px2vw(26px);
+					color: #333;
+					font-weight: 500;
+				}
+
+				.section-count {
+					color: #3498db;
+					font-size: px2vw(24px);
+				}
+			}
+
+			.employee-tags-container {
+				display: flex;
+				flex-wrap: wrap;
+				gap: px2vw(12px);
+				min-height: px2vw(60px);
+				margin-bottom: px2vw(16px);
+
+				.employee-tag-item {
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					width: calc((100% - px2vw(48px)) / 5);
+					background: linear-gradient(135deg, #e8f6f3, #d5efe9);
+					border: 1px solid #a3d9c9;
+					border-radius: px2vw(8px);
+					padding: px2vw(12px) px2vw(10px);
+					gap: px2vw(8px);
+
+					.tag-name {
+						font-size: px2vw(22px);
+						color: #2e8b7a;
+						font-weight: 500;
+						flex: 1;
+						overflow: hidden;
+						text-overflow: ellipsis;
+						white-space: nowrap;
+					}
+
+					.tag-delete {
+						width: px2vw(28px);
+						height: px2vw(28px);
+						border-radius: px2vw(4px);
+						background-color: rgba(46, 139, 122, 0.15);
+						display: flex;
+						align-items: center;
+						justify-content: center;
+						font-size: px2vw(18px);
+						color: #2e8b7a;
+						font-weight: bold;
+						transition: all 0.2s;
+
+						&:active {
+							background-color: rgba(46, 139, 122, 0.3);
+							transform: scale(0.95);
+						}
+					}
+				}
+
+				.no-employee-tip {
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					width: 100%;
+					height: px2vw(60px);
+
+					text {
+						font-size: px2vw(24px);
+						color: #bbb;
+					}
+				}
+			}
+
+			.add-employee-btn {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				width: calc((100% - px2vw(48px)) / 5);
+				background: #f0f0f0;
+				border: 1px dashed #ccc;
+				border-radius: px2vw(8px);
+				padding: px2vw(12px) px2vw(10px);
+
+				.add-btn-icon {
+					font-size: px2vw(28px);
+					color: #3498db;
+					font-weight: bold;
+				}
+			}
+		}
+	}
+
+	.employee-edit-modal-footer {
+		display: flex;
+		border-top: 1px solid #eee;
+		flex-shrink: 0;
+
+		.edit-btn-cancel,
+		.edit-btn-confirm {
+			flex: 1;
+			text-align: center;
+			padding: px2vw(20px);
+			font-size: px2vw(28px);
+			transition: background-color 0.15s;
+
+			&:active {
+				background-color: #f0f0f0;
+				opacity: 0.7;
+			}
+		}
+
+		.edit-btn-cancel {
+			color: #666;
+			border-right: 1px solid #eee;
+		}
+
+		.edit-btn-confirm {
+			color: #3498db;
+			font-weight: bold;
 		}
 	}
 }
