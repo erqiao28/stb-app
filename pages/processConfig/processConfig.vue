@@ -71,50 +71,86 @@
 							<text>暂无工序数据</text>
 						</view>
 						<view v-else class="chart-levels">
-							<!-- 二级工序 -->
-							<scroll-view class="chart-row" scroll-x>
-								<view class="chart-bars">
-									<view
-										class="chart-bar"
-										:class="{ 'active': selectedLevel2Id === node.rowid }"
-										v-for="node in level2List"
-										:key="node.rowid"
-										@click="selectLevel2(node.rowid)"
-									>
-										<text class="chart-bar-name">{{ node.name || '-' }}</text>
-									</view>
+						<!-- 二级工序容器 -->
+						<view class="level2-row">
+							<view class="level2-column" v-for="node in level2List" :key="node.rowid">
+								<view
+									:id="'level2-' + node.rowid"
+									class="chart-bar"
+									:class="{ 'active': selectedLevel2Id === node.rowid }"
+									@click="selectLevel2(node.rowid)"
+								>
+									<text class="chart-bar-name">{{ node.name || '-' }}</text>
 								</view>
-							</scroll-view>
-
-							<!-- 三级工序 -->
-							<scroll-view class="chart-row" scroll-x v-if="selectedLevel2Id && level3List.length">
-								<view class="chart-bars">
-									<view
-										class="chart-bar level3"
-										:class="{ 'active': selectedLevel3Id === child.rowid }"
-										v-for="child in level3List"
-										:key="child.rowid"
-										@click="selectLevel3(child.rowid)"
-									>
-										<text class="chart-bar-name">{{ child.name || '-' }}</text>
-									</view>
-								</view>
-							</scroll-view>
-
-							<!-- 四级工序 -->
-							<scroll-view class="chart-row" scroll-x v-if="selectedLevel3Id && level4List.length">
-								<view class="chart-bars">
-									<view
-										class="chart-bar level4"
-										v-for="leaf in level4List"
-										:key="leaf.rowid"
-									>
-										<text class="chart-bar-name">{{ leaf.name || '-' }}</text>
-									</view>
-								</view>
-							</scroll-view>
+							</view>
 						</view>
+
+						<!-- 连接线层 -->
+						<view class="connector-layer" v-if="connectorLines.length">
+							<view
+								class="connector-line"
+								:class="line.type"
+								v-for="(line, idx) in connectorLines"
+								:key="idx"
+								:style="{
+									left: line.left + 'px',
+									top: line.top + 'px',
+									width: line.type === 'horizontal' ? line.width + 'px' : '1px',
+									height: line.type === 'vertical' ? line.height + 'px' : '1px'
+								}"
+							></view>
+						</view>
+
+						<!-- 三级工序容器 -->
+						<view class="level3-row" v-if="selectedLevel2Id && selectedLevel2Children.length">
+							<view class="level3-column" v-for="child in selectedLevel2Children" :key="child.rowid">
+								<view
+									:id="'level3-' + child.rowid"
+									class="chart-bar level3"
+									:class="{ 'active': selectedLevel3Id === child.rowid }"
+									@click.stop="selectLevel3(child.rowid)"
+								>
+									<text class="chart-bar-name">{{ child.name || '-' }}</text>
+								</view>
+
+								<!-- 四级工序 -->
+								<view class="children-wrapper" v-if="selectedLevel3Id === child.rowid && child.children.length">
+									<view class="connector-vertical"></view>
+									<view class="children-row">
+										<view class="child-column" v-for="leaf in child.children" :key="leaf.rowid">
+											<view class="connector-vertical-short"></view>
+											<view class="chart-bar level4">
+												<text class="chart-bar-name">{{ leaf.name || '-' }}</text>
+											</view>
+										</view>
+									</view>
+								</view>
+							</view>
+						</view>
+					</view>
 					</scroll-view>
+
+					<!-- 已选工序栏 -->
+					<view class="selected-process-panel" v-if="selectedLevel3Sequence.length">
+						<view class="selected-process-title">已选工序</view>
+						<scroll-view class="selected-process-scroll" scroll-x>
+							<view class="selected-process-list">
+								<view
+									class="selected-process-item"
+									v-for="(process, idx) in selectedLevel3Processes"
+									:key="process.rowid"
+								>
+									<view class="selected-process-index">{{ idx + 1 }}</view>
+									<view
+										class="chart-bar selected"
+										@click="removeSelectedLevel3(process.rowid)"
+									>
+										<text class="chart-bar-name">{{ process.name || '-' }}</text>
+									</view>
+								</view>
+							</view>
+						</scroll-view>
+					</view>
 				</view>
 			</view>
 		</view>
@@ -122,7 +158,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
@@ -505,6 +541,10 @@ const selectedProductName = computed(() => {
 
 const handleProductClick = (product) => {
 	selectedProductId.value = product.rowid
+	selectedLevel2Id.value = ''
+	selectedLevel3Id.value = ''
+	selectedLevel3Sequence.value = []
+	connectorLines.value = []
 	loadProcessTree()
 }
 
@@ -560,6 +600,9 @@ const loadProcessTree = async () => {
 		
 		// 默认展开二级工序
 		expandedTreeIds.value = processTree.value.map(node => node.rowid)
+		
+		// 如果当前选中的二级工序仍有效，重绘连接线
+		updateConnectors()
 	} catch (e) {
 		console.error('加载工序数据失败:', e)
 		uni.showToast({ title: '加载工序数据失败', icon: 'none' })
@@ -619,22 +662,89 @@ const buildProcessTree = (processes) => {
 
 const selectedLevel2Id = ref('')
 const selectedLevel3Id = ref('')
+const selectedLevel3Sequence = ref([])
 
 const level2List = computed(() => processTree.value)
-const level3List = computed(() => {
-	const node = processTree.value.find(n => n.rowid === selectedLevel2Id.value)
+
+const selectedLevel2Children = computed(() => {
+	const node = level2List.value.find(n => n.rowid === selectedLevel2Id.value)
 	return node ? node.children : []
 })
-const level4List = computed(() => {
-	let result = []
-	processTree.value.forEach(n => {
-		const child = n.children.find(c => c.rowid === selectedLevel3Id.value)
-		if (child) {
-			result = child.children
-		}
+
+const selectedLevel3Processes = computed(() => {
+	const allLevel3 = []
+	processTree.value.forEach(node => {
+		allLevel3.push(...node.children)
 	})
-	return result
+	return selectedLevel3Sequence.value.map(rowid => {
+		return allLevel3.find(child => child.rowid === rowid)
+	}).filter(Boolean)
 })
+
+const connectorLines = ref([])
+
+const getRect = (selector) => {
+	return new Promise((resolve) => {
+		uni.createSelectorQuery().select(selector).boundingClientRect((rect) => {
+			resolve(rect || null)
+		}).exec()
+	})
+}
+
+const updateConnectors = async () => {
+	await nextTick()
+	if (!selectedLevel2Id.value || selectedLevel2Children.value.length === 0) {
+		connectorLines.value = []
+		return
+	}
+
+	const chartRect = await getRect('.chart-levels')
+	const selectedL2Rect = await getRect('#level2-' + selectedLevel2Id.value)
+	if (!chartRect || !selectedL2Rect) {
+		connectorLines.value = []
+		return
+	}
+
+	const selectedCenterX = selectedL2Rect.left + selectedL2Rect.width / 2 - chartRect.left
+	const l2BottomY = selectedL2Rect.bottom - chartRect.top
+
+	const childRects = []
+	for (const child of selectedLevel2Children.value) {
+		const rect = await getRect('#level3-' + child.rowid)
+		if (rect) {
+			childRects.push({
+				rowid: child.rowid,
+				centerX: rect.left + rect.width / 2 - chartRect.left,
+				topY: rect.top - chartRect.top
+			})
+		}
+	}
+
+	if (childRects.length === 0) {
+		connectorLines.value = []
+		return
+	}
+
+	const minX = Math.min(...childRects.map(c => c.centerX))
+	const maxX = Math.max(...childRects.map(c => c.centerX))
+	const midY = l2BottomY + (childRects[0].topY - l2BottomY) / 2
+
+	const lines = [
+		// 从选中的二级工序向下到横向主干
+		{ type: 'vertical', left: selectedCenterX, top: l2BottomY, height: midY - l2BottomY },
+		// 横向主干
+		{ type: 'horizontal', left: minX, top: midY, width: maxX - minX }
+	]
+
+	// 从横向主干向上到每个三级工序
+	childRects.forEach((c) => {
+		lines.push({ type: 'vertical', left: c.centerX, top: midY, height: c.topY - midY })
+	})
+
+	connectorLines.value = lines
+}
+
+watch(selectedLevel2Id, updateConnectors)
 
 const selectLevel2 = (rowid) => {
 	selectedLevel2Id.value = rowid === selectedLevel2Id.value ? '' : rowid
@@ -642,7 +752,23 @@ const selectLevel2 = (rowid) => {
 }
 
 const selectLevel3 = (rowid) => {
-	selectedLevel3Id.value = rowid === selectedLevel3Id.value ? '' : rowid
+	const idx = selectedLevel3Sequence.value.indexOf(rowid)
+	if (idx >= 0) {
+		selectedLevel3Sequence.value.splice(idx, 1)
+		if (selectedLevel3Id.value === rowid) {
+			selectedLevel3Id.value = ''
+		}
+	} else {
+		selectedLevel3Id.value = rowid
+		selectedLevel3Sequence.value.push(rowid)
+	}
+}
+
+const removeSelectedLevel3 = (rowid) => {
+	const idx = selectedLevel3Sequence.value.indexOf(rowid)
+	if (idx >= 0) {
+		selectedLevel3Sequence.value.splice(idx, 1)
+	}
 }
 
 onMounted(() => {
@@ -980,6 +1106,57 @@ onMounted(() => {
 				}
 			}
 
+			.chart-bar {
+				flex-shrink: 0;
+				width: px2vw(60px);
+				height: px2vw(180px);
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				background: linear-gradient(180deg, #5884f1 0%, #3b6ad9 100%);
+				border-radius: px2vw(8px);
+				box-shadow: 0 2px 8px rgba(88, 132, 241, 0.3);
+				cursor: pointer;
+				transition: all 0.2s ease;
+
+				&:active {
+					transform: scale(0.96);
+				}
+
+				&.active {
+					background: linear-gradient(180deg, #27ae60 0%, #219150 100%);
+					box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+				}
+
+				&.level3 {
+					height: px2vw(180px);
+					background: linear-gradient(180deg, #27ae60 0%, #219150 100%);
+					box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+				}
+
+				&.level4 {
+					height: px2vw(120px);
+					background: linear-gradient(180deg, #9b59b6 0%, #7d3c98 100%);
+					box-shadow: 0 2px 8px rgba(155, 89, 182, 0.3);
+				}
+
+				&.selected {
+					background: linear-gradient(180deg, #27ae60 0%, #219150 100%);
+					box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+				}
+
+				.chart-bar-name {
+					font-size: px2vw(20px);
+					color: #fff;
+					writing-mode: vertical-rl;
+					white-space: nowrap;
+					overflow: hidden;
+					text-overflow: ellipsis;
+					max-height: 90%;
+					padding: px2vw(8px) 0;
+				}
+			}
+
 			.process-chart-scroll {
 				flex: 1;
 				overflow: hidden;
@@ -998,75 +1175,150 @@ onMounted(() => {
 				}
 
 				.chart-levels {
+					position: relative;
 					padding: px2vw(20px);
+					overflow-x: auto;
 
-					.chart-row {
+					.level2-row {
+						display: flex;
+						flex-wrap: wrap;
+						justify-content: space-around;
+						align-items: flex-start;
 						width: 100%;
-						white-space: nowrap;
-						margin-bottom: px2vw(20px);
+					}
 
-						&:last-child {
-							margin-bottom: 0;
-						}
+					.level2-column {
+						display: flex;
+						flex-direction: column;
+						align-items: center;
+						flex-shrink: 0;
+						margin: px2vw(10px);
+						min-width: px2vw(80px);
+					}
 
-						.chart-bars {
-							display: inline-flex;
-							align-items: flex-end;
-							gap: px2vw(16px);
-							padding: px2vw(10px);
-							min-width: 100%;
+					.connector-layer {
+						position: absolute;
+						top: 0;
+						left: 0;
+						width: 100%;
+						height: 100%;
+						pointer-events: none;
+						z-index: 1;
 
-							.chart-bar {
-								flex-shrink: 0;
-								width: px2vw(60px);
-								height: px2vw(180px);
-								display: flex;
-								align-items: center;
-								justify-content: center;
-								background: linear-gradient(180deg, #5884f1 0%, #3b6ad9 100%);
-								border-radius: px2vw(8px);
-								box-shadow: 0 2px 8px rgba(88, 132, 241, 0.3);
-								cursor: pointer;
-								transition: all 0.2s ease;
+						.connector-line {
+							position: absolute;
+							background-color: #999;
 
-								&:active {
-									transform: scale(0.96);
-								}
+							&.horizontal {
+								height: 1px;
+							}
 
-								&.active {
-									background: linear-gradient(180deg, #27ae60 0%, #219150 100%);
-									box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
-								}
-
-								&.level3 {
-									height: px2vw(150px);
-									background: linear-gradient(180deg, #f5a623 0%, #d48b1a 100%);
-									box-shadow: 0 2px 8px rgba(245, 166, 35, 0.3);
-
-									&.active {
-										background: linear-gradient(180deg, #27ae60 0%, #219150 100%);
-										box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
-									}
-								}
-
-								&.level4 {
-									height: px2vw(120px);
-									background: linear-gradient(180deg, #9b59b6 0%, #7d3c98 100%);
-									box-shadow: 0 2px 8px rgba(155, 89, 182, 0.3);
-								}
-
-								.chart-bar-name {
-									font-size: px2vw(20px);
-									color: #fff;
-									writing-mode: vertical-rl;
-									white-space: nowrap;
-									overflow: hidden;
-									text-overflow: ellipsis;
-									max-height: 90%;
-									padding: px2vw(8px) 0;
-								}
+							&.vertical {
+								width: 1px;
 							}
 						}
+					}
+
+					.level3-row {
+						display: flex;
+						justify-content: center;
+						align-items: flex-start;
+						gap: px2vw(16px);
+						width: 100%;
+						margin-top: px2vw(20px);
+					}
+
+					.level3-column {
+						display: flex;
+						flex-direction: column;
+						align-items: center;
+						flex-shrink: 0;
+					}
+
+					.children-wrapper {
+						display: flex;
+						flex-direction: column;
+						align-items: center;
+						margin-top: px2vw(20px);
+					}
+
+					.connector-vertical {
+						width: 1px;
+						height: px2vw(30px);
+						background-color: #999;
+					}
+
+					.children-row {
+						display: inline-flex;
+						align-items: flex-start;
+						gap: px2vw(16px);
+						padding-top: px2vw(20px);
+						position: relative;
+						border-top: 1px solid #999;
+
+						.child-column {
+							display: flex;
+							flex-direction: column;
+							align-items: center;
+							position: relative;
+
+							.connector-vertical-short {
+								position: absolute;
+								top: px2vw(-20px);
+								left: 50%;
+								transform: translateX(-50%);
+								width: 1px;
+								height: px2vw(20px);
+								background-color: #999;
+							}
+						}
+					}
+
+				}
+			}
+
+			.selected-process-panel {
+				flex-shrink: 0;
+				background-color: #fff;
+				border-top: 1px solid #eee;
+				padding: px2vw(16px) px2vw(20px);
+
+				.selected-process-title {
+					font-size: px2vw(24px);
+					font-weight: bold;
+					color: #333;
+					margin-bottom: px2vw(12px);
+				}
+
+				.selected-process-scroll {
+					width: 100%;
+					white-space: nowrap;
+				}
+
+				.selected-process-list {
+					display: inline-flex;
+					align-items: flex-end;
+					gap: px2vw(16px);
+					padding: px2vw(10px) 0;
+				}
+
+				.selected-process-item {
+					display: flex;
+					flex-direction: column;
+					align-items: center;
+					flex-shrink: 0;
+
+					.selected-process-index {
+						width: px2vw(32px);
+						height: px2vw(32px);
+						line-height: px2vw(32px);
+						text-align: center;
+						background-color: #5884f1;
+						color: #fff;
+						border-radius: 50%;
+						font-size: px2vw(18px);
+						font-weight: bold;
+						margin-bottom: px2vw(8px);
 					}
 				}
 			}
