@@ -798,6 +798,7 @@ const submitProcessConfig = async () => {
 
 	const params = {
 		productRowid: selectedProductId.value,
+		workshop: loginWorkshop.value,
 		processes: selectedLevel3Sequence.value.map((rowid, index) => ({
 			rowid,
 			sequence: index + 1
