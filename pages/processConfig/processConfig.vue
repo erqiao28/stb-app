@@ -17,10 +17,13 @@
 				<scroll-view class="product-list" scroll-y v-if="!isLeftPanelCollapsed">
 					<view class="order-group" v-for="(group, gIdx) in groupedProductList" :key="group.orderNo">
 						<view class="order-header" @click="toggleOrderCollapse(group.orderNo)">
-							<text class="order-index">{{ chineseNumberMap[gIdx + 1] || (gIdx + 1) }}</text>
+						<text class="order-index">{{ chineseNumberMap[gIdx + 1] || (gIdx + 1) }}</text>
+						<view class="order-header-main">
 							<text class="order-no">{{ group.orderNo || '-' }}</text>
-							<text class="order-count">({{ group.products.length }})</text>
+							<text class="order-delivery-date" v-if="group.orderDeliveryDate">{{ group.orderDeliveryDate }}</text>
 						</view>
+						<text class="order-count">({{ group.products.length }})</text>
+					</view>
 						<view class="order-products" v-show="!isOrderCollapsed(group.orderNo)">
 							<view
 								v-for="(product, idx) in group.products"
@@ -32,6 +35,7 @@
 								<text class="product-index">{{ idx + 1 }}</text>
 								<view class="product-info">
 									<text class="product-name">{{ product.productName || '-' }}</text>
+									<text class="product-exchange-date" v-if="product.productExchangeDate">{{ product.productExchangeDate }}</text>
 								</view>
 								<view class="product-btns">
 									<text class="expand-btn" @click.stop="toggleExpand(product.rowid)">
@@ -195,7 +199,9 @@ const PRODUCT_FIELD_MAP = {
 	auditStatus: '675fd061d12dcb2ce0aa8b4a',
 	configStatus: '690edc630c0cc1d669a4e773',
 	productionStatus: '6968eb149223cfe3a0c3ad86',
-	craftBill: '66976f982503723eec1b00ea'
+	craftBill: '66976f982503723eec1b00ea',
+	orderDeliveryDate: '6a58683d6d70ffabc67c630f',
+	productExchangeDate: '69808f5d3b5e707f84ce9841'
 }
 
 // 下拉选项 key（根据字段对照表）
@@ -481,6 +487,8 @@ const loadProducts = async () => {
 				productName: formatFieldValue(item[PRODUCT_FIELD_MAP.productName]) || '',
 				productionCode: formatFieldValue(item[PRODUCT_FIELD_MAP.productionCode]) || '',
 				models: formatFieldValue(item[PRODUCT_FIELD_MAP.models]) || '',
+				orderDeliveryDate: formatFieldValue(item[PRODUCT_FIELD_MAP.orderDeliveryDate]) || '',
+				productExchangeDate: formatFieldValue(item[PRODUCT_FIELD_MAP.productExchangeDate]) || '',
 				craftBillSids: extractRelationSids(item[PRODUCT_FIELD_MAP.craftBill])
 			}))
 			
@@ -507,7 +515,7 @@ const collapseAllOrders = () => {
 	collapsedOrderIds.value = [...new Set(productList.value.map(p => p.orderNo).filter(Boolean))]
 }
 
-// 按订单编号分组
+// 按订单编号分组，并按订单交货日期升序排列
 const groupedProductList = computed(() => {
 	const groups = {}
 	productList.value.forEach(product => {
@@ -515,12 +523,17 @@ const groupedProductList = computed(() => {
 		if (!groups[orderNo]) {
 			groups[orderNo] = {
 				orderNo,
+				orderDeliveryDate: product.orderDeliveryDate || '',
 				products: []
 			}
 		}
 		groups[orderNo].products.push(product)
 	})
-	return Object.values(groups)
+	return Object.values(groups).sort((a, b) => {
+		if (!a.orderDeliveryDate) return 1
+		if (!b.orderDeliveryDate) return -1
+		return a.orderDeliveryDate.localeCompare(b.orderDeliveryDate)
+	})
 })
 
 const toggleOrderCollapse = (orderNo) => {
@@ -786,16 +799,7 @@ const removeSelectedLevel3 = (rowid) => {
 
 const isSubmitting = ref(false)
 
-const submitProcessConfig = async () => {
-	if (!selectedProductId.value) {
-		uni.showToast({ title: '请先选择产品', icon: 'none' })
-		return
-	}
-	if (selectedLevel3Sequence.value.length === 0) {
-		uni.showToast({ title: '请至少选择一个工序', icon: 'none' })
-		return
-	}
-
+const doSubmitProcessConfig = async () => {
 	const params = {
 		productRowid: selectedProductId.value,
 		workshop: loginWorkshop.value,
@@ -810,12 +814,39 @@ const submitProcessConfig = async () => {
 		const res = await http.post(PROCESS_CONFIG_COMPLETE_URL, params)
 		console.log('工艺配置提交成功:', res)
 		uni.showToast({ title: '配置完成', icon: 'success' })
+
+		// 提交成功后刷新产品列表
+		await loadProducts()
 	} catch (e) {
 		console.error('工艺配置提交失败:', e)
 		uni.showToast({ title: '提交失败，请重试', icon: 'none' })
 	} finally {
 		isSubmitting.value = false
 	}
+}
+
+const submitProcessConfig = () => {
+	if (!selectedProductId.value) {
+		uni.showToast({ title: '请先选择产品', icon: 'none' })
+		return
+	}
+	if (selectedLevel3Sequence.value.length === 0) {
+		uni.showToast({ title: '请至少选择一个工序', icon: 'none' })
+		return
+	}
+
+	const count = selectedLevel3Sequence.value.length
+	uni.showModal({
+		title: '确认提交',
+		content: `已选择 ${count} 个工序，确定提交工艺配置吗？`,
+		confirmText: '确定',
+		cancelText: '取消',
+		success: (res) => {
+			if (res.confirm) {
+				doSubmitProcessConfig()
+			}
+		}
+	})
 }
 
 onMounted(() => {
@@ -953,8 +984,16 @@ onMounted(() => {
 						flex-shrink: 0;
 					}
 
-					.order-no {
+					.order-header-main {
 						flex: 1;
+						display: flex;
+						flex-direction: row;
+						align-items: center;
+						min-width: 0;
+						overflow: hidden;
+					}
+
+					.order-no {
 						font-size: px2vw(22px);
 						color: #333;
 						font-weight: bold;
@@ -962,6 +1001,16 @@ onMounted(() => {
 						white-space: nowrap;
 						overflow: hidden;
 						text-overflow: ellipsis;
+					}
+
+					.order-delivery-date {
+						font-size: px2vw(18px);
+						color: #888;
+						margin-left: px2vw(12px);
+						white-space: nowrap;
+						overflow: hidden;
+						text-overflow: ellipsis;
+						flex-shrink: 0;
 					}
 
 					.order-count {
@@ -1025,8 +1074,17 @@ onMounted(() => {
 					white-space: nowrap;
 					overflow: hidden;
 					text-overflow: ellipsis;
-					flex: 1;
 					min-width: 0;
+				}
+
+				.product-exchange-date {
+					font-size: px2vw(18px);
+					color: #888;
+					margin-left: px2vw(12px);
+					white-space: nowrap;
+					overflow: hidden;
+					text-overflow: ellipsis;
+					flex-shrink: 0;
 				}
 
 				.product-btns {
