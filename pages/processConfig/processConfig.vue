@@ -65,6 +65,14 @@
 					<view class="chart-header">
 						<text class="chart-title">工序配置</text>
 						<text class="chart-subtitle">{{ selectedProductName || '-' }}</text>
+						<view
+							class="submit-btn"
+							:class="{ 'disabled': !selectedProductId || selectedLevel3Sequence.length === 0 || isSubmitting }"
+							@click="submitProcessConfig"
+						>
+							<text v-if="isSubmitting">提交中...</text>
+							<text v-else>配置完成</text>
+						</view>
 					</view>
 					<scroll-view class="process-chart-scroll" scroll-y>
 						<view v-if="!level2List.length" class="chart-empty">
@@ -107,9 +115,10 @@
 								<view
 									:id="'level3-' + child.rowid"
 									class="chart-bar level3"
-									:class="{ 'active': selectedLevel3Id === child.rowid }"
+									:class="{ 'active': selectedLevel3Id === child.rowid, 'selected': selectedLevel3Set.has(child.rowid) }"
 									@click.stop="selectLevel3(child.rowid)"
 								>
+									<view class="selected-marker" v-if="selectedLevel3Set.has(child.rowid)"></view>
 									<text class="chart-bar-name">{{ child.name || '-' }}</text>
 								</view>
 
@@ -160,6 +169,8 @@
 <script setup>
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
+import http from '../../utils/request'
+import { PROCESS_CONFIG_COMPLETE_URL } from '../../utils/api'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 
@@ -681,6 +692,8 @@ const selectedLevel3Processes = computed(() => {
 	}).filter(Boolean)
 })
 
+const selectedLevel3Set = computed(() => new Set(selectedLevel3Sequence.value))
+
 const connectorLines = ref([])
 
 const getRect = (selector) => {
@@ -768,6 +781,39 @@ const removeSelectedLevel3 = (rowid) => {
 	const idx = selectedLevel3Sequence.value.indexOf(rowid)
 	if (idx >= 0) {
 		selectedLevel3Sequence.value.splice(idx, 1)
+	}
+}
+
+const isSubmitting = ref(false)
+
+const submitProcessConfig = async () => {
+	if (!selectedProductId.value) {
+		uni.showToast({ title: '请先选择产品', icon: 'none' })
+		return
+	}
+	if (selectedLevel3Sequence.value.length === 0) {
+		uni.showToast({ title: '请至少选择一个工序', icon: 'none' })
+		return
+	}
+
+	const params = {
+		productRowid: selectedProductId.value,
+		processes: selectedLevel3Sequence.value.map((rowid, index) => ({
+			rowid,
+			sequence: index + 1
+		}))
+	}
+
+	isSubmitting.value = true
+	try {
+		const res = await http.post(PROCESS_CONFIG_COMPLETE_URL, params)
+		console.log('工艺配置提交成功:', res)
+		uni.showToast({ title: '配置完成', icon: 'success' })
+	} catch (e) {
+		console.error('工艺配置提交失败:', e)
+		uni.showToast({ title: '提交失败，请重试', icon: 'none' })
+	} finally {
+		isSubmitting.value = false
 	}
 }
 
@@ -1093,6 +1139,7 @@ onMounted(() => {
 					font-weight: bold;
 					color: #333;
 					margin-right: px2vw(16px);
+					flex-shrink: 0;
 				}
 
 				.chart-subtitle {
@@ -1103,6 +1150,32 @@ onMounted(() => {
 					overflow: hidden;
 					text-overflow: ellipsis;
 					white-space: nowrap;
+				}
+
+				.submit-btn {
+					flex-shrink: 0;
+					padding: 0 px2vw(20px);
+					height: px2vw(42px);
+					line-height: px2vw(42px);
+					background: linear-gradient(180deg, #5884f1 0%, #3b6ad9 100%);
+					color: #fff;
+					font-size: px2vw(22px);
+					font-weight: bold;
+					border-radius: px2vw(8px);
+					box-shadow: 0 2px 8px rgba(88, 132, 241, 0.3);
+					text-align: center;
+					transition: all 0.2s ease;
+					margin-left: px2vw(16px);
+
+					&:active {
+						transform: scale(0.98);
+					}
+
+					&.disabled {
+						background: #c5c5c5;
+						box-shadow: none;
+						pointer-events: none;
+					}
 				}
 			}
 
@@ -1118,6 +1191,7 @@ onMounted(() => {
 				box-shadow: 0 2px 8px rgba(88, 132, 241, 0.3);
 				cursor: pointer;
 				transition: all 0.2s ease;
+				position: relative;
 
 				&:active {
 					transform: scale(0.96);
@@ -1154,6 +1228,17 @@ onMounted(() => {
 					text-overflow: ellipsis;
 					max-height: 90%;
 					padding: px2vw(8px) 0;
+				}
+
+				.selected-marker {
+					position: absolute;
+					top: px2vw(8px);
+					right: px2vw(8px);
+					width: px2vw(16px);
+					height: px2vw(16px);
+					background-color: #fff;
+					border-radius: 50%;
+					box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 				}
 			}
 
@@ -1319,6 +1404,16 @@ onMounted(() => {
 						font-size: px2vw(18px);
 						font-weight: bold;
 						margin-bottom: px2vw(8px);
+					}
+
+					.chart-bar {
+						background: linear-gradient(180deg, #f5a623 0%, #d48b1a 100%);
+						border: none;
+						box-shadow: 0 2px 8px rgba(245, 166, 35, 0.3);
+
+						.chart-bar-name {
+							color: #fff;
+						}
 					}
 				}
 			}
