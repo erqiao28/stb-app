@@ -138,7 +138,10 @@
 					<view class="order-group" v-for="(group, gIdx) in groupedProductList" :key="group.orderNo">
 						<view class="order-header" @click="toggleOrderCollapse(group.orderNo)">
 						<text class="order-index">{{ chineseNumberMap[gIdx + 1] || (gIdx + 1) }}</text>
-						<text class="order-no">{{ group.orderNo || '-' }}</text>
+						<view class="order-header-main">
+							<text class="order-no">{{ group.orderNo || '-' }}</text>
+							<text class="order-delivery-date" v-if="group.orderDeliveryDate">{{ group.orderDeliveryDate }}</text>
+						</view>
 						<text class="order-count">({{ group.products.length }})</text>
 					</view>
 						<view class="order-products" v-show="!isOrderCollapsed(group.orderNo)">
@@ -156,6 +159,7 @@
 								<text class="product-index">{{ idx + 1 }}</text>
 								<view class="product-info">
 									<text class="product-name">{{ product.productNameNew || '-' }}</text>
+									<text class="product-delivery-date" v-if="product.productDeliveryDate">{{ product.productDeliveryDate }}</text>
 								</view>
 								<view class="product-btns">
 									<text class="expand-btn" @click.stop="toggleExpand(product.rowid)">{{ expandedIds.includes(product.rowid) ? '▼' : '▲' }}</text>
@@ -197,13 +201,14 @@
 							:style="{ gridTemplateColumns: 'min-content min-content repeat(' + group.processes.length + ', min-content)' }"
 						>
 							<view class="grid-product-name" style="grid-row: 1 / span 7; grid-column: 1">
-							<view
-							class="grid-product-action"
-							:style="{ backgroundColor: selectedProcessIds.length === 1 ? '#5884f1' : '#999' }"
-							@click.stop="openProcessActionModalByRowid(group.productRowid)"
-						>操作</view>
-							<view class="grid-product-name-text">{{ group.productName }}</view>
-						</view>
+						<view
+						class="grid-product-action"
+						:style="{ backgroundColor: selectedProcessIds.length === 1 ? '#5884f1' : '#999' }"
+						@click.stop="openProcessActionModalByRowid(group.productRowid)"
+					>操作</view>
+						<view class="grid-product-name-text">{{ group.productName }}</view>
+						<view class="grid-product-confirm" @click.stop="handleProcessListConfirm(group.productRowid)">确定</view>
+					</view>
 							<view class="grid-label-cell" style="grid-row: 1; grid-column: 2">选中</view>
 							<view class="grid-label-cell" style="grid-row: 2; grid-column: 2">顺序</view>
 							<view class="grid-label-cell" style="grid-row: 3; grid-column: 2">工序</view>
@@ -219,7 +224,7 @@
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 3, gridColumn: 3 + idx }">{{ p.processName || '-' }}</view>
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 4, gridColumn: 3 + idx }">{{ p.orderCount || 0 }}</view>
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.dailyOutput || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ productDispatchCounts[p.productRowid] || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ selectedProcessIds.includes(p.rowid) ? (productDispatchCounts[p.productRowid] || 0) : '' }}</view>
 							<view
 							v-if="isEmployeeGroupStart(group.processes, idx)"
 							class="grid-cell employee-cell"
@@ -770,7 +775,7 @@ import { callWorkflowListAPIPaged, getLabelsBySids, getWorksheetStructure } from
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
-import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, PRE_DISPATCH_PRODUCT_ADD_URL, ATTENDANCE_SUBMIT_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, POSITION_PROCESS_SELECT_URL, POSITION_PROCESS_DELETE_URL, SPRAY_PROCESS_EMPLOYEE_URL } from '../../utils/api'
+import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, PRE_DISPATCH_PROCESS_CONFIRM_URL, PRE_DISPATCH_PRODUCT_ADD_URL, ATTENDANCE_SUBMIT_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, POSITION_PROCESS_SELECT_URL, POSITION_PROCESS_DELETE_URL, SPRAY_PROCESS_EMPLOYEE_URL } from '../../utils/api'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -815,6 +820,8 @@ const PRE_DISPATCH_FIELD_MAP = {
 	paintSpec: '6a3deb356d70ffabc6702d01',
 	polishSpec: '6a3deb356d70ffabc6702d02',
 	materialSizeSpec: '6a3debe76d70ffabc6702dbb',
+	orderDeliveryDate: '6a587a166d70ffabc67c7982',
+	productDeliveryDate: '6a1e7d2c27514927ff33e56b'
 }
 
 const PRE_DISPATCH_SUMMARY_FIELD_MAP = {
@@ -1433,6 +1440,8 @@ const mapPreDispatchRow = (item) => ({
 	paintSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.paintSpec]),
 	polishSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.polishSpec]),
 	materialSizeSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.materialSizeSpec]),
+	orderDeliveryDate: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.orderDeliveryDate]) || '',
+	productDeliveryDate: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.productDeliveryDate]) || ''
 })
 
 const mapSummaryRow = (item) => ({
@@ -1920,6 +1929,53 @@ const handleConfirmDispatch = () => {
 	confirmDispatchCount.value = rowids.length
 	confirmDispatchRowids.value = rowids
 	showConfirmDispatchModal.value = true
+}
+
+const handleProcessListConfirm = async (productRowid) => {
+	// 获取该产品下勾选的工序
+	const checkedProcesses = processList.value.filter(p => p.productRowid === productRowid && selectedProcessIds.value.includes(p.rowid))
+	if (checkedProcesses.length === 0) {
+		uni.showToast({ title: '请先勾选工序', icon: 'none' })
+		return
+	}
+
+	const hasPreDispatchRowidSet = new Set()
+	const noPreDispatchRowidSet = new Set()
+	checkedProcesses.forEach(p => {
+		if (p.preDispatchRowid) {
+			hasPreDispatchRowidSet.add(p.preDispatchRowid)
+		} else {
+			noPreDispatchRowidSet.add(p.rowid)
+		}
+	})
+	const hasPreDispatchRowids = [...hasPreDispatchRowidSet]
+	const noPreDispatchRowids = [...noPreDispatchRowidSet]
+
+	try {
+		uni.showLoading({ title: '提交中...' })
+		const resp = await http.post(PRE_DISPATCH_PROCESS_CONFIRM_URL, {
+			hasPreDispatchRowids,
+			noPreDispatchRowids
+		})
+		uni.hideLoading()
+		if (resp.status === 1) {
+			uni.showToast({ title: '提交成功', icon: 'success' })
+			// 刷新该产品工序数据
+			const product = productList.value.find(item => item.rowid === productRowid)
+			if (product) {
+				loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
+				processList.value = processList.value.filter(p => p.productRowid !== productRowid)
+				selectedProcessIds.value = selectedProcessIds.value.filter(id => !checkedProcesses.some(p => p.rowid === id))
+				await loadProductProcesses(product)
+			}
+		} else {
+			uni.showToast({ title: resp.message || '提交失败', icon: 'none' })
+		}
+	} catch (e) {
+		uni.hideLoading()
+		console.error('工序列表确定提交失败:', e)
+		uni.showToast({ title: '提交失败', icon: 'none' })
+	}
 }
 
 const doConfirmDispatch = async () => {
@@ -2600,16 +2656,21 @@ const getEmployeeCellText = (processes, idx) => {
 	return names.join('、')
 }
 
+// 按订单编号分组，并按订单交货日期升序排列
 const groupedProductList = computed(() => {
 	const groups = {}
 	productList.value.forEach((product) => {
 		const key = product.orderNo || '未分类'
 		if (!groups[key]) {
-			groups[key] = { orderNo: key, products: [] }
+			groups[key] = { orderNo: key, orderDeliveryDate: product.orderDeliveryDate || '', products: [] }
 		}
 		groups[key].products.push(product)
 	})
-	return Object.values(groups)
+	return Object.values(groups).sort((a, b) => {
+		if (!a.orderDeliveryDate) return 1
+		if (!b.orderDeliveryDate) return -1
+		return a.orderDeliveryDate.localeCompare(b.orderDeliveryDate)
+	})
 })
 
 const groupedProcessList = computed(() => {
@@ -3377,8 +3438,9 @@ function getTomorrowDate() {
 }
 
 function getYesterdayDate() {
+	// 临时：日期筛选改为前天
 	const yesterday = new Date()
-	yesterday.setDate(yesterday.getDate() - 1)
+	yesterday.setDate(yesterday.getDate() - 2)
 	const year = yesterday.getFullYear()
 	const month = String(yesterday.getMonth() + 1).padStart(2, '0')
 	const day = String(yesterday.getDate()).padStart(2, '0')
@@ -4307,8 +4369,16 @@ onMounted(async () => {
 							flex-shrink: 0;
 						}
 
-						.order-no {
+						.order-header-main {
 							flex: 1;
+							display: flex;
+							flex-direction: row;
+							align-items: center;
+							min-width: 0;
+							overflow: hidden;
+						}
+
+						.order-no {
 							font-size: px2vw(22px);
 							color: #333;
 							font-weight: bold;
@@ -4316,6 +4386,16 @@ onMounted(async () => {
 							white-space: nowrap;
 							overflow: hidden;
 							text-overflow: ellipsis;
+						}
+
+						.order-delivery-date {
+							font-size: px2vw(18px);
+							color: #888;
+							margin-left: px2vw(12px);
+							white-space: nowrap;
+							overflow: hidden;
+							text-overflow: ellipsis;
+							flex-shrink: 0;
 						}
 
 						.order-count {
@@ -4379,8 +4459,17 @@ onMounted(async () => {
 						white-space: nowrap;
 						overflow: hidden;
 						text-overflow: ellipsis;
-						flex: 1;
 						min-width: 0;
+					}
+
+					.product-delivery-date {
+						font-size: px2vw(18px);
+						color: #888;
+						margin-left: px2vw(12px);
+						white-space: nowrap;
+						overflow: hidden;
+						text-overflow: ellipsis;
+						flex-shrink: 0;
 					}
 
 					.product-btns {
@@ -4560,6 +4649,9 @@ onMounted(async () => {
 						font-size: px2vw(20px);
 						color: #333;
 						white-space: nowrap;
+						position: sticky;
+						left: 0;
+						z-index: 10;
 
 						.grid-product-action {
 							margin-bottom: px2vw(16px);
@@ -4584,6 +4676,22 @@ onMounted(async () => {
 							display: flex;
 							align-items: center;
 							justify-content: center;
+						}
+
+						.grid-product-confirm {
+							margin-top: px2vw(16px);
+							padding: px2vw(6px) px2vw(10px);
+							background-color: #27ae60;
+							color: #fff;
+							border-radius: px2vw(6px);
+							font-size: px2vw(18px);
+							writing-mode: vertical-rl;
+							text-orientation: upright;
+							letter-spacing: px2vw(4px);
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							min-height: px2vw(80px);
 						}
 					}
 
