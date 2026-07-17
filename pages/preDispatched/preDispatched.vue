@@ -3015,17 +3015,19 @@ const confirmProcessAction = async () => {
 			const res = await http.post(OPERATE_PROCESS_URL, params)
 			uni.hideLoading()
 			if (res && (res.status === 0 || res.success === true || res.code === 200 || res.data)) {
-				// 同步预派工关联工序
-				const productRowid = product?.rowid || ''
-				const preDispatchRowids = [...new Set(
-					processList.value
-						.filter(p => p.productRowid === productRowid && p.preDispatchRowid)
-						.map(p => p.preDispatchRowid)
-				)]
-				if (preDispatchRowids.length > 0) {
-					uni.showLoading({ title: '同步中...', mask: true })
-					await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
-					uni.hideLoading()
+				// 替换或删除时才同步预派工关联工序
+				if (mode === '替换' || mode === '删除') {
+					const productRowid = product?.rowid || ''
+					const preDispatchRowids = [...new Set(
+						processList.value
+							.filter(p => p.productRowid === productRowid && p.preDispatchRowid)
+							.map(p => p.preDispatchRowid)
+					)]
+					if (preDispatchRowids.length > 0) {
+						uni.showLoading({ title: '同步中...', mask: true })
+						await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
+						uni.hideLoading()
+					}
 				}
 				uni.showToast({ title: '操作成功', icon: 'success' })
 				closeProcessActionModal()
