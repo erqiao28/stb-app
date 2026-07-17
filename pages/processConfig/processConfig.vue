@@ -78,7 +78,7 @@
 							<text v-else>配置完成</text>
 						</view>
 					</view>
-					<scroll-view class="process-chart-scroll" scroll-y>
+					<scroll-view class="process-chart-scroll" scroll-y scroll-x>
 						<view v-if="!level2List.length" class="chart-empty">
 							<text>暂无工序数据</text>
 						</view>
@@ -98,7 +98,7 @@
 						</view>
 
 						<!-- 连接线层 -->
-						<view class="connector-layer" v-if="connectorLines.length">
+						<view class="connector-layer">
 							<view
 								class="connector-line"
 								:class="line.type"
@@ -724,15 +724,16 @@ const updateConnectors = async () => {
 		return
 	}
 
-	const chartRect = await getRect('.chart-levels')
+	const connectorLayerRect = await getRect('.connector-layer')
 	const selectedL2Rect = await getRect('#level2-' + selectedLevel2Id.value)
-	if (!chartRect || !selectedL2Rect) {
+	if (!connectorLayerRect || !selectedL2Rect) {
 		connectorLines.value = []
 		return
 	}
 
-	const selectedCenterX = selectedL2Rect.left + selectedL2Rect.width / 2 - chartRect.left
-	const l2BottomY = selectedL2Rect.bottom - chartRect.top
+	// 以连接线层为参照系计算位置，自动兼容横向滚动
+	const selectedCenterX = selectedL2Rect.left + selectedL2Rect.width / 2 - connectorLayerRect.left
+	const l2BottomY = selectedL2Rect.bottom - connectorLayerRect.top
 
 	const childRects = []
 	for (const child of selectedLevel2Children.value) {
@@ -740,8 +741,8 @@ const updateConnectors = async () => {
 		if (rect) {
 			childRects.push({
 				rowid: child.rowid,
-				centerX: rect.left + rect.width / 2 - chartRect.left,
-				topY: rect.top - chartRect.top
+				centerX: rect.left + rect.width / 2 - connectorLayerRect.left,
+				topY: rect.top - connectorLayerRect.top
 			})
 		}
 	}
@@ -1303,7 +1304,6 @@ onMounted(() => {
 
 			.process-chart-scroll {
 				flex: 1;
-				overflow: hidden;
 				background-color: #f8f9fa;
 
 				.chart-empty {
@@ -1320,8 +1320,10 @@ onMounted(() => {
 
 				.chart-levels {
 					position: relative;
+					display: inline-flex;
+					flex-direction: column;
+					min-width: 100%;
 					padding: px2vw(20px);
-					overflow-x: auto;
 
 					.level2-row {
 						display: flex;
@@ -1365,7 +1367,7 @@ onMounted(() => {
 
 					.level3-row {
 						display: flex;
-						justify-content: center;
+						justify-content: flex-start;
 						align-items: flex-start;
 						gap: px2vw(16px);
 						width: 100%;

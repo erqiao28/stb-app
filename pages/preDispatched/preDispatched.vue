@@ -661,15 +661,15 @@
 				<view class="dispatch-grid">
 					<view class="dispatch-grid-cell">
 						<text class="grid-cell-label">订单数量</text>
-						<text class="grid-cell-value">100</text>
+						<text class="grid-cell-value">-</text>
 					</view>
 					<view class="dispatch-grid-cell">
 						<text class="grid-cell-label">可派数量</text>
-						<text class="grid-cell-value">50</text>
+						<text class="grid-cell-value">{{ dispatchModalDispatchCount }}</text>
 					</view>
 					<view class="dispatch-grid-cell">
 						<text class="grid-cell-label">完成数量</text>
-						<text class="grid-cell-value">30</text>
+						<text class="grid-cell-value">{{ dispatchModalFinishCount }}</text>
 					</view>
 					<view class="dispatch-grid-cell">
 						<text class="grid-cell-label">派工数量</text>
@@ -775,7 +775,7 @@ import { callWorkflowListAPIPaged, getLabelsBySids, getWorksheetStructure } from
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
-import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, PRE_DISPATCH_PROCESS_CONFIRM_URL, PRE_DISPATCH_PRODUCT_ADD_URL, ATTENDANCE_SUBMIT_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, POSITION_PROCESS_SELECT_URL, POSITION_PROCESS_DELETE_URL, SPRAY_PROCESS_EMPLOYEE_URL } from '../../utils/api'
+import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, PRE_DISPATCH_PROCESS_CONFIRM_URL, PRE_DISPATCH_PRODUCT_ADD_URL, ATTENDANCE_SUBMIT_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, OPERATE_PROCESS_SYNC_URL, ATTENDANCE_SYNC_URL, POSITION_PROCESS_SELECT_URL, POSITION_PROCESS_DELETE_URL, SPRAY_PROCESS_EMPLOYEE_URL } from '../../utils/api'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -908,6 +908,8 @@ const productDispatchCounts = ref({})
 const showDispatchModal = ref(false)
 const dispatchModalProduct = ref(null)
 const dispatchModalInput = ref('0')
+const dispatchModalDispatchCount = ref(0)
+const dispatchModalFinishCount = ref(0)
 const isEmployeeExpanded = ref(false)
 
 const showEmployeeTaskPopover = ref(false)
@@ -1951,22 +1953,87 @@ const handleProcessListConfirm = async (productRowid) => {
 	const hasPreDispatchRowids = [...hasPreDispatchRowidSet]
 	const noPreDispatchRowids = [...noPreDispatchRowidSet]
 
+	// 计算可派数量和完成数量
+	const dispatchDate = filterDate.value
+	let dispatchCount = 0
+	let finishCount = 0
+
+	// 提取关联的预派工rowids
+	const pdRowids = [...hasPreDispatchRowidSet]
+	if (pdRowids.length > 0) {
+		// 有预派工关联：获取预派工数据
+		const pdRes = await callWorkflowListAPIPaged({
+			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
+			filters: [{
+				controlId: 'rowid',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: pdRowids
+			}],
+			pageSize: 500,
+			pageNum: 1,
+			silent: true
+		})
+		const pdRows = Array.isArray(pdRes?.data) ? pdRes.data : []
+
+		// 可派数量：取预派工的 dispatchCount 平均值
+		const pdDispatchVals = pdRows.map(item => parseFloat(formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.dispatchCount])) || 0)
+		if (pdDispatchVals.length > 0) {
+			dispatchCount = Math.round(pdDispatchVals.reduce((a, b) => a + b, 0) / pdDispatchVals.length)
+		}
+
+		// 完成数量：取关联工序的 finishCount 平均值
+		const allRelatedProcessRowids = new Set()
+		pdRows.forEach(item => {
+			extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail]).forEach(sid => allRelatedProcessRowids.add(sid))
+		})
+		if (allRelatedProcessRowids.size > 0) {
+			const processFinishVals = processList.value
+				.filter(p => allRelatedProcessRowids.has(p.rowid))
+				.map(p => parseFloat(p.finishCount) || 0)
+			if (processFinishVals.length > 0) {
+				finishCount = Math.round(processFinishVals.reduce((a, b) => a + b, 0) / processFinishVals.length)
+			}
+		}
+	} else if (checkedProcesses.length > 0) {
+		// 无预派工：有勾选工序，取工序表的平均值
+		const processNeedVals = checkedProcesses.map(p => parseFloat(p.needCount) || 0)
+		if (processNeedVals.length > 0) {
+			dispatchCount = Math.round(processNeedVals.reduce((a, b) => a + b, 0) / processNeedVals.length)
+		}
+		const processFinishVals = checkedProcesses.map(p => parseFloat(p.finishCount) || 0)
+		if (processFinishVals.length > 0) {
+			finishCount = Math.round(processFinishVals.reduce((a, b) => a + b, 0) / processFinishVals.length)
+		}
+	}
+
 	try {
 		uni.showLoading({ title: '提交中...' })
 		const resp = await http.post(PRE_DISPATCH_PROCESS_CONFIRM_URL, {
 			hasPreDispatchRowids,
-			noPreDispatchRowids
+			noPreDispatchRowids,
+			dispatchDate,
+			dispatchCount,
+			finishCount
 		})
 		uni.hideLoading()
 		if (resp.status === 1) {
 			uni.showToast({ title: '提交成功', icon: 'success' })
-			// 刷新该产品工序数据
+			// 刷新该产品工序数据，保留勾选状态
 			const product = productList.value.find(item => item.rowid === productRowid)
 			if (product) {
+				// 保存当前勾选状态
+				const savedCheckedRowids = checkedProcesses.map(p => p.rowid)
 				loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
 				processList.value = processList.value.filter(p => p.productRowid !== productRowid)
-				selectedProcessIds.value = selectedProcessIds.value.filter(id => !checkedProcesses.some(p => p.rowid === id))
 				await loadProductProcesses(product)
+				// 恢复勾选状态
+				savedCheckedRowids.forEach(rowid => {
+					if (!selectedProcessIds.value.includes(rowid)) {
+						selectedProcessIds.value.push(rowid)
+					}
+				})
 			}
 		} else {
 			uni.showToast({ title: resp.message || '提交失败', icon: 'none' })
@@ -2283,6 +2350,40 @@ const openDispatchModal = (product) => {
 	if (!product || !product.rowid) return
 	dispatchModalProduct.value = product
 	dispatchModalInput.value = productDispatchCounts.value[product.rowid] || '0'
+
+	// 计算可派数量和完成数量
+	let dispatchCount = 0
+	let finishCount = 0
+
+	// 获取该产品下的所有工序
+	const productProcesses = processList.value.filter(p => p.productRowid === product.rowid)
+	// 有预派工关联的工序
+	const associatedProcesses = productProcesses.filter(p => p.preDispatchRowid)
+	// 有预派工rowids
+	const pdRowids = [...new Set(associatedProcesses.map(p => p.preDispatchRowid).filter(Boolean))]
+
+	if (pdRowids.length > 0) {
+		// 有预派工：获取预派工数据
+		if (associatedProcesses.length > 0) {
+			const needVals = associatedProcesses.map(p => parseFloat(p.needCount) || 0)
+			const finishVals = associatedProcesses.map(p => parseFloat(p.finishCount) || 0)
+			if (needVals.length > 0) dispatchCount = Math.round(needVals.reduce((a, b) => a + b, 0) / needVals.length)
+			if (finishVals.length > 0) finishCount = Math.round(finishVals.reduce((a, b) => a + b, 0) / finishVals.length)
+		}
+	} else {
+		// 无预派工：用勾选的工序
+		const checkedProcesses = productProcesses.filter(p => selectedProcessIds.value.includes(p.rowid))
+		if (checkedProcesses.length > 0) {
+			const needVals = checkedProcesses.map(p => parseFloat(p.needCount) || 0)
+			const finishVals = checkedProcesses.map(p => parseFloat(p.finishCount) || 0)
+			if (needVals.length > 0) dispatchCount = Math.round(needVals.reduce((a, b) => a + b, 0) / needVals.length)
+			if (finishVals.length > 0) finishCount = Math.round(finishVals.reduce((a, b) => a + b, 0) / finishVals.length)
+		}
+	}
+
+	dispatchModalDispatchCount.value = dispatchCount
+	dispatchModalFinishCount.value = finishCount
+
 	showDispatchModal.value = true
 }
 
@@ -2433,6 +2534,8 @@ const loadProductProcesses = async (product) => {
 				processName: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.processName]),
 				orderCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.allcount]) || 0,
 				dailyOutput: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.dailyOutput]) || 0,
+				needCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.needCount]) || 0,
+				finishCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.finishCount]) || 0,
 				isAssociated,
 				isBeforeAssociated: !isAssociated && seq <= maxAssociatedSequence,
 				isAfterAssociated: !isAssociated && seq > maxAssociatedSequence,
@@ -2451,7 +2554,9 @@ const toggleProcessSelection = (process) => {
 	if (!process.rowid) return
 	const index = selectedProcessIds.value.indexOf(process.rowid)
 	if (index > -1) {
+		// 取消勾选时，也要取消同类别的所有工序
 		selectedProcessIds.value.splice(index, 1)
+		autoDeselectRelatedProcesses(process)
 	} else {
 		if (process.isAfterAssociated) {
 			uni.showToast({ title: '产品未流转到该工序', icon: 'none' })
@@ -2459,10 +2564,38 @@ const toggleProcessSelection = (process) => {
 			uni.showToast({ title: '产品已完成该工序', icon: 'none' })
 		}
 		selectedProcessIds.value.push(process.rowid)
-		
+
 		// 工序归类联动：如果该工序属于某个归类，则勾选同归类下的所有工序
 		autoSelectRelatedProcesses(process)
 	}
+}
+
+// 根据工序归类自动取消勾选同类别工序
+const autoDeselectRelatedProcesses = (process) => {
+	if (!process.processName || !craftPositionMap.value || craftPositionMap.value.size === 0) return
+
+	// 查找该工序所属的归类名称
+	let craftPositionName = ''
+	craftPositionMap.value.forEach((processNames, name) => {
+		if (processNames.includes(process.processName)) {
+			craftPositionName = name
+		}
+	})
+
+	if (!craftPositionName) return
+
+	// 获取该归类下的所有工序名称
+	const relatedProcessNames = craftPositionMap.value.get(craftPositionName) || []
+
+	// 在当前已加载的产品工序中，找出同归类的工序并取消勾选
+	processList.value.forEach(p => {
+		if (p.rowid && p.productRowid === process.productRowid && relatedProcessNames.includes(p.processName)) {
+			const idx = selectedProcessIds.value.indexOf(p.rowid)
+			if (idx > -1) {
+				selectedProcessIds.value.splice(idx, 1)
+			}
+		}
+	})
 }
 
 // 根据工序归类自动勾选同类别工序
@@ -2517,6 +2650,11 @@ const toggleOrderCollapse = (orderNo) => {
 const loadEmployeeDispatchSummary = async () => {
 	try {
 		const currentDate = filterDate.value
+		// 先调用同步接口
+		uni.showLoading({ title: '加载中...', mask: true })
+		await http.post(ATTENDANCE_SYNC_URL, { date: currentDate })
+		uni.hideLoading()
+
 		const wsFilter = employeeWorkshopFilter.value
 		const filters = []
 		if (wsFilter) {
@@ -2877,6 +3015,18 @@ const confirmProcessAction = async () => {
 			const res = await http.post(OPERATE_PROCESS_URL, params)
 			uni.hideLoading()
 			if (res && (res.status === 0 || res.success === true || res.code === 200 || res.data)) {
+				// 同步预派工关联工序
+				const productRowid = product?.rowid || ''
+				const preDispatchRowids = [...new Set(
+					processList.value
+						.filter(p => p.productRowid === productRowid && p.preDispatchRowid)
+						.map(p => p.preDispatchRowid)
+				)]
+				if (preDispatchRowids.length > 0) {
+					uni.showLoading({ title: '同步中...', mask: true })
+					await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
+					uni.hideLoading()
+				}
 				uni.showToast({ title: '操作成功', icon: 'success' })
 				closeProcessActionModal()
 				loadProducts(true)
@@ -3438,9 +3588,8 @@ function getTomorrowDate() {
 }
 
 function getYesterdayDate() {
-	// 临时：日期筛选改为前天
-	const yesterday = new Date()
-	yesterday.setDate(yesterday.getDate() - 2)
+	// 临时：日期筛选改为 2026-07-14
+	const yesterday = new Date('2026-07-14')
 	const year = yesterday.getFullYear()
 	const month = String(yesterday.getMonth() + 1).padStart(2, '0')
 	const day = String(yesterday.getDate()).padStart(2, '0')
