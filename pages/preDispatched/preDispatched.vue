@@ -1964,12 +1964,13 @@ const handleProcessListConfirm = async (productRowid) => {
 	let dispatchCount = 0
 	let finishCount = 0
 
-	// 提取关联的预派工rowids
-	const pdRowids = [...hasPreDispatchRowidSet]
 	// 无工序的预派工rowid（一个工序列表只会有一个）
 	let noProcessPreDispatchRowid = ''
-	if (pdRowids.length > 0) {
-		// 有预派工关联：获取预派工数据
+
+	// 获取该产品下所有预派工rowids（包括有工序和无工序的）
+	const product = productList.value.find(item => item.rowid === productRowid)
+	const allProductPreDispatchRowids = Array.isArray(product?.preDispatchRowids) ? product.preDispatchRowids : []
+	if (allProductPreDispatchRowids.length > 0) {
 		const pdRes = await callWorkflowListAPIPaged({
 			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
 			filters: [{
@@ -1977,7 +1978,7 @@ const handleProcessListConfirm = async (productRowid) => {
 				dataType: 30,
 				spliceType: 1,
 				filterType: 2,
-				values: pdRowids
+				values: allProductPreDispatchRowids
 			}],
 			pageSize: 500,
 			pageNum: 1,
@@ -1986,7 +1987,9 @@ const handleProcessListConfirm = async (productRowid) => {
 		const pdRows = Array.isArray(pdRes?.data) ? pdRes.data : []
 		console.log('[工序列表确定] 获取预派工数据:', {
 			productRowid,
-			pdRowids,
+			allProductPreDispatchRowids,
+			hasPreDispatchRowids,
+			noPreDispatchRowids,
 			count: pdRows.length,
 			rows: pdRows
 		})
@@ -2027,6 +2030,16 @@ const handleProcessListConfirm = async (productRowid) => {
 			finishCount = Math.round(processFinishVals.reduce((a, b) => a + b, 0) / processFinishVals.length)
 		}
 	}
+
+	console.log('[工序列表确定] 提交参数:', {
+		productRowid,
+		hasPreDispatchRowids,
+		noPreDispatchRowids,
+		noProcessPreDispatchRowid,
+		dispatchDate,
+		dispatchCount,
+		finishCount
+	})
 
 	try {
 		uni.showLoading({ title: '提交中...' })
