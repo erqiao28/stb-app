@@ -1966,6 +1966,8 @@ const handleProcessListConfirm = async (productRowid) => {
 
 	// 提取关联的预派工rowids
 	const pdRowids = [...hasPreDispatchRowidSet]
+	// 无工序的预派工rowids
+	const noProcessPreDispatchRowids = []
 	if (pdRowids.length > 0) {
 		// 有预派工关联：获取预派工数据
 		const pdRes = await callWorkflowListAPIPaged({
@@ -1992,7 +1994,13 @@ const handleProcessListConfirm = async (productRowid) => {
 		// 完成数量：取关联工序的 finishCount 平均值
 		const allRelatedProcessRowids = new Set()
 		pdRows.forEach(item => {
-			extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail]).forEach(sid => allRelatedProcessRowids.add(sid))
+			const sids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail])
+			if (sids && sids.length > 0) {
+				sids.forEach(sid => allRelatedProcessRowids.add(sid))
+			} else {
+				// 工序排产明细为空，收集该预派工rowid
+				noProcessPreDispatchRowids.push(item.rowid)
+			}
 		})
 		if (allRelatedProcessRowids.size > 0) {
 			const processFinishVals = processList.value
@@ -2019,6 +2027,7 @@ const handleProcessListConfirm = async (productRowid) => {
 		const resp = await http.post(PRE_DISPATCH_PROCESS_CONFIRM_URL, {
 			hasPreDispatchRowids,
 			noPreDispatchRowids,
+			noProcessPreDispatchRowids,
 			dispatchDate,
 			dispatchCount,
 			finishCount
