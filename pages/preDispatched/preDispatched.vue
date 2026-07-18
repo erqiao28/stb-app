@@ -1947,16 +1947,12 @@ const handleProcessListConfirm = async (productRowid) => {
 		return
 	}
 
-	const hasPreDispatchRowidSet = new Set()
 	const noPreDispatchRowidSet = new Set()
 	checkedProcesses.forEach(p => {
-		if (p.preDispatchRowid) {
-			hasPreDispatchRowidSet.add(p.preDispatchRowid)
-		} else {
+		if (!p.preDispatchRowid) {
 			noPreDispatchRowidSet.add(p.rowid)
 		}
 	})
-	const hasPreDispatchRowids = [...hasPreDispatchRowidSet]
 	const noPreDispatchRowids = [...noPreDispatchRowidSet]
 
 	// 计算可派数量和完成数量
@@ -1964,6 +1960,8 @@ const handleProcessListConfirm = async (productRowid) => {
 	let dispatchCount = 0
 	let finishCount = 0
 
+	// 有工序的预派工rowids
+	let hasPreDispatchRowids = []
 	// 无工序的预派工rowid（一个工序列表只会有一个）
 	let noProcessPreDispatchRowid = ''
 
@@ -1988,13 +1986,22 @@ const handleProcessListConfirm = async (productRowid) => {
 		console.log('[工序列表确定] 获取预派工数据:', {
 			productRowid,
 			allProductPreDispatchRowids,
-			hasPreDispatchRowids,
 			noPreDispatchRowids,
 			count: pdRows.length,
 			rows: pdRows
 		})
 
-		// 可派数量：取预派工的 dispatchCount 平均值
+		// 按工序排产明细是否为空分类预派工
+		pdRows.forEach(item => {
+			const sids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail])
+			if (sids && sids.length > 0) {
+				hasPreDispatchRowids.push(item.rowid)
+			} else {
+				noProcessPreDispatchRowid = item.rowid
+			}
+		})
+
+		// 可派数量：取所有预派工的 dispatchCount 平均值
 		const pdDispatchVals = pdRows.map(item => parseFloat(formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.dispatchCount])) || 0)
 		if (pdDispatchVals.length > 0) {
 			dispatchCount = Math.round(pdDispatchVals.reduce((a, b) => a + b, 0) / pdDispatchVals.length)
@@ -2003,13 +2010,7 @@ const handleProcessListConfirm = async (productRowid) => {
 		// 完成数量：取关联工序的 finishCount 平均值
 		const allRelatedProcessRowids = new Set()
 		pdRows.forEach(item => {
-			const sids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail])
-			if (sids && sids.length > 0) {
-				sids.forEach(sid => allRelatedProcessRowids.add(sid))
-			} else {
-				// 工序排产明细为空，记录该预派工rowid
-				noProcessPreDispatchRowid = item.rowid
-			}
+			extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail]).forEach(sid => allRelatedProcessRowids.add(sid))
 		})
 		if (allRelatedProcessRowids.size > 0) {
 			const processFinishVals = processList.value
