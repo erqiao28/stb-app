@@ -3046,24 +3046,25 @@ const confirmProcessAction = async () => {
 				uni.showToast({ title: result.message || '删除失败', icon: 'none' })
 				return
 			}
-			// 删除成功后刷新工序列表
-			// 清除该产品的已加载记录，让 loadProductProcesses 重新加载
+			// 删除成功后立即刷新工序列表并关闭弹窗
 			loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
 			processList.value = processList.value.filter(p => p.productRowid !== productRowid)
 			await loadProductProcesses(product)
-			// 同步预派工关联工序（只同步工序排产明细不为空的）
-			const preDispatchRowids = await getPreDispatchRowidsWithProcessDetail(productRowid)
-			if (preDispatchRowids.length > 0) {
-				uni.showLoading({ title: '同步中...', mask: true })
-				await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
-				uni.hideLoading()
-				// 同步后再刷新一次
-				loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
-				processList.value = processList.value.filter(p => p.productRowid !== productRowid)
-				await loadProductProcesses(product)
-			}
 			uni.showToast({ title: '删除成功', icon: 'success' })
 			closeProcessActionModal()
+			// 同步预派工关联工序（异步执行，不影响主流程）
+			const preDispatchRowids = await getPreDispatchRowidsWithProcessDetail(productRowid)
+			if (preDispatchRowids.length > 0) {
+				try {
+					await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
+					// 同步成功后再刷新一次
+					loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
+					processList.value = processList.value.filter(p => p.productRowid !== productRowid)
+					await loadProductProcesses(product)
+				} catch (e) {
+					console.error('同步预派工失败:', e)
+				}
+			}
 		} catch (e) {
 			uni.hideLoading()
 			console.error('删除工序失败:', e)
@@ -3095,26 +3096,27 @@ const confirmProcessAction = async () => {
 				uni.showToast({ title: res.message || '操作失败', icon: 'none' })
 				return
 			}
-			// 操作成功后刷新工序列表
-			// 清除该产品的已加载记录，让 loadProductProcesses 重新加载
+			// 操作成功后立即刷新工序列表并关闭弹窗
 			loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
 			processList.value = processList.value.filter(p => p.productRowid !== productRowid)
 			await loadProductProcesses(product)
-			// 替换时才同步预派工关联工序（只同步工序排产明细不为空的）
+			uni.showToast({ title: '操作成功', icon: 'success' })
+			closeProcessActionModal()
+			// 替换时才同步预派工关联工序（异步执行，不影响主流程）
 			if (mode === '替换') {
 				const preDispatchRowids = await getPreDispatchRowidsWithProcessDetail(productRowid)
 				if (preDispatchRowids.length > 0) {
-					uni.showLoading({ title: '同步中...', mask: true })
-					await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
-					uni.hideLoading()
-					// 同步后再刷新一次
-					loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
-					processList.value = processList.value.filter(p => p.productRowid !== productRowid)
-					await loadProductProcesses(product)
+					try {
+						await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
+						// 同步成功后再刷新一次
+						loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
+						processList.value = processList.value.filter(p => p.productRowid !== productRowid)
+						await loadProductProcesses(product)
+					} catch (e) {
+						console.error('同步预派工失败:', e)
+					}
 				}
 			}
-			uni.showToast({ title: '操作成功', icon: 'success' })
-			closeProcessActionModal()
 		} catch (e) {
 			uni.hideLoading()
 			console.error('操作工序失败:', e)
