@@ -2974,6 +2974,40 @@ const onProcessActionModeChange = (e) => {
 	processActionModeIndex.value = Number(e.detail.value) || 0
 }
 
+// 获取工序排产明细不为空的预派工 rowids
+const getPreDispatchRowidsWithProcessDetail = async (productRowid) => {
+	const rawRowids = [...new Set(
+		processList.value
+			.filter(p => p.productRowid === productRowid && p.preDispatchRowid)
+			.map(p => p.preDispatchRowid)
+	)]
+	if (rawRowids.length === 0) return []
+
+	// 查询预派工数据，过滤工序排产明细不为空的
+	const pdRes = await callWorkflowListAPIPaged({
+		worksheetId: PRE_DISPATCH_WORKSHEET_ID,
+		filters: [{
+			controlId: 'rowid',
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: rawRowids
+		}],
+		pageSize: 500,
+		pageNum: 1,
+		silent: true
+	})
+	const pdRows = Array.isArray(pdRes?.data) ? pdRes.data : []
+	// 工序排产明细字段
+	const processDetailField = PRE_DISPATCH_FIELD_MAP.processDetail
+	return pdRows
+		.filter(item => {
+			const sids = extractRelationSids(item[processDetailField])
+			return sids && sids.length > 0
+		})
+		.map(item => item.rowid)
+}
+
 const confirmProcessAction = async () => {
 	const mode = processActionModeOptions[processActionModeIndex.value]
 	const selected = processActionSelected.value
@@ -3004,13 +3038,9 @@ const confirmProcessAction = async () => {
 			}
 			// 删除成功后立即刷新工序列表
 			loadProducts(true)
-			// 同步预派工关联工序
+			// 同步预派工关联工序（只同步工序排产明细不为空的）
 			const productRowid = product?.rowid || ''
-			const preDispatchRowids = [...new Set(
-				processList.value
-					.filter(p => p.productRowid === productRowid && p.preDispatchRowid)
-					.map(p => p.preDispatchRowid)
-			)]
+			const preDispatchRowids = await getPreDispatchRowidsWithProcessDetail(productRowid)
 			if (preDispatchRowids.length > 0) {
 				uni.showLoading({ title: '同步中...', mask: true })
 				await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
@@ -3052,14 +3082,10 @@ const confirmProcessAction = async () => {
 			}
 			// 操作成功后立即刷新工序列表
 			loadProducts(true)
-			// 替换或删除时才同步预派工关联工序
-			if (mode === '替换' || mode === '删除') {
+			// 替换时才同步预派工关联工序（只同步工序排产明细不为空的）
+			if (mode === '替换') {
 				const productRowid = product?.rowid || ''
-				const preDispatchRowids = [...new Set(
-					processList.value
-						.filter(p => p.productRowid === productRowid && p.preDispatchRowid)
-						.map(p => p.preDispatchRowid)
-				)]
+				const preDispatchRowids = await getPreDispatchRowidsWithProcessDetail(productRowid)
 				if (preDispatchRowids.length > 0) {
 					uni.showLoading({ title: '同步中...', mask: true })
 					await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
