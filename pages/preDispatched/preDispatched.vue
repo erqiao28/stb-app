@@ -1969,6 +1969,7 @@ const handleProcessListConfirm = async (productRowid) => {
 	// 获取该产品下所有预派工rowids（包括有工序和无工序的）
 	const product = productList.value.find(item => item.rowid === productRowid)
 	const allProductPreDispatchRowids = Array.isArray(product?.preDispatchRowids) ? product.preDispatchRowids : []
+	let pdRows = []
 	if (allProductPreDispatchRowids.length > 0) {
 		const pdRes = await callWorkflowListAPIPaged({
 			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
@@ -1983,7 +1984,7 @@ const handleProcessListConfirm = async (productRowid) => {
 			pageNum: 1,
 			silent: true
 		})
-		const pdRows = Array.isArray(pdRes?.data) ? pdRes.data : []
+		pdRows = Array.isArray(pdRes?.data) ? pdRes.data : []
 		console.log('[工序列表确定] 获取预派工数据:', {
 			productRowid,
 			allProductPreDispatchRowids,
@@ -2001,14 +2002,28 @@ const handleProcessListConfirm = async (productRowid) => {
 				noProcessPreDispatchRowid = item.rowid
 			}
 		})
+	}
 
-		// 可派数量：取所有预派工的 dispatchCount 平均值
+	// 用户输入的派工数量（优先使用）
+	const userInputDispatchCount = parseFloat(productDispatchCounts.value[productRowid]) || 0
+	if (userInputDispatchCount > 0) {
+		dispatchCount = userInputDispatchCount
+	} else if (pdRows.length > 0) {
+		// 有预派工：取所有预派工的 dispatchCount 平均值
 		const pdDispatchVals = pdRows.map(item => parseFloat(formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.dispatchCount])) || 0)
 		if (pdDispatchVals.length > 0) {
 			dispatchCount = Math.round(pdDispatchVals.reduce((a, b) => a + b, 0) / pdDispatchVals.length)
 		}
+	} else if (checkedProcesses.length > 0) {
+		// 无预派工：取工序表的 needCount 平均值
+		const processNeedVals = checkedProcesses.map(p => parseFloat(p.needCount) || 0)
+		if (processNeedVals.length > 0) {
+			dispatchCount = Math.round(processNeedVals.reduce((a, b) => a + b, 0) / processNeedVals.length)
+		}
+	}
 
-		// 完成数量：取关联工序的 finishCount 平均值
+	// 完成数量：取关联工序的 finishCount 平均值
+	if (pdRows.length > 0) {
 		const allRelatedProcessRowids = new Set()
 		pdRows.forEach(item => {
 			extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail]).forEach(sid => allRelatedProcessRowids.add(sid))
@@ -2022,11 +2037,6 @@ const handleProcessListConfirm = async (productRowid) => {
 			}
 		}
 	} else if (checkedProcesses.length > 0) {
-		// 无预派工：有勾选工序，取工序表的平均值
-		const processNeedVals = checkedProcesses.map(p => parseFloat(p.needCount) || 0)
-		if (processNeedVals.length > 0) {
-			dispatchCount = Math.round(processNeedVals.reduce((a, b) => a + b, 0) / processNeedVals.length)
-		}
 		const processFinishVals = checkedProcesses.map(p => parseFloat(p.finishCount) || 0)
 		if (processFinishVals.length > 0) {
 			finishCount = Math.round(processFinishVals.reduce((a, b) => a + b, 0) / processFinishVals.length)
@@ -2035,6 +2045,7 @@ const handleProcessListConfirm = async (productRowid) => {
 
 	console.log('[工序列表确定] 提交参数:', {
 		productRowid,
+		userInputDispatchCount,
 		hasPreDispatchRowids,
 		noPreDispatchRowids,
 		noProcessPreDispatchRowid,
