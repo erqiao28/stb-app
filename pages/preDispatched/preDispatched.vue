@@ -3000,23 +3000,26 @@ const confirmProcessAction = async () => {
 			const isFailed = result && result.status === 1 && result.message
 			if (isFailed) {
 				uni.showToast({ title: result.message || '删除失败', icon: 'none' })
-			} else {
-				// 删除成功后同步预派工关联工序
-				const productRowid = product?.rowid || ''
-				const preDispatchRowids = [...new Set(
-					processList.value
-						.filter(p => p.productRowid === productRowid && p.preDispatchRowid)
-						.map(p => p.preDispatchRowid)
-				)]
-				if (preDispatchRowids.length > 0) {
-					uni.showLoading({ title: '同步中...', mask: true })
-					await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
-					uni.hideLoading()
-				}
-				uni.showToast({ title: '删除成功', icon: 'success' })
-				closeProcessActionModal()
+				return
+			}
+			// 删除成功后立即刷新工序列表
+			loadProducts(true)
+			// 同步预派工关联工序
+			const productRowid = product?.rowid || ''
+			const preDispatchRowids = [...new Set(
+				processList.value
+					.filter(p => p.productRowid === productRowid && p.preDispatchRowid)
+					.map(p => p.preDispatchRowid)
+			)]
+			if (preDispatchRowids.length > 0) {
+				uni.showLoading({ title: '同步中...', mask: true })
+				await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
+				uni.hideLoading()
+				// 同步后再刷新一次
 				loadProducts(true)
 			}
+			uni.showToast({ title: '删除成功', icon: 'success' })
+			closeProcessActionModal()
 		} catch (e) {
 			uni.hideLoading()
 			console.error('删除工序失败:', e)
@@ -3045,25 +3048,28 @@ const confirmProcessAction = async () => {
 			const isFailed = res && res.status === 1 && res.message
 			if (isFailed) {
 				uni.showToast({ title: res.message || '操作失败', icon: 'none' })
-			} else {
-				// 替换或删除时才同步预派工关联工序
-				if (mode === '替换' || mode === '删除') {
-					const productRowid = product?.rowid || ''
-					const preDispatchRowids = [...new Set(
-						processList.value
-							.filter(p => p.productRowid === productRowid && p.preDispatchRowid)
-							.map(p => p.preDispatchRowid)
-					)]
-					if (preDispatchRowids.length > 0) {
-						uni.showLoading({ title: '同步中...', mask: true })
-						await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
-						uni.hideLoading()
-					}
-				}
-				uni.showToast({ title: '操作成功', icon: 'success' })
-				closeProcessActionModal()
-				loadProducts(true)
+				return
 			}
+			// 操作成功后立即刷新工序列表
+			loadProducts(true)
+			// 替换或删除时才同步预派工关联工序
+			if (mode === '替换' || mode === '删除') {
+				const productRowid = product?.rowid || ''
+				const preDispatchRowids = [...new Set(
+					processList.value
+						.filter(p => p.productRowid === productRowid && p.preDispatchRowid)
+						.map(p => p.preDispatchRowid)
+				)]
+				if (preDispatchRowids.length > 0) {
+					uni.showLoading({ title: '同步中...', mask: true })
+					await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
+					uni.hideLoading()
+					// 同步后再刷新一次
+					loadProducts(true)
+				}
+			}
+			uni.showToast({ title: '操作成功', icon: 'success' })
+			closeProcessActionModal()
 		} catch (e) {
 			uni.hideLoading()
 			console.error('操作工序失败:', e)
