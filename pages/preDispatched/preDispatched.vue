@@ -1984,6 +1984,12 @@ const handleProcessListConfirm = async (productRowid) => {
 			silent: true
 		})
 		const pdRows = Array.isArray(pdRes?.data) ? pdRes.data : []
+		console.log('[工序列表确定] 获取预派工数据:', {
+			productRowid,
+			pdRowids,
+			count: pdRows.length,
+			rows: pdRows
+		})
 
 		// 可派数量：取预派工的 dispatchCount 平均值
 		const pdDispatchVals = pdRows.map(item => parseFloat(formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.dispatchCount])) || 0)
@@ -3024,6 +3030,12 @@ const getPreDispatchRowidsWithProcessDetail = async (productRowid) => {
 		silent: true
 	})
 	const pdRows = Array.isArray(pdRes?.data) ? pdRes.data : []
+	console.log('[同步预派工] 获取预派工数据:', {
+		productRowid,
+		rawRowids,
+		count: pdRows.length,
+		rows: pdRows
+	})
 	// 工序排产明细字段
 	const processDetailField = PRE_DISPATCH_FIELD_MAP.processDetail
 	return pdRows
