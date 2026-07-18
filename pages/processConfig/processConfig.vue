@@ -488,7 +488,9 @@ const loadProducts = async () => {
 				msg: res?.msg
 			})
 			
-			if (res?.status !== 1 || !res?.data) {
+			// 判断是否有错误（status 不为 1 或 msg 包含错误信息）
+			const hasError = res?.status !== 1 || (res?.msg && !res.msg.includes('成功'))
+			if (hasError || !res?.data) {
 				console.error('[工艺配置] 获取产品列表失败:', res)
 				break
 			}
