@@ -1104,6 +1104,7 @@ const toggleAttendancePanel = () => {
 	closeProcessDropdownPanel()
 	setTimeout(() => {
 		showAttendancePanel.value = true
+		loadWorkshopEmployees()
 	}, 300)
 }
 
