@@ -728,13 +728,13 @@
 				<view class="process-action-close" @click="closeProcessActionModal">&times;</view>
 			</view>
 			<view class="process-action-body">
-				<view class="process-action-filter">
+				<view class="process-action-filter" v-if="processActionModeOptions[processActionModeIndex] !== '删除'">
 					<view class="process-action-search">
 						<input type="text" placeholder="请输入工序名称" v-model="processActionSearch" @input="handleProcessActionSearch" />
 					</view>
 				</view>
 				<view class="process-action-main">
-					<view class="process-action-list-section">
+					<view class="process-action-list-section" v-if="processActionModeOptions[processActionModeIndex] !== '删除'">
 						<scroll-view scroll-y class="process-action-list">
 							<view class="process-action-list-header">工序名称</view>
 							<view
@@ -752,7 +752,7 @@
 						</scroll-view>
 					</view>
 					<view class="process-action-form">
-						<view class="process-action-form-group">
+						<view class="process-action-form-group" v-if="processActionModeOptions[processActionModeIndex] !== '删除'">
 							<text class="process-action-form-label">生产顺序</text>
 							<input type="number" class="process-action-input" placeholder="请输入顺序" v-model="processActionSequence" step="0.01" />
 						</view>
@@ -2995,11 +2995,26 @@ const confirmProcessAction = async () => {
 			uni.showLoading({ title: '删除中...' })
 			const result = await http.post(DELETE_PROCESS_URL, { rowid: processRowid })
 			uni.hideLoading()
-			if (result.status === 1) {
+			// status=1 且有 message 视为失败，否则视为成功
+			const isFailed = result && result.status === 1 && result.message
+			if (isFailed) {
 				uni.showToast({ title: result.message || '删除失败', icon: 'none' })
 			} else {
+				// 删除成功后同步预派工关联工序
+				const productRowid = product?.rowid || ''
+				const preDispatchRowids = [...new Set(
+					processList.value
+						.filter(p => p.productRowid === productRowid && p.preDispatchRowid)
+						.map(p => p.preDispatchRowid)
+				)]
+				if (preDispatchRowids.length > 0) {
+					uni.showLoading({ title: '同步中...', mask: true })
+					await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
+					uni.hideLoading()
+				}
 				uni.showToast({ title: '删除成功', icon: 'success' })
 				closeProcessActionModal()
+				loadProducts(true)
 			}
 		} catch (e) {
 			uni.hideLoading()
