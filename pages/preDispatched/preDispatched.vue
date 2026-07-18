@@ -2587,6 +2587,7 @@ const loadProductProcesses = async (product) => {
 		// 清理已不存在于当前工序列表中的选中状态
 		const currentProcessRowids = new Set(newProcesses.map(p => p.rowid))
 		selectedProcessIds.value = selectedProcessIds.value.filter(rowid => currentProcessRowids.has(rowid))
+		console.log('[加载工序] productRowid:', product.rowid, '工序数据:', newProcesses.map(p => ({ rowid: p.rowid, processName: p.processName, preDispatchRowid: p.preDispatchRowid, employeeNames: p.employeeNames })))
 	} catch (e) {
 		console.error('加载工序失败:', e)
 	}
