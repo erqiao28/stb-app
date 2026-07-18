@@ -2800,16 +2800,14 @@ const toggleEmployeeSection = () => {
 	}
 }
 
-const employeeNamesEqual = (a, b) => {
+const preDispatchRowidEqual = (a, b) => {
 	if (!a || !b) return false
-	if (a.length === 0 || b.length === 0) return false
-	if (a.length !== b.length) return false
-	return a.join(',') === b.join(',')
+	return String(a) === String(b)
 }
 
 const getEmployeeGroupStart = (processes, idx) => {
 	let start = idx
-	while (start > 0 && employeeNamesEqual(processes[start - 1].employeeNames, processes[start].employeeNames)) {
+	while (start > 0 && preDispatchRowidEqual(processes[start - 1].preDispatchRowid, processes[start].preDispatchRowid)) {
 		start--
 	}
 	return start
@@ -2822,7 +2820,7 @@ const isEmployeeGroupStart = (processes, idx) => {
 const getEmployeeGroupSpan = (processes, idx) => {
 	if (!isEmployeeGroupStart(processes, idx)) return 0
 	let span = 1
-	while (idx + span < processes.length && employeeNamesEqual(processes[idx].employeeNames, processes[idx + span].employeeNames)) {
+	while (idx + span < processes.length && preDispatchRowidEqual(processes[idx].preDispatchRowid, processes[idx + span].preDispatchRowid)) {
 		span++
 	}
 	return span
@@ -2840,6 +2838,11 @@ const getEmployeeCellText = (processes, idx) => {
 	if (names.length === 0) return '-'
 	if (span === 1 && names.length > 1) return '多人'
 	return names.join('、')
+}
+
+const getEmployeeGroupPreDispatchRowid = (processes, idx) => {
+	const startIdx = getEmployeeGroupStart(processes, idx)
+	return processes[startIdx]?.preDispatchRowid || ''
 }
 
 // 按订单编号分组，并按订单交货日期升序排列
