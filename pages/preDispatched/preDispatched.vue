@@ -1966,8 +1966,8 @@ const handleProcessListConfirm = async (productRowid) => {
 
 	// 提取关联的预派工rowids
 	const pdRowids = [...hasPreDispatchRowidSet]
-	// 无工序的预派工rowids
-	const noProcessPreDispatchRowids = []
+	// 无工序的预派工rowid（一个工序列表只会有一个）
+	let noProcessPreDispatchRowid = ''
 	if (pdRowids.length > 0) {
 		// 有预派工关联：获取预派工数据
 		const pdRes = await callWorkflowListAPIPaged({
@@ -2004,8 +2004,8 @@ const handleProcessListConfirm = async (productRowid) => {
 			if (sids && sids.length > 0) {
 				sids.forEach(sid => allRelatedProcessRowids.add(sid))
 			} else {
-				// 工序排产明细为空，收集该预派工rowid
-				noProcessPreDispatchRowids.push(item.rowid)
+				// 工序排产明细为空，记录该预派工rowid
+				noProcessPreDispatchRowid = item.rowid
 			}
 		})
 		if (allRelatedProcessRowids.size > 0) {
@@ -2033,7 +2033,7 @@ const handleProcessListConfirm = async (productRowid) => {
 		const resp = await http.post(PRE_DISPATCH_PROCESS_CONFIRM_URL, {
 			hasPreDispatchRowids,
 			noPreDispatchRowids,
-			noProcessPreDispatchRowids,
+			noProcessPreDispatchRowid,
 			dispatchDate,
 			dispatchCount,
 			finishCount
