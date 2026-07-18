@@ -866,7 +866,7 @@ const filterCraft = ref('')
 const filterInnerPaint = ref('')
 const filterPolish = ref('')
 const filterGuokou = ref('')
-const filterDate = ref(getYesterdayDate())
+const filterDate = ref(getTomorrowDate())
 
 const productList = ref([])
 const summaryList = ref([])
@@ -1556,7 +1556,7 @@ const handleReset = () => {
 	filterInnerPaint.value = ''
 	filterPolish.value = ''
 	filterGuokou.value = ''
-	filterDate.value = getYesterdayDate()
+	filterDate.value = getTomorrowDate()
 	selectedProductIds.value = []
 	processList.value = []
 	loadedProductIds.value = []
@@ -3723,8 +3723,8 @@ function getTomorrowDate() {
 }
 
 function getYesterdayDate() {
-	// 临时：日期筛选改为 2026-07-14
-	const yesterday = new Date('2026-07-14')
+	const yesterday = new Date()
+	yesterday.setDate(yesterday.getDate() - 1)
 	const year = yesterday.getFullYear()
 	const month = String(yesterday.getMonth() + 1).padStart(2, '0')
 	const day = String(yesterday.getDate()).padStart(2, '0')
