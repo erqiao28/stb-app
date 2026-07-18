@@ -442,7 +442,7 @@ const loadProducts = async () => {
 				filters: [
 					{
 						controlId: PRODUCT_FIELD_MAP.productOrder,
-						dataType: 29,
+						dataType: 30,
 						spliceType: 1,
 						filterType: 8
 					},
