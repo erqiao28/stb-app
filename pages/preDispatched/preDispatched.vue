@@ -3750,12 +3750,19 @@ const loadEmployeeOptions = async () => {
 				values: [wsFilter]
 			})
 		}
+		console.log('[选择员工] 查询条件:', {
+			currentDate,
+			wsFilter,
+			filters,
+			workshop: loginWorkshop.value
+		})
 		const res = await callWorkflowListAPIPaged({
 			worksheetId: 'yggs',
 			filters,
 			pageSize: 100,
 			pageNum: 1
 		})
+		console.log('[选择员工] 接口返回:', res)
 		if (res.data && res.data.length > 0) {
 			const mappedEmployees = res.data.map(item => {
 				const dispatchWorkDate = item[EMPLOYEE_FIELD_MAP.dispatchDate] || ''
@@ -3771,6 +3778,8 @@ const loadEmployeeOptions = async () => {
 				}
 			})
 			const filteredEmployees = mappedEmployees.filter(emp => emp.dispatchWorkDate === currentDate)
+			console.log('[选择员工] 映射后数据:', mappedEmployees)
+			console.log('[选择员工] 按日期过滤后:', filteredEmployees)
 			allEmployeeOptions.value = filteredEmployees
 		} else {
 			allEmployeeOptions.value = []
