@@ -484,13 +484,16 @@ const loadProducts = async () => {
 				pageSize, 
 				pageNum, 
 				dataLength: res?.data?.length,
+				total: res?.total,
 				status: res?.status,
 				msg: res?.msg
 			})
 			
-			// 判断是否有错误（status 不为 1 或 msg 包含错误信息）
-			const hasError = res?.status !== 1 || (res?.msg && !res.msg.includes('成功'))
-			if (hasError || !res?.data) {
+			// 判断是否有数据（data 是数组且有数据，或者 total > 0）
+			const hasData = Array.isArray(res?.data) && res.data.length > 0
+			const noMore = res?.data?.length < pageSize || (res?.total && (pageNum * pageSize >= res.total))
+			
+			if (!hasData && pageNum === 1) {
 				console.error('[工艺配置] 获取产品列表失败:', res)
 				break
 			}
@@ -512,7 +515,7 @@ const loadProducts = async () => {
 			productList.value.push(...filtered)
 			
 			// 判断是否有更多数据
-			hasMore = rows.length >= pageSize
+			hasMore = !noMore
 			pageNum++
 		}
 		
