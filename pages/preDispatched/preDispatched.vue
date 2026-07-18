@@ -3735,14 +3735,14 @@ const loadEmployeeOptions = async () => {
 	try {
 		const currentDate = filterDate.value
 		const wsFilter = employeeWorkshopFilter.value
-		const filters = [{
+		const baseFilters = [{
 			controlId: '6943bd902161a0fc58bad5ab',
 			dataType: 30,
 			spliceType: 1,
 			filterType: 8
 		}]
 		if (wsFilter) {
-			filters.unshift({
+			baseFilters.unshift({
 				controlId: '696075d19223cfe3a0c169dc',
 				dataType: 30,
 				spliceType: 1,
@@ -3753,18 +3753,26 @@ const loadEmployeeOptions = async () => {
 		console.log('[选择员工] 查询条件:', {
 			currentDate,
 			wsFilter,
-			filters,
+			filters: baseFilters,
 			workshop: loginWorkshop.value
 		})
-		const res = await callWorkflowListAPIPaged({
-			worksheetId: 'yggs',
-			filters,
-			pageSize: 100,
-			pageNum: 1
-		})
-		console.log('[选择员工] 接口返回:', res)
-		if (res.data && res.data.length > 0) {
-			const mappedEmployees = res.data.map(item => {
+
+		const allFilteredEmployees = []
+		let pageNum = 1
+		const pageSize = 100
+		while (true) {
+			const res = await callWorkflowListAPIPaged({
+				worksheetId: 'yggs',
+				filters: baseFilters,
+				pageSize,
+				pageNum,
+				silent: true
+			})
+			console.log(`[选择员工] 第${pageNum}页接口返回:`, res)
+			const rows = Array.isArray(res?.data) ? res.data : []
+			if (rows.length === 0) break
+
+			const mappedEmployees = rows.map(item => {
 				const dispatchWorkDate = item[EMPLOYEE_FIELD_MAP.dispatchDate] || ''
 				const totalHoursStr = item[EMPLOYEE_FIELD_MAP.totalHours] || '0'
 				const wageStr = item[EMPLOYEE_FIELD_MAP.wage] || '0'
@@ -3778,12 +3786,16 @@ const loadEmployeeOptions = async () => {
 				}
 			})
 			const filteredEmployees = mappedEmployees.filter(emp => emp.dispatchWorkDate === currentDate)
-			console.log('[选择员工] 映射后数据:', mappedEmployees)
-			console.log('[选择员工] 按日期过滤后:', filteredEmployees)
-			allEmployeeOptions.value = filteredEmployees
-		} else {
-			allEmployeeOptions.value = []
+			console.log(`[选择员工] 第${pageNum}页映射后数据:`, mappedEmployees)
+			console.log(`[选择员工] 第${pageNum}页按日期过滤后:`, filteredEmployees)
+
+			if (filteredEmployees.length === 0) break
+			allFilteredEmployees.push(...filteredEmployees)
+			pageNum++
 		}
+
+		console.log('[选择员工] 所有符合条件员工:', allFilteredEmployees)
+		allEmployeeOptions.value = allFilteredEmployees
 	} catch (error) {
 		console.error('加载员工列表失败:', error)
 		allEmployeeOptions.value = []
