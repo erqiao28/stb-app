@@ -3063,21 +3063,25 @@ const confirmProcessAction = async () => {
 				uni.showToast({ title: result.message || '删除失败', icon: 'none' })
 				return
 			}
-			// 删除成功后立即刷新工序列表并关闭弹窗
+			// 删除成功后先关闭弹窗，再显示刷新动画并刷新工序列表
+			closeProcessActionModal()
+			uni.showLoading({ title: '刷新中...', mask: true })
 			loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
 			processList.value = processList.value.filter(p => p.productRowid !== productRowid)
 			await loadProductProcesses(product)
+			uni.hideLoading()
 			uni.showToast({ title: '删除成功', icon: 'success' })
-			closeProcessActionModal()
 			// 同步预派工关联工序（异步执行，不影响主流程）
 			const preDispatchRowids = await getPreDispatchRowidsWithProcessDetail(productRowid)
 			if (preDispatchRowids.length > 0) {
 				try {
 					await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
 					// 同步成功后再刷新一次
+					uni.showLoading({ title: '刷新中...', mask: true })
 					loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
 					processList.value = processList.value.filter(p => p.productRowid !== productRowid)
 					await loadProductProcesses(product)
+					uni.hideLoading()
 				} catch (e) {
 					console.error('同步预派工失败:', e)
 				}
@@ -3113,12 +3117,14 @@ const confirmProcessAction = async () => {
 				uni.showToast({ title: res.message || '操作失败', icon: 'none' })
 				return
 			}
-			// 操作成功后立即刷新工序列表并关闭弹窗
+			// 操作成功后先关闭弹窗，再显示刷新动画并刷新工序列表
+			closeProcessActionModal()
+			uni.showLoading({ title: '刷新中...', mask: true })
 			loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
 			processList.value = processList.value.filter(p => p.productRowid !== productRowid)
 			await loadProductProcesses(product)
+			uni.hideLoading()
 			uni.showToast({ title: '操作成功', icon: 'success' })
-			closeProcessActionModal()
 			// 替换时才同步预派工关联工序（异步执行，不影响主流程）
 			if (mode === '替换') {
 				const preDispatchRowids = await getPreDispatchRowidsWithProcessDetail(productRowid)
@@ -3126,9 +3132,11 @@ const confirmProcessAction = async () => {
 					try {
 						await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
 						// 同步成功后再刷新一次
+						uni.showLoading({ title: '刷新中...', mask: true })
 						loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
 						processList.value = processList.value.filter(p => p.productRowid !== productRowid)
 						await loadProductProcesses(product)
+						uni.hideLoading()
 					} catch (e) {
 						console.error('同步预派工失败:', e)
 					}
