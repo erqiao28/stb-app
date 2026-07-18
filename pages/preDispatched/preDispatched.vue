@@ -3035,6 +3035,7 @@ const confirmProcessAction = async () => {
 			uni.showToast({ title: '工序ID不存在', icon: 'none' })
 			return
 		}
+		const productRowid = product?.rowid || ''
 		try {
 			uni.showLoading({ title: '删除中...' })
 			const result = await http.post(DELETE_PROCESS_URL, { rowid: processRowid })
@@ -3045,17 +3046,21 @@ const confirmProcessAction = async () => {
 				uni.showToast({ title: result.message || '删除失败', icon: 'none' })
 				return
 			}
-			// 删除成功后立即刷新工序列表
-			loadProducts(true)
+			// 删除成功后刷新工序列表
+			// 清除该产品的已加载记录，让 loadProductProcesses 重新加载
+			loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
+			processList.value = processList.value.filter(p => p.productRowid !== productRowid)
+			await loadProductProcesses(product)
 			// 同步预派工关联工序（只同步工序排产明细不为空的）
-			const productRowid = product?.rowid || ''
 			const preDispatchRowids = await getPreDispatchRowidsWithProcessDetail(productRowid)
 			if (preDispatchRowids.length > 0) {
 				uni.showLoading({ title: '同步中...', mask: true })
 				await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
 				uni.hideLoading()
 				// 同步后再刷新一次
-				loadProducts(true)
+				loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
+				processList.value = processList.value.filter(p => p.productRowid !== productRowid)
+				await loadProductProcesses(product)
 			}
 			uni.showToast({ title: '删除成功', icon: 'success' })
 			closeProcessActionModal()
@@ -3071,6 +3076,7 @@ const confirmProcessAction = async () => {
 			uni.showToast({ title: '缺少产品编号', icon: 'none' })
 			return
 		}
+		const productRowid = product?.rowid || ''
 		const params = {
 			processName: selected.processName || '',
 			sequence: parseFloat(processActionSequence.value) || 0,
@@ -3089,18 +3095,22 @@ const confirmProcessAction = async () => {
 				uni.showToast({ title: res.message || '操作失败', icon: 'none' })
 				return
 			}
-			// 操作成功后立即刷新工序列表
-			loadProducts(true)
+			// 操作成功后刷新工序列表
+			// 清除该产品的已加载记录，让 loadProductProcesses 重新加载
+			loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
+			processList.value = processList.value.filter(p => p.productRowid !== productRowid)
+			await loadProductProcesses(product)
 			// 替换时才同步预派工关联工序（只同步工序排产明细不为空的）
 			if (mode === '替换') {
-				const productRowid = product?.rowid || ''
 				const preDispatchRowids = await getPreDispatchRowidsWithProcessDetail(productRowid)
 				if (preDispatchRowids.length > 0) {
 					uni.showLoading({ title: '同步中...', mask: true })
 					await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
 					uni.hideLoading()
 					// 同步后再刷新一次
-					loadProducts(true)
+					loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
+					processList.value = processList.value.filter(p => p.productRowid !== productRowid)
+					await loadProductProcesses(product)
 				}
 			}
 			uni.showToast({ title: '操作成功', icon: 'success' })
