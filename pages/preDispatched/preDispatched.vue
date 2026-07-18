@@ -133,7 +133,12 @@
 
 		<view class="main-content">
 			<view class="left-panel">
-				<view class="panel-title">产品列表({{ selectedProductIds.length }}/{{ productList.length }})</view>
+				<view class="panel-title">
+					<text>产品列表({{ selectedProductIds.length }}/{{ productList.length }})</text>
+					<view class="sync-select-switch" @click.stop="syncSelectEnabled = !syncSelectEnabled">
+						<view class="switch" :class="{ 'switch-on': syncSelectEnabled }"></view>
+					</view>
+				</view>
 				<scroll-view class="product-list" scroll-y>
 					<view class="order-group" v-for="(group, gIdx) in groupedProductList" :key="group.orderNo">
 						<view class="order-header" @click="toggleOrderCollapse(group.orderNo)">
@@ -873,6 +878,7 @@ const summaryPageNum = ref(1)
 const SUMMARY_PAGE_SIZE = 20
 
 const selectedProductIds = ref([])
+const syncSelectEnabled = ref(false) // 同组产品同步勾选开关
 const expandedIds = ref([])
 const collapsedOrderIds = ref([])
 const chineseNumberMap = {
@@ -2554,9 +2560,12 @@ const toggleProcessSelection = (process) => {
 	if (!process.rowid) return
 	const index = selectedProcessIds.value.indexOf(process.rowid)
 	if (index > -1) {
-		// 取消勾选时，也要取消同类别的所有工序
+		// 取消勾选
 		selectedProcessIds.value.splice(index, 1)
-		autoDeselectRelatedProcesses(process)
+		// 归类联动：开关开启时才联动
+		if (syncSelectEnabled.value) {
+			autoDeselectRelatedProcesses(process)
+		}
 	} else {
 		if (process.isAfterAssociated) {
 			uni.showToast({ title: '产品未流转到该工序', icon: 'none' })
@@ -2565,8 +2574,10 @@ const toggleProcessSelection = (process) => {
 		}
 		selectedProcessIds.value.push(process.rowid)
 
-		// 工序归类联动：如果该工序属于某个归类，则勾选同归类下的所有工序
-		autoSelectRelatedProcesses(process)
+		// 归类联动：开关开启时才联动
+		if (syncSelectEnabled.value) {
+			autoSelectRelatedProcesses(process)
+		}
 	}
 }
 
@@ -3014,7 +3025,11 @@ const confirmProcessAction = async () => {
 			uni.showLoading({ title: '提交中...', mask: true })
 			const res = await http.post(OPERATE_PROCESS_URL, params)
 			uni.hideLoading()
-			if (res && (res.status === 0 || res.success === true || res.code === 200 || res.data)) {
+			// status=1 且有 message 视为失败，否则视为成功（后端约定 status=1 表示成功）
+			const isFailed = res && res.status === 1 && res.message
+			if (isFailed) {
+				uni.showToast({ title: res.message || '操作失败', icon: 'none' })
+			} else {
 				// 替换或删除时才同步预派工关联工序
 				if (mode === '替换' || mode === '删除') {
 					const productRowid = product?.rowid || ''
@@ -3032,8 +3047,6 @@ const confirmProcessAction = async () => {
 				uni.showToast({ title: '操作成功', icon: 'success' })
 				closeProcessActionModal()
 				loadProducts(true)
-			} else {
-				uni.showToast({ title: res?.message || res?.msg || '操作失败', icon: 'none' })
 			}
 		} catch (e) {
 			uni.hideLoading()
@@ -4452,6 +4465,41 @@ onMounted(async () => {
 				background-color: #f5f7fa;
 				border-bottom: 1px solid #eee;
 				flex-shrink: 0;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: px2vw(16px);
+			}
+
+			.sync-select-switch {
+				.switch {
+					width: px2vw(36px);
+					height: px2vw(20px);
+					border-radius: px2vw(10px);
+					background-color: #ccc;
+					position: relative;
+					transition: background-color 0.2s;
+
+					&::after {
+						content: '';
+						position: absolute;
+						width: px2vw(16px);
+						height: px2vw(16px);
+						border-radius: 50%;
+						background-color: #fff;
+						top: px2vw(2px);
+						left: px2vw(2px);
+						transition: left 0.2s;
+					}
+				}
+
+				.switch-on {
+					background-color: #1890ff;
+
+					&::after {
+						left: px2vw(18px);
+					}
+				}
 			}
 
 			.left-bottom-btns {
