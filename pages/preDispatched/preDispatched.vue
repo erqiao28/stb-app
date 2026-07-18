@@ -206,11 +206,11 @@
 							:style="{ gridTemplateColumns: 'min-content min-content repeat(' + group.processes.length + ', min-content)' }"
 						>
 							<view class="grid-product-name" style="grid-row: 1 / span 7; grid-column: 1">
-						<view
-						class="grid-product-action"
-						:style="{ backgroundColor: selectedProcessIds.length === 1 ? '#5884f1' : '#999' }"
-						@click.stop="openProcessActionModalByRowid(group.productRowid)"
-					>操作</view>
+				<view
+					class="grid-product-action"
+					:style="{ backgroundColor: isProcessActionEnabled(group.productRowid) ? '#5884f1' : '#999' }"
+					@click.stop="openProcessActionModalByRowid(group.productRowid)"
+				>操作</view>
 						<view class="grid-product-name-text">{{ group.productName }}</view>
 						<view class="grid-product-confirm" @click.stop="handleProcessListConfirm(group.productRowid)">确定</view>
 					</view>
@@ -2560,6 +2560,9 @@ const loadProductProcesses = async (product) => {
 			}
 		}).sort((a, b) => (parseFloat(a.sequence) || 0) - (parseFloat(b.sequence) || 0))
 		processList.value.push(...newProcesses)
+		// 清理已不存在于当前工序列表中的选中状态
+		const currentProcessRowids = new Set(newProcesses.map(p => p.rowid))
+		selectedProcessIds.value = selectedProcessIds.value.filter(rowid => currentProcessRowids.has(rowid))
 	} catch (e) {
 		console.error('加载工序失败:', e)
 	}
@@ -2907,6 +2910,15 @@ const openProcessActionModal = (product) => {
 	loadProcessActionList()
 }
 
+// 判断当前产品下是否只选中了一道有效的工序
+const isProcessActionEnabled = (productRowid) => {
+	const currentProcessIds = processList.value
+		.filter(p => p.productRowid === productRowid)
+		.map(p => p.rowid)
+	const selectedCount = selectedProcessIds.value.filter(rowid => currentProcessIds.includes(rowid)).length
+	return selectedCount === 1
+}
+
 const openProcessActionModalByRowid = (productRowid) => {
 	// 检查是否只选中了一道工序
 	if (selectedProcessIds.value.length !== 1) {
@@ -2914,8 +2926,13 @@ const openProcessActionModalByRowid = (productRowid) => {
 		return
 	}
 	const selectedProcessId = selectedProcessIds.value[0]
-	// 获取选中工序的顺序
 	const selectedProcess = processList.value.find((p) => p.rowid === selectedProcessId)
+	// 校验选中的工序是否属于当前产品
+	if (!selectedProcess || selectedProcess.productRowid !== productRowid) {
+		uni.showToast({ title: '请勾选当前产品下的工序', icon: 'none' })
+		return
+	}
+	// 获取选中工序的顺序
 	const selectedSeq = selectedProcess ? parseFloat(selectedProcess.sequence) || 0 : 0
 	// 生产顺序默认为选中工序顺序 + 0.01
 	processActionSequence.value = (selectedSeq + 0.01).toFixed(2)
