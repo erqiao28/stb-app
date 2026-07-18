@@ -480,6 +480,19 @@ const loadProducts = async () => {
 				silent: pageNum > 1
 			})
 			
+			console.log(`[工艺配置] 第${pageNum}页获取产品:`, { 
+				pageSize, 
+				pageNum, 
+				dataLength: res?.data?.length,
+				status: res?.status,
+				msg: res?.msg
+			})
+			
+			if (res?.status !== 1 || !res?.data) {
+				console.error('[工艺配置] 获取产品列表失败:', res)
+				break
+			}
+			
 			const rows = Array.isArray(res?.data) ? res.data : []
 			const mapped = rows.map(item => ({
 				rowid: item.rowid || '',
