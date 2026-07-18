@@ -3733,69 +3733,25 @@ function getYesterdayDate() {
 
 const loadEmployeeOptions = async () => {
 	try {
+		// 优先复用员工出勤已加载的数据，避免重复查询且保证数据一致
+		if (employeeList.value.length === 0) {
+			await loadWorkshopEmployees()
+		}
 		const currentDate = filterDate.value
-		const wsFilter = employeeWorkshopFilter.value
-		const baseFilters = [{
-			controlId: '6943bd902161a0fc58bad5ab',
-			dataType: 30,
-			spliceType: 1,
-			filterType: 8
-		}]
-		if (wsFilter) {
-			baseFilters.unshift({
-				controlId: '696075d19223cfe3a0c169dc',
-				dataType: 30,
-				spliceType: 1,
-				filterType: 2,
-				values: [wsFilter]
-			})
-		}
-		console.log('[选择员工] 查询条件:', {
+		const mappedEmployees = employeeList.value.map(item => ({
+			id: item.id || '',
+			name: item.name || '-',
+			position: '',
+			totalHours: item.totalHours || 0,
+			wage: item.wage || 0,
+			dispatchWorkDate: currentDate
+		}))
+		console.log('[选择员工] 复用员工出勤数据:', {
 			currentDate,
-			wsFilter,
-			filters: baseFilters,
-			workshop: loginWorkshop.value
+			count: mappedEmployees.length,
+			employees: mappedEmployees
 		})
-
-		const allFilteredEmployees = []
-		let pageNum = 1
-		const pageSize = 100
-		while (true) {
-			const res = await callWorkflowListAPIPaged({
-				worksheetId: 'yggs',
-				filters: baseFilters,
-				pageSize,
-				pageNum,
-				silent: true
-			})
-			console.log(`[选择员工] 第${pageNum}页接口返回:`, res)
-			const rows = Array.isArray(res?.data) ? res.data : []
-			if (rows.length === 0) break
-
-			const mappedEmployees = rows.map(item => {
-				const dispatchWorkDate = item[EMPLOYEE_FIELD_MAP.dispatchDate] || ''
-				const totalHoursStr = item[EMPLOYEE_FIELD_MAP.totalHours] || '0'
-				const wageStr = item[EMPLOYEE_FIELD_MAP.wage] || '0'
-				return {
-					id: item['6943bd902161a0fc58bad5ab'] || '',
-					name: item[EMPLOYEE_FIELD_MAP.employeeName] || '',
-					position: item['6943bf332161a0fc58bad7a4'] || '',
-					totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
-					wage: wageStr === '' ? 0 : parseFloat(wageStr) || 0,
-					dispatchWorkDate: dispatchWorkDate
-				}
-			})
-			const filteredEmployees = mappedEmployees.filter(emp => emp.dispatchWorkDate === currentDate)
-			console.log(`[选择员工] 第${pageNum}页映射后数据:`, mappedEmployees)
-			console.log(`[选择员工] 第${pageNum}页按日期过滤后:`, filteredEmployees)
-
-			if (filteredEmployees.length === 0) break
-			allFilteredEmployees.push(...filteredEmployees)
-			pageNum++
-		}
-
-		console.log('[选择员工] 所有符合条件员工:', allFilteredEmployees)
-		allEmployeeOptions.value = allFilteredEmployees
+		allEmployeeOptions.value = mappedEmployees
 	} catch (error) {
 		console.error('加载员工列表失败:', error)
 		allEmployeeOptions.value = []
