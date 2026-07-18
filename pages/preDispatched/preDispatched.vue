@@ -728,13 +728,13 @@
 				<view class="process-action-close" @click="closeProcessActionModal">&times;</view>
 			</view>
 			<view class="process-action-body">
-				<view class="process-action-filter" v-if="processActionModeOptions[processActionModeIndex] !== '删除'">
+				<view class="process-action-filter">
 					<view class="process-action-search">
 						<input type="text" placeholder="请输入工序名称" v-model="processActionSearch" @input="handleProcessActionSearch" />
 					</view>
 				</view>
 				<view class="process-action-main">
-					<view class="process-action-list-section" v-if="processActionModeOptions[processActionModeIndex] !== '删除'">
+					<view class="process-action-list-section">
 						<scroll-view scroll-y class="process-action-list">
 							<view class="process-action-list-header">工序名称</view>
 							<view
@@ -2979,7 +2979,8 @@ const confirmProcessAction = async () => {
 	const selected = processActionSelected.value
 	const product = processActionProduct.value
 
-	if (!selected) {
+	// 添加和替换模式需要选择工序
+	if (mode !== '删除' && !selected) {
 		uni.showToast({ title: '请选择工序', icon: 'none' })
 		return
 	}
