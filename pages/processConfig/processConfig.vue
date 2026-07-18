@@ -221,7 +221,7 @@ const CRAFT_BILL_FIELD_MAP = {
 	stretch: '6a5768e56d70ffabc67c0b48',
 	spray: '6a57690f6d70ffabc67c0b4f',
 	polish: '6a57690f6d70ffabc67c0b50',
-	assembly: '6a57690f6d70ffabc67c0b50'
+	assembly: '6a57690f6d70ffabc67c0b51'
 }
 
 // 工序数据字典工作表
