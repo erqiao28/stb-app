@@ -2071,6 +2071,9 @@ const handleProcessListConfirm = async (productRowid) => {
 					}
 				})
 			}
+			// 刷新员工数据
+			loadWorkshopEmployees()
+			loadEmployeeDispatchSummary()
 		} else {
 			uni.showToast({ title: resp.message || '提交失败', icon: 'none' })
 		}
@@ -2791,8 +2794,9 @@ const loadEmployeeDispatchSummary = async () => {
 
 const toggleEmployeeSection = () => {
 	isEmployeeExpanded.value = !isEmployeeExpanded.value
-	if (isEmployeeExpanded.value && employeeDispatchSummary.value.length === 0) {
+	if (isEmployeeExpanded.value) {
 		loadEmployeeDispatchSummary()
+		loadWorkshopEmployees()
 	}
 }
 
@@ -3760,6 +3764,7 @@ const loadEmployeeOptions = async () => {
 }
 
 const openEmployeeSelector = async () => {
+	await loadWorkshopEmployees()
 	await loadEmployeeOptions()
 	showEmployeeSelector.value = true
 }
@@ -3796,8 +3801,14 @@ onMounted(async () => {
 	loadCraftPositionList()  // 获取工序归类表数据
 	await loadProducts(true)
 	loadSummaries(true)
-	loadEmployeeDispatchSummary()
+	// 进入页面时先同步生成未生成的员工数据，再获取员工列表
+	try {
+		await http.post(ATTENDANCE_SYNC_URL, { date: filterDate.value })
+	} catch (e) {
+		console.error('[onMounted] 同步员工数据失败:', e)
+	}
 	loadWorkshopEmployees()
+	loadEmployeeDispatchSummary()
 })
 </script>
 
