@@ -433,7 +433,7 @@ const loadProducts = async () => {
 	
 	try {
 		let pageNum = 1
-		const pageSize = 100
+		const pageSize = 50
 		let hasMore = true
 		
 		while (hasMore) {
