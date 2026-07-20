@@ -431,12 +431,16 @@ const loadProducts = async () => {
 	productList.value = []
 	craftBillQtyCache.clear()
 	
+	// 手动显示 loading，由我们统一控制显示和隐藏
+	uni.showLoading({ title: '加载中...', mask: true })
+	
 	try {
 		let pageNum = 1
 		const pageSize = 50
 		let hasMore = true
 		
 		while (hasMore) {
+			// 所有请求都 silent: true，由我们统一控制 loading 显示
 			const res = await callWorkflowListAPIPaged({
 				worksheetId: PRODUCT_WORKSHEET_ID,
 				filters: [
@@ -477,7 +481,7 @@ const loadProducts = async () => {
 				],
 				pageSize,
 				pageNum,
-				silent: pageNum > 1
+				silent: true  // 所有请求都 silent，由我们统一控制 loading
 			})
 			
 			console.log(`[工艺配置] 第${pageNum}页获取产品:`, { 
@@ -525,6 +529,8 @@ const loadProducts = async () => {
 		console.error('加载产品列表失败:', e)
 		uni.showToast({ title: '加载产品列表失败', icon: 'none' })
 	} finally {
+		// 隐藏 loading，确保所有数据加载完成后再隐藏
+		uni.hideLoading()
 		loadingProducts.value = false
 	}
 }
