@@ -218,14 +218,6 @@ const PROCESS_DICT_FIELD_MAP = {
 	name: 'Name'
 }
 
-// 工序层级下拉选项 key
-const LEVEL_KEYS = {
-	level1: '1b5ce0ee-dbfd-4715-9b39-b7b52e3716d6',
-	level2: '227b0b2b-6998-4962-bdc2-741c24a77d7f',
-	level3: '93634f73-16cb-4231-9a8f-282ab0d91544',
-	level4: 'c3b9855b-1356-40fe-b6cb-7a1e25187592'
-}
-
 const productList = ref([])
 const loadingProducts = ref(false)
 const selectedProductId = ref('')
@@ -235,7 +227,6 @@ const isLeftPanelCollapsed = ref(false)
 
 const processDictList = ref([])
 const processTree = ref([])
-const expandedTreeIds = ref([])
 
 const chineseNumberMap = {
 	1: '一', 2: '二', 3: '三', 4: '四', 5: '五',
@@ -361,6 +352,8 @@ const filterByCraftBill = async (products) => {
 	// 2. 收集未缓存的工艺单 rowid
 	const qtyField = getCraftBillQtyField()
 	if (!qtyField) {
+		console.warn('[工艺单筛选] 当前账号车间权限未配置，无法按工艺单过滤：', loginWorkshop.value)
+		uni.showToast({ title: '当前账号车间权限未配置，无法筛选工艺单', icon: 'none', duration: 2500 })
 		return emptyProducts
 	}
 	
@@ -574,7 +567,6 @@ const handleProductClick = (product) => {
 	selectedLevel2Id.value = ''
 	selectedLevel3Id.value = ''
 	selectedLevel3Sequence.value = []
-	connectorLines.value = []
 	loadProcessTree()
 }
 
@@ -585,37 +577,47 @@ const toggleLeftPanel = () => {
 // 加载工序数据字典并构建工序树
 const loadProcessTree = async () => {
 	try {
-		const res = await callWorkflowListAPIPaged({
-			worksheetId: PROCESS_DICT_WORKSHEET_ID,
-			filters: [
-				{
-					controlId: PROCESS_DICT_FIELD_MAP.dictType,
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: ['工序']
-				},
-				{
-					controlId: PROCESS_DICT_FIELD_MAP.workshop,
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: [loginWorkshop.value]
-				},
-				{
-					controlId: PROCESS_DICT_FIELD_MAP.isNewProcess,
-					dataType: 36,
-					spliceType: 1,
-					filterType: 2,
-					values: [1]
-				}
-			],
-			pageSize: 500,
-			pageNum: 1,
-			silent: true
-		})
-		const rows = Array.isArray(res?.data) ? res.data : []
-		processDictList.value = rows.map(item => ({
+		// 分页循环拉取全部工序字典，每页 100 条，避免超过 500 条被静默截断
+		const pageSize = 100
+		let pageNum = 1
+		let allRows = []
+		let hasMore = true
+		while (hasMore) {
+			const res = await callWorkflowListAPIPaged({
+				worksheetId: PROCESS_DICT_WORKSHEET_ID,
+				filters: [
+					{
+						controlId: PROCESS_DICT_FIELD_MAP.dictType,
+						dataType: 30,
+						spliceType: 1,
+						filterType: 2,
+						values: ['工序']
+					},
+					{
+						controlId: PROCESS_DICT_FIELD_MAP.workshop,
+						dataType: 30,
+						spliceType: 1,
+						filterType: 2,
+						values: [loginWorkshop.value]
+					},
+					{
+						controlId: PROCESS_DICT_FIELD_MAP.isNewProcess,
+						dataType: 30,
+						spliceType: 1,
+						filterType: 2,
+						values: ['1']
+					}
+				],
+				pageSize,
+				pageNum,
+				silent: true
+			})
+			const rows = Array.isArray(res?.data) ? res.data : []
+			allRows.push(...rows)
+			hasMore = rows.length === pageSize && allRows.length < (res?.total || 0)
+			pageNum++
+		}
+		processDictList.value = allRows.map(item => ({
 			rowid: item.rowid || '',
 			name: formatFieldValue(item[PROCESS_DICT_FIELD_MAP.name]) || '',
 			level: formatFieldValue(item[PROCESS_DICT_FIELD_MAP.level]) || '',
@@ -627,12 +629,8 @@ const loadProcessTree = async () => {
 		
 		// 构建工序树：二级工序 -> 三级工序 -> 四级工序
 		processTree.value = buildProcessTree(processDictList.value)
-		
-		// 默认展开二级工序
-		expandedTreeIds.value = processTree.value.map(node => node.rowid)
-		
-		// 如果当前选中的二级工序仍有效，重绘连接线
-		updateConnectors()
+
+
 	} catch (e) {
 		console.error('加载工序数据失败:', e)
 		uni.showToast({ title: '加载工序数据失败', icon: 'none' })
@@ -754,70 +752,6 @@ const selectedLevel3Processes = computed(() => {
 
 const selectedLevel3Set = computed(() => new Set(selectedLevel3Sequence.value))
 
-const connectorLines = ref([])
-
-const getRect = (selector) => {
-	return new Promise((resolve) => {
-		uni.createSelectorQuery().select(selector).boundingClientRect((rect) => {
-			resolve(rect || null)
-		}).exec()
-	})
-}
-
-const updateConnectors = async () => {
-	await nextTick()
-	if (!selectedLevel2Id.value || selectedLevel2Children.value.length === 0) {
-		connectorLines.value = []
-		return
-	}
-
-	const connectorLayerRect = await getRect('.connector-layer')
-	const selectedL2Rect = await getRect('#level2-' + selectedLevel2Id.value)
-	if (!connectorLayerRect || !selectedL2Rect) {
-		connectorLines.value = []
-		return
-	}
-
-	// 以连接线层为参照系计算位置，自动兼容横向滚动
-	const selectedCenterX = selectedL2Rect.left + selectedL2Rect.width / 2 - connectorLayerRect.left
-	const l2BottomY = selectedL2Rect.bottom - connectorLayerRect.top
-
-	const childRects = []
-	for (const child of selectedLevel2Children.value) {
-		const rect = await getRect('#level3-' + child.rowid)
-		if (rect) {
-			childRects.push({
-				rowid: child.rowid,
-				centerX: rect.left + rect.width / 2 - connectorLayerRect.left,
-				topY: rect.top - connectorLayerRect.top
-			})
-		}
-	}
-
-	if (childRects.length === 0) {
-		connectorLines.value = []
-		return
-	}
-
-	const minX = Math.min(...childRects.map(c => c.centerX))
-	const maxX = Math.max(...childRects.map(c => c.centerX))
-	const midY = l2BottomY + (childRects[0].topY - l2BottomY) / 2
-
-	const lines = [
-		// 从选中的二级工序向下到横向主干
-		{ type: 'vertical', left: selectedCenterX, top: l2BottomY, height: midY - l2BottomY },
-		// 横向主干
-		{ type: 'horizontal', left: minX, top: midY, width: maxX - minX }
-	]
-
-	// 从横向主干向上到每个三级工序
-	childRects.forEach((c) => {
-		lines.push({ type: 'vertical', left: c.centerX, top: midY, height: c.topY - midY })
-	})
-
-	connectorLines.value = lines
-}
-
 // 监听选中二级工序变化，重新计算三级工序偏移量
 watch(selectedLevel2Id, (newVal) => {
 	if (newVal) {
@@ -874,6 +808,11 @@ const doSubmitProcessConfig = async () => {
 		const res = await http.post(PROCESS_CONFIG_COMPLETE_URL, params)
 		console.log('工艺配置提交成功:', res)
 		uni.showToast({ title: '配置完成', icon: 'success' })
+
+		// 提交成功后清空选中状态，避免对同一产品重复提交
+		selectedProductId.value = ''
+		selectedLevel3Sequence.value = []
+		processTree.value = []
 
 		// 提交成功后刷新产品列表
 		await loadProducts()
@@ -1400,29 +1339,6 @@ onMounted(() => {
 						align-items: center;
 						flex-shrink: 0;
 						width: px2vw(76px);
-					}
-
-					.connector-layer {
-						position: absolute;
-						top: 0;
-						left: 0;
-						width: 100%;
-						height: 100%;
-						pointer-events: none;
-						z-index: 1;
-
-						.connector-line {
-							position: absolute;
-							background-color: #999;
-
-							&.horizontal {
-								height: 1px;
-							}
-
-							&.vertical {
-								width: 1px;
-							}
-						}
 					}
 
 					.level3-row {

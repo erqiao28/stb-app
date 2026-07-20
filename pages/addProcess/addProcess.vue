@@ -31,7 +31,7 @@
 						<view class="table-header-row">
 							<view class="table-header-cell">工序名称</view>
 						</view>
-						<view v-for="item in tableData" :key="item.processNumber" class="table-body-row" :class="{ selected: selectedProcess?.processName === item.processName }" @click="selectProcess(item)">
+						<view v-for="item in tableData" :key="item.rowid || item.processName" class="table-body-row" :class="{ selected: selectedProcess?.rowid === item.rowid }" @click="selectProcess(item)">
 							<view class="uni-table-td">{{ item.processName }}</view>
 						</view>
 						<!-- 加载更多提示 -->
@@ -47,15 +47,6 @@
 
 			<!-- 右侧：输入框和按钮区域 -->
 			<view class="input-section">
-				<!-- <view class="input-group">
-					<view class="input-label">新增工序</view>
-					<input 
-						type="text" 
-						class="process-input" 
-						placeholder="请输入工序名称" 
-						v-model="manualProcessName"
-						@input="handleManualInput" />
-				</view> -->
 				<view class="input-group">
 					<view class="input-label">生产顺序</view>
 					<input 
@@ -82,7 +73,7 @@
 						</view>
 					</picker>
 				</view>
-				<button class="add-button" @click="addProcess">添加工序</button>
+				<button class="add-button" :disabled="isSubmitting" @click="addProcess">添加工序</button>
 			</view>
 		</view> 
 	</view>
@@ -103,9 +94,6 @@ import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
-
-/** 登录权限是否为「工序」 */
-const isGongxuLimits = ref(false)
 
 /** 车间选项 */
 const workshopOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
@@ -132,12 +120,11 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 const hasMore = ref(true)
 const loading = ref(false)
+// 提交中标记：防止快速连点重复提交
+const isSubmitting = ref(false)
 
 // 选中的工序（存储整个工序对象）
 const selectedProcess = ref(null)
-
-// 手动输入的工序名称
-const manualProcessName = ref('')
 
 // 生产顺序
 const productionSequence = ref('')
@@ -151,21 +138,22 @@ const onModifyModeChange = (e) => {
 	modifyModeIndex.value = Number(e.detail.value) || 0
 }
 
-// 本工序工价
-const processPrice = ref('')
-
 // 计划生产日期
 const plannedProductionDate = ref('')
-
-// 是否新增状态（true=手动输入新增，false=从表格选择）
-const isNewProcess = ref(false)
 
 // 搜索输入值
 const searchValue = ref('')
 
-// 防抖搜索（移除延迟，实现实时）
+// 搜索防抖定时器与请求序号（防止慢的旧响应覆盖新结果）
+let searchTimer = null
+let requestSeq = 0
+
+// 防抖搜索：停止输入 300ms 后才发起请求，避免每次按键都请求
 const handleSearch = () => {
-  getProcessList(1, true)
+	if (searchTimer) clearTimeout(searchTimer)
+	searchTimer = setTimeout(() => {
+		getProcessList(1, true)
+	}, 300)
 }
 
 onLoad((options) => {
@@ -190,9 +178,6 @@ onLoad((options) => {
 	const day = String(today.getDate()).padStart(2, '0')
 	const todayStr = `${year}-${month}-${day}`
 	plannedProductionDate.value = todayStr
-	// 判断权限是否为「工序」（从 store 或本地存储读取）
-	const lim = (userStore.loginLimits || '').trim()
-	isGongxuLimits.value = lim === '工序'
 	// 初始化车间选择器为传入的车间（无论什么权限都初始化）
 	if (orderData.value.workshop) {
 		const idx = workshopOptions.value.indexOf(orderData.value.workshop)
@@ -223,13 +208,15 @@ onReachBottom(() => {
 
 const loadMore = () => {
 	if (!hasMore.value || loading.value) return;
+	// currentPage 由 getProcessList 内部统一赋值，此处不再自增，避免跳页
 	getProcessList(currentPage.value + 1, false)
-	currentPage.value++
 }
 
 // 获取工序列表
 const getProcessList = async (pageNum, isRefresh = false) => {
-	if (loading.value) return;
+	// 加载更多时若已有请求在进行则跳过；刷新类请求（搜索/下拉/初始化）允许插队，过期响应通过序号丢弃
+	if (loading.value && !isRefresh) return;
+	const seq = ++requestSeq
 	loading.value = true;
 	console.log('workshop:', orderData.value.workshop)
 	const baseFilters = [
@@ -291,7 +278,21 @@ const getProcessList = async (pageNum, isRefresh = false) => {
 		filters
 	}
 
-	const res = await callWorkflowListAPIPaged(params, pageSize.value, pageNum)
+	// 请求失败时复位 loading 并提示，避免页面卡死只能退出重进
+	let res
+	try {
+		res = await callWorkflowListAPIPaged(params, pageSize.value, pageNum)
+	} catch (e) {
+		console.error('加载工序列表失败:', e)
+		// 仅当没有更新的请求时才提示并复位 loading（新请求会自行管理 loading）
+		if (seq === requestSeq) {
+			showToast('加载失败，请重试')
+			loading.value = false
+		}
+		return
+	}
+	// 已有更新的请求发出，丢弃本次过期结果
+	if (seq !== requestSeq) return
 	console.log('API res total:', res.total, 'data length:', res.data.length)
 	console.log('API res data:', res.data)  // 日志确认数据
 	let mappedData = res.data.map(item => {
@@ -323,60 +324,55 @@ const getProcessList = async (pageNum, isRefresh = false) => {
 
 // 添加工序
 const addProcess = async () => {
-	// 确定工序名称：优先使用手动输入的，否则使用表格选择的
-	const processName = manualProcessName.value.trim() || selectedProcess.value?.processName || ''
-	
+	// 防重复提交
+	if (isSubmitting.value) return
+
+	const processName = selectedProcess.value?.processName || ''
+
 	if (!processName) {
-		showToast('请选择工序或输入工序名称')
+		showToast('请选择工序')
 		return
 	}
 
-	if (!productionSequence.value || !productionSequence.value.trim()) {
-		showToast('请输入生产顺序')
-		return
+	isSubmitting.value = true
+	try {
+		const res = await http.post(ADD_PROCESS_URL, {
+			ordercode: orderData.value.ordercode,
+			productcode: orderData.value.productcode,
+			workshop: orderData.value.workshop,
+			processName: processName,
+			isNew: false,
+			sequence: parseFloat(productionSequence.value) || 0,
+			modifyMode: modifyMode.value,
+			processPrice: 0,
+			plannedProductionDate: plannedProductionDate.value || '',
+			billRowid: orderData.value.billRowid,
+			processRowid: orderData.value.processRowid || '',
+			billType: orderData.value.billType || ''
+		})
+		console.log('保存响应:', res)
+		showToast('添加成功')
+		// 移到 navigateBack success 中
+		uni.navigateBack({
+			success: () => {
+				uni.$emit('processAdded', {
+					orderCode: orderData.value.ordercode,
+					processName: processName
+				})
+			}
+		})
+	} catch (e) {
+		console.error('添加工序失败:', e)
+		showToast('添加失败，请重试')
+	} finally {
+		isSubmitting.value = false
 	}
-
-	const res = await http.post(ADD_PROCESS_URL, {
-		ordercode: orderData.value.ordercode,
-		productcode: orderData.value.productcode,
-		workshop: orderData.value.workshop,
-		processName: processName,
-		isNew: isNewProcess.value,
-		sequence: parseFloat(productionSequence.value) || 0,
-		modifyMode: modifyMode.value,
-		processPrice: 0,
-		plannedProductionDate: plannedProductionDate.value || '',
-		billRowid: orderData.value.billRowid,
-		processRowid: orderData.value.processRowid || '',
-		billType: orderData.value.billType || ''
-	})
-	console.log('保存响应:', res)
-	showToast('添加成功')
-	// 移到 navigateBack success 中
-	uni.navigateBack({
-		success: () => {
-			uni.$emit('processAdded', {
-				orderCode: orderData.value.ordercode,
-				processName: processName
-			})
-		}
-	})
 }
 
 // 选中工序
 const selectProcess = (item) => {
 	selectedProcess.value = item  // 存储整个工序对象
-	manualProcessName.value = '' // 清空手动输入
-	isNewProcess.value = false // 从表格选择，不是新增
 	// 生产顺序保持使用跳转前选中的顺序+0.01，不需要重新计算
-}
-
-// 处理手动输入
-const handleManualInput = () => {
-	if (manualProcessName.value.trim()) {
-		selectedProcess.value = null // 清空表格选择
-		isNewProcess.value = true // 手动输入，是新增
-	}
 }
 
 // 计划生产日期选择变化处理

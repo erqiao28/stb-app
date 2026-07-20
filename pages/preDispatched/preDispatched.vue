@@ -775,8 +775,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, getCurrentInstance, watch } from 'vue'
-import { callWorkflowListAPIPaged, getLabelsBySids, getWorksheetStructure } from '../../utils/workflow'
+import { ref, onMounted, onShow, computed, getCurrentInstance, watch } from 'vue'
+import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
@@ -799,7 +799,6 @@ const employeeWorkshopFilter = computed(() => {
 })
 
 const PRE_DISPATCH_WORKSHEET_ID = '6a1e468d27514927ff33cbae'
-const PRE_DISPATCH_SUMMARY_WORKSHEET_ID = '6a3a172c6d70ffabc66e5d97'
 
 const PRE_DISPATCH_FIELD_MAP = {
 	orderNo: '6a1e47d727514927ff33cc45',
@@ -827,16 +826,6 @@ const PRE_DISPATCH_FIELD_MAP = {
 	materialSizeSpec: '6a3debe76d70ffabc6702dbb',
 	orderDeliveryDate: '6a587a166d70ffabc67c7982',
 	productDeliveryDate: '6a1e7d2c27514927ff33e56b'
-}
-
-const PRE_DISPATCH_SUMMARY_FIELD_MAP = {
-	summaryNo: '6a3a20236d70ffabc66e6977',
-	dailyWage: '6a3a20236d70ffabc66e6978',
-	workshop: '6a3a36136d70ffabc66e87ce',
-	dispatchDate: '6a3a20756d70ffabc66e69c5',
-	totalWorktime: '6a3a20606d70ffabc66e69a7',
-	totalWage: '6a3a20606d70ffabc66e69a8',
-	preDispatch: '6a3a20236d70ffabc66e697c',
 }
 
 const DAILY_WAGE_WORKSHEET_ID = '692112b021066a9f124f5c9f'
@@ -869,13 +858,7 @@ const filterGuokou = ref('')
 const filterDate = ref(getTomorrowDate())
 
 const productList = ref([])
-const summaryList = ref([])
 const loadingProducts = ref(false)
-const loadingSummary = ref(false)
-const loadingMore = ref(false)
-const hasMoreSummary = ref(true)
-const summaryPageNum = ref(1)
-const SUMMARY_PAGE_SIZE = 20
 
 const selectedProductIds = ref([])
 const syncSelectEnabled = ref(false) // 同组产品同步勾选开关
@@ -1049,6 +1032,10 @@ const showAttendancePanel = ref(false)
 const showProcessPanel = ref(false)
 const expandedEmployeeId = ref('')
 
+// 面板开关延迟定时器（快速切换时取消旧定时器，避免已关闭的面板重新打开）
+let attendancePanelTimer = null
+let processPanelTimer = null
+
 const showProcessDropdownPanel = ref(false)
 const processDropdownList = ref([])
 const selectedProcessDropdownEmployee = ref(null)
@@ -1066,15 +1053,12 @@ const submitAttendance = async (status, emp) => {
 	}
 	try {
 		uni.showLoading({ title: '提交中...', mask: true })
-		const resp = await http.post(ATTENDANCE_SUBMIT_URL, {
+		// 明道云 hook 成功失败均返回 status:1，无法据此区分，HTTP 请求成功即视为业务成功
+		await http.post(ATTENDANCE_SUBMIT_URL, {
 			rowid: emp.id,
 			status
 		})
 		uni.hideLoading()
-		if (resp.status === 1) {
-			uni.showToast({ title: resp.message || resp.msg || '提交失败', icon: 'none' })
-			return
-		}
 		uni.showToast({ title: `${status}打卡成功`, icon: 'success' })
 		loadWorkshopEmployees()
 	} catch (e) {
@@ -1093,6 +1077,7 @@ const handleChartEmployeeSwipeDown = (emp) => {
 }
 
 const toggleAttendancePanel = () => {
+	if (attendancePanelTimer) clearTimeout(attendancePanelTimer)
 	if (showAttendancePanel.value) {
 		showAttendancePanel.value = false
 		closeProcessDropdownPanel()
@@ -1102,13 +1087,14 @@ const toggleAttendancePanel = () => {
 	showSprayPanel.value = false
 	sprayExpandedId.value = ''
 	closeProcessDropdownPanel()
-	setTimeout(() => {
+	attendancePanelTimer = setTimeout(() => {
 		showAttendancePanel.value = true
 		loadWorkshopEmployees()
 	}, 300)
 }
 
 const toggleProcessPanel = () => {
+	if (processPanelTimer) clearTimeout(processPanelTimer)
 	if (showProcessPanel.value) {
 		showProcessPanel.value = false
 		closeProcessDropdownPanel()
@@ -1118,7 +1104,7 @@ const toggleProcessPanel = () => {
 	showSprayPanel.value = false
 	sprayExpandedId.value = ''
 	closeProcessDropdownPanel()
-	setTimeout(() => {
+	processPanelTimer = setTimeout(() => {
 		showProcessPanel.value = true
 		loadPositionProcessEmployees()
 	}, 300)
@@ -1147,6 +1133,8 @@ const toggleSprayItemExpand = (item) => {
 }
 
 const closeAllPanels = () => {
+	if (attendancePanelTimer) clearTimeout(attendancePanelTimer)
+	if (processPanelTimer) clearTimeout(processPanelTimer)
 	showAttendancePanel.value = false
 	showProcessPanel.value = false
 	showSprayPanel.value = false
@@ -1203,12 +1191,8 @@ const handleProcessDropdownItemClick = async (proc) => {
 			processRowid: proc.rowid,
 			workshop: loginWorkshop.value || ''
 		}
-		const resp = await http.post(POSITION_PROCESS_SELECT_URL, params)
+		await http.post(POSITION_PROCESS_SELECT_URL, params)
 		uni.hideLoading()
-		if (resp.status === 1) {
-			uni.showToast({ title: resp.message || '提交失败', icon: 'none' })
-			return
-		}
 		uni.showToast({ title: '提交成功', icon: 'success' })
 		closeProcessDropdownPanel()
 		loadPositionProcessEmployees()
@@ -1231,12 +1215,8 @@ const handleProcessDelete = async (emp, seq) => {
 			processSeq: seq,
 			workshop: loginWorkshop.value || ''
 		}
-		const resp = await http.post(POSITION_PROCESS_DELETE_URL, params)
+		await http.post(POSITION_PROCESS_DELETE_URL, params)
 		uni.hideLoading()
-		if (resp.status === 1) {
-			uni.showToast({ title: resp.message || '删除失败', icon: 'none' })
-			return
-		}
 		uni.showToast({ title: '删除成功', icon: 'success' })
 		loadPositionProcessEmployees()
 	} catch (e) {
@@ -1253,12 +1233,8 @@ const handleSprayEmployeeClick = async (emp) => {
 			sprayProcessId: sprayExpandedId.value,
 			employeeId: emp.id
 		}
-		const resp = await http.post(SPRAY_PROCESS_EMPLOYEE_URL, params)
+		await http.post(SPRAY_PROCESS_EMPLOYEE_URL, params)
 		uni.hideLoading()
-		if (resp.status === 1) {
-			uni.showToast({ title: resp.message || '提交失败', icon: 'none' })
-			return
-		}
 		uni.showToast({ title: '提交成功', icon: 'success' })
 		loadSprayProcessList()
 	} catch (e) {
@@ -1453,17 +1429,6 @@ const mapPreDispatchRow = (item) => ({
 	productDeliveryDate: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.productDeliveryDate]) || ''
 })
 
-const mapSummaryRow = (item) => ({
-	rowid: item.rowid,
-	summaryNo: formatFieldValue(item[PRE_DISPATCH_SUMMARY_FIELD_MAP.summaryNo]),
-	workshop: formatFieldValue(item[PRE_DISPATCH_SUMMARY_FIELD_MAP.workshop]),
-	dispatchDate: formatFieldValue(item[PRE_DISPATCH_SUMMARY_FIELD_MAP.dispatchDate]),
-	totalWorktime: formatFieldValue(item[PRE_DISPATCH_SUMMARY_FIELD_MAP.totalWorktime]),
-	totalWage: formatFieldValue(item[PRE_DISPATCH_SUMMARY_FIELD_MAP.totalWage]),
-	dailyWageRowids: extractRelationSids(item[PRE_DISPATCH_SUMMARY_FIELD_MAP.dailyWage]),
-	preDispatchRowids: extractRelationSids(item[PRE_DISPATCH_SUMMARY_FIELD_MAP.preDispatch]),
-})
-
 const DICTIONARY_WORKSHEET_ID = 'shujuzidian'
 const DICTIONARY_PROCESS_TYPE_FIELD = '6614d7ed1f7f1264f3a332c3'
 const DICTIONARY_PROCESS_LEVEL_FIELD = '66b07c4a965ba588586ec783'
@@ -1545,7 +1510,6 @@ const loadCraftPositionList = async () => {
 
 const handleSearch = async () => {
 	await loadProducts(true)
-	loadSummaries(true)
 	loadEmployeeDispatchSummary()
 	loadWorkshopEmployees()
 }
@@ -1904,20 +1868,16 @@ const confirmSelectedProducts = async () => {
 	uni.showLoading({ title: '添加中...' })
 	
 	try {
-		const resp = await http.post(PRE_DISPATCH_PRODUCT_ADD_URL, {
+		await http.post(PRE_DISPATCH_PRODUCT_ADD_URL, {
 			dispatchDate: filterDate.value,  // 筛选日期
 			rowids: rowids  // 选中产品的 rowid 数组
 		})
-		
+
 		uni.hideLoading()
-		
-		if (resp.status === 1) {
-			uni.showToast({ title: '添加成功', icon: 'success' })
-			showSelectProductModal.value = false
-			handleSearch()  // 刷新列表
-		} else {
-			uni.showToast({ title: resp.message || '添加失败', icon: 'none' })
-		}
+
+		uni.showToast({ title: '添加成功', icon: 'success' })
+		showSelectProductModal.value = false
+		handleSearch()  // 刷新列表
 	} catch (e) {
 		uni.hideLoading()
 		console.error('添加预派工失败:', e)
@@ -2005,7 +1965,12 @@ const handleProcessListConfirm = async (productRowid) => {
 	}
 
 	// 用户输入的派工数量（优先使用）
-	const userInputDispatchCount = parseFloat(productDispatchCounts.value[productRowid]) || 0
+	const rawUserInput = productDispatchCounts.value[productRowid]
+	const userInputDispatchCount = parseFloat(rawUserInput) || 0
+	if (rawUserInput !== undefined && rawUserInput !== '' && (isNaN(parseFloat(rawUserInput)) || userInputDispatchCount < 0)) {
+		uni.showToast({ title: '派工数量无效，请重新设置', icon: 'none' })
+		return
+	}
 	if (userInputDispatchCount > 0) {
 		dispatchCount = userInputDispatchCount
 	} else if (pdRows.length > 0) {
@@ -2056,7 +2021,7 @@ const handleProcessListConfirm = async (productRowid) => {
 
 	try {
 		uni.showLoading({ title: '提交中...' })
-		const resp = await http.post(PRE_DISPATCH_PROCESS_CONFIRM_URL, {
+		await http.post(PRE_DISPATCH_PROCESS_CONFIRM_URL, {
 			hasPreDispatchRowids,
 			noPreDispatchRowids,
 			noProcessPreDispatchRowid,
@@ -2065,29 +2030,25 @@ const handleProcessListConfirm = async (productRowid) => {
 			finishCount
 		})
 		uni.hideLoading()
-		if (resp.status === 1) {
-			uni.showToast({ title: '提交成功', icon: 'success' })
-			// 刷新该产品工序数据，保留勾选状态
-			const product = productList.value.find(item => item.rowid === productRowid)
-			if (product) {
-				// 保存当前勾选状态
-				const savedCheckedRowids = checkedProcesses.map(p => p.rowid)
-				loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
-				processList.value = processList.value.filter(p => p.productRowid !== productRowid)
-				await loadProductProcesses(product)
-				// 恢复勾选状态
-				savedCheckedRowids.forEach(rowid => {
-					if (!selectedProcessIds.value.includes(rowid)) {
-						selectedProcessIds.value.push(rowid)
-					}
-				})
-			}
-			// 刷新员工数据
-			loadWorkshopEmployees()
-			loadEmployeeDispatchSummary()
-		} else {
-			uni.showToast({ title: resp.message || '提交失败', icon: 'none' })
+		uni.showToast({ title: '提交成功', icon: 'success' })
+		// 刷新该产品工序数据，保留勾选状态
+		const product = productList.value.find(item => item.rowid === productRowid)
+		if (product) {
+			// 保存当前勾选状态
+			const savedCheckedRowids = checkedProcesses.map(p => p.rowid)
+			loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
+			processList.value = processList.value.filter(p => p.productRowid !== productRowid)
+			await loadProductProcesses(product)
+			// 恢复勾选状态
+			savedCheckedRowids.forEach(rowid => {
+				if (!selectedProcessIds.value.includes(rowid)) {
+					selectedProcessIds.value.push(rowid)
+				}
+			})
 		}
+		// 刷新员工数据
+		loadWorkshopEmployees()
+		loadEmployeeDispatchSummary()
 	} catch (e) {
 		uni.hideLoading()
 		console.error('工序列表确定提交失败:', e)
@@ -2099,16 +2060,12 @@ const doConfirmDispatch = async () => {
 	showConfirmDispatchModal.value = false
 	try {
 		uni.showLoading({ title: '确认中...' })
-		const resp = await http.post(PRE_DISPATCH_CONFIRM_URL, {
+		await http.post(PRE_DISPATCH_CONFIRM_URL, {
 			rowids: confirmDispatchRowids.value
 		})
 		uni.hideLoading()
-		if (resp.status === 1) {
-			uni.showToast({ title: '确认派工成功', icon: 'success' })
-			handleSearch()
-		} else {
-			uni.showToast({ title: resp.message || '确认派工失败', icon: 'none' })
-		}
+		uni.showToast({ title: '确认派工成功', icon: 'success' })
+		handleSearch()
 	} catch (e) {
 		uni.hideLoading()
 		console.error('确认派工失败:', e)
@@ -2159,15 +2116,26 @@ const loadProducts = async (reset = true) => {
 			})
 		}
 
-		const res = await callWorkflowListAPIPaged({
-			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
-			filters,
-			pageSize: 100,
-			pageNum: 1,
-			silent: !reset
-		})
+		// 分页循环拉取全部"未派工"记录，避免只取第一页时目标日期数据落在后续页而丢失
+		let raw = []
+		let pageNum = 1
+		const pageSize = 100
+		let hasMore = true
+		while (hasMore) {
+			const res = await callWorkflowListAPIPaged({
+				worksheetId: PRE_DISPATCH_WORKSHEET_ID,
+				filters,
+				pageSize,
+				pageNum,
+				// 仅首页沿用原 loading 行为，后续页静默请求
+				silent: pageNum === 1 ? !reset : true
+			})
+			const rows = Array.isArray(res?.data) ? res.data : []
+			raw.push(...rows)
+			hasMore = rows.length === pageSize && raw.length < (res?.total || 0)
+			pageNum++
+		}
 
-		let raw = Array.isArray(res?.data) ? res.data : []
 		let mapped = raw.map(mapPreDispatchRow)
 
 		if (filterDate.value) {
@@ -2208,182 +2176,7 @@ const loadProducts = async (reset = true) => {
 	}
 }
 
-const loadSummaries = async (reset = true) => {
-	const nextPage = reset ? 1 : summaryPageNum.value + 1
-	loadingSummary.value = true
-	if (!reset) loadingMore.value = true
 
-	try {
-		const filters = []
-		if (loginWorkshop.value) {
-			filters.push({
-				controlId: PRE_DISPATCH_SUMMARY_FIELD_MAP.workshop,
-				dataType: 11,
-				spliceType: 1,
-				filterType: 2,
-				values: [loginWorkshop.value]
-			})
-		}
-
-		const res = await callWorkflowListAPIPaged({
-			worksheetId: PRE_DISPATCH_SUMMARY_WORKSHEET_ID,
-			filters,
-			pageSize: SUMMARY_PAGE_SIZE,
-			pageNum: nextPage,
-			silent: !reset
-		})
-
-		let raw = Array.isArray(res?.data) ? res.data : []
-		let mapped = raw.map(mapSummaryRow)
-
-		if (filterDate.value) {
-			mapped = mapped.filter(item => item.dispatchDate === filterDate.value)
-		}
-
-		if (reset) {
-			summaryList.value = mapped
-		} else {
-			summaryList.value = [...summaryList.value, ...mapped]
-		}
-		summaryPageNum.value = nextPage
-
-		const total = typeof res?.total === 'number' ? res.total : 0
-		if (total > 0) {
-			const fetched = (nextPage - 1) * SUMMARY_PAGE_SIZE + raw.length
-			hasMoreSummary.value = fetched < total
-		} else {
-			hasMoreSummary.value = raw.length >= SUMMARY_PAGE_SIZE
-		}
-
-		await loadSummariesRelationData()
-	} catch (e) {
-		console.error('加载汇总失败:', e)
-		uni.showToast({ title: '加载失败', icon: 'none' })
-	} finally {
-		loadingSummary.value = false
-		loadingMore.value = false
-	}
-}
-
-const loadSummariesRelationData = async () => {
-	const allPreDispatchRowids = []
-	const allDailyWageRowids = []
-	summaryList.value.forEach(summary => {
-		if (summary.preDispatchRowids && summary.preDispatchRowids.length > 0) {
-			allPreDispatchRowids.push(...summary.preDispatchRowids)
-		}
-		if (summary.dailyWageRowids && summary.dailyWageRowids.length > 0) {
-			allDailyWageRowids.push(...summary.dailyWageRowids)
-		}
-	})
-
-	const tasks = []
-
-	if (allPreDispatchRowids.length > 0) {
-		const uniqueRowids = [...new Set(allPreDispatchRowids)]
-		tasks.push(
-			callWorkflowListAPIPaged({
-				worksheetId: PRE_DISPATCH_WORKSHEET_ID,
-				filters: [{
-					controlId: 'rowid',
-					dataType: 30,
-					filterType: 2,
-					values: uniqueRowids
-				}],
-				pageSize: 500,
-				pageNum: 1,
-				silent: true
-			}).then(res => ({ type: 'preDispatch', data: res }))
-		)
-	}
-
-	if (allDailyWageRowids.length > 0) {
-		const uniqueRowids = [...new Set(allDailyWageRowids)]
-		tasks.push(
-			callWorkflowListAPIPaged({
-				worksheetId: DAILY_WAGE_WORKSHEET_ID,
-				filters: [{
-					controlId: 'rowid',
-					dataType: 30,
-					filterType: 2,
-					values: uniqueRowids
-				}],
-				pageSize: 500,
-				pageNum: 1,
-				silent: true
-			}).then(res => ({ type: 'dailyWage', data: res }))
-		)
-	}
-
-	if (tasks.length === 0) return
-
-	try {
-		const results = await Promise.all(tasks)
-
-		const preDispatchMap = {}
-		const dailyWageMap = {}
-
-		results.forEach(result => {
-			if (result.type === 'preDispatch') {
-				const dataList = Array.isArray(result.data?.data) ? result.data.data : []
-				dataList.forEach(item => {
-					if (item.rowid) {
-						preDispatchMap[item.rowid] = mapPreDispatchRow(item)
-					}
-				})
-			} else if (result.type === 'dailyWage') {
-				const dataList = Array.isArray(result.data?.data) ? result.data.data : []
-				dataList.forEach(item => {
-					if (item.rowid) {
-						dailyWageMap[item.rowid] = formatFieldValue(item[DAILY_WAGE_EMPLOYEE_NAME_FIELD])
-					}
-				})
-			}
-		})
-
-		summaryList.value.forEach(summary => {
-				if (summary.preDispatchRowids && summary.preDispatchRowids.length > 0) {
-					const preDispatches = summary.preDispatchRowids
-						.map(rowid => preDispatchMap[rowid])
-						.filter(Boolean)
-						.map(item => {
-							const processDetailSids = Array.isArray(item.processDetail) ? item.processDetail : []
-							const processDisplay = processDetailSids.length > 1
-								? (item.craftPosition || '岗位工序匹配表')
-								: (item.processName || '')
-							return {
-								...item,
-								processDisplay
-							}
-						})
-
-					summary.preDispatches = preDispatches
-				}
-
-				if (summary.dailyWageRowids && summary.dailyWageRowids.length > 0) {
-					const employeeName = formatFieldValue(dailyWageMap[summary.dailyWageRowids[0]])
-					summary.employeeNames = employeeName || '-'
-				}
-			})
-
-			// 按预派工订单编号排序，让相同预派工数据的汇总排列在一起
-			summaryList.value.sort((a, b) => {
-				const aOrder = a.preDispatches?.[0]?.orderNo || ''
-				const bOrder = b.preDispatches?.[0]?.orderNo || ''
-				if (aOrder !== bOrder) return aOrder.localeCompare(bOrder)
-				const aProduct = a.preDispatches?.[0]?.productNameNew || ''
-				const bProduct = b.preDispatches?.[0]?.productNameNew || ''
-				return aProduct.localeCompare(bProduct)
-			})
-		} catch (e) {
-			console.error('加载汇总关联数据失败:', e)
-		}
-	}
-
-const loadMoreSummary = () => {
-	if (loadingMore.value || !hasMoreSummary.value) return
-	loadSummaries(false)
-}
 
 const handleProductClick = (product) => {
 	if (!product || !product.rowid) return
@@ -2444,9 +2237,16 @@ const closeDispatchModal = () => {
 }
 
 const saveDispatchModal = () => {
-	if (dispatchModalProduct.value) {
-		productDispatchCounts.value[dispatchModalProduct.value.rowid] = dispatchModalInput.value
+	if (!dispatchModalProduct.value) return
+
+	const val = dispatchModalInput.value.trim()
+	const num = parseFloat(val)
+	if (val === '' || isNaN(num) || num < 0) {
+		uni.showToast({ title: '请输入有效的非负派工数量', icon: 'none' })
+		return
 	}
+
+	productDispatchCounts.value[dispatchModalProduct.value.rowid] = String(num)
 	closeDispatchModal()
 }
 
@@ -2709,10 +2509,13 @@ const toggleOrderCollapse = (orderNo) => {
 const loadEmployeeDispatchSummary = async () => {
 	try {
 		const currentDate = filterDate.value
-		// 先调用同步接口
+		// 先调用同步接口（finally 保证 Loading 必关闭，避免异常时遮罩卡死页面）
 		uni.showLoading({ title: '加载中...', mask: true })
-		await http.post(ATTENDANCE_SYNC_URL, { date: currentDate })
-		uni.hideLoading()
+		try {
+			await http.post(ATTENDANCE_SYNC_URL, { date: currentDate })
+		} finally {
+			uni.hideLoading()
+		}
 
 		const wsFilter = employeeWorkshopFilter.value
 		const filters = []
@@ -3101,14 +2904,8 @@ const confirmProcessAction = async () => {
 		const productRowid = product?.rowid || ''
 		try {
 			uni.showLoading({ title: '删除中...' })
-			const result = await http.post(DELETE_PROCESS_URL, { rowid: processRowid })
+			await http.post(DELETE_PROCESS_URL, { rowid: processRowid })
 			uni.hideLoading()
-			// status=1 且有 message 视为失败，否则视为成功
-			const isFailed = result && result.status === 1 && result.message
-			if (isFailed) {
-				uni.showToast({ title: result.message || '删除失败', icon: 'none' })
-				return
-			}
 			// 删除成功后先关闭弹窗，再显示刷新动画并刷新工序列表
 			closeProcessActionModal()
 			uni.showLoading({ title: '刷新中...', mask: true })
@@ -3155,14 +2952,8 @@ const confirmProcessAction = async () => {
 		}
 		try {
 			uni.showLoading({ title: '提交中...', mask: true })
-			const res = await http.post(OPERATE_PROCESS_URL, params)
+			await http.post(OPERATE_PROCESS_URL, params)
 			uni.hideLoading()
-			// status=1 且有 message 视为失败，否则视为成功（后端约定 status=1 表示成功）
-			const isFailed = res && res.status === 1 && res.message
-			if (isFailed) {
-				uni.showToast({ title: res.message || '操作失败', icon: 'none' })
-				return
-			}
 			// 操作成功后先关闭弹窗，再显示刷新动画并刷新工序列表
 			closeProcessActionModal()
 			uni.showLoading({ title: '刷新中...', mask: true })
@@ -3384,17 +3175,12 @@ const handleVoidClick = async (item) => {
 		success: async (res) => {
 			if (res.confirm && res.content) {
 				try {
-					const resp = await http.post(PRE_DISPATCH_VOID_URL, {
+					await http.post(PRE_DISPATCH_VOID_URL, {
 						rowid: item.rowid,
 						reason: res.content
 					})
-					if (resp.status === 1) {
-						uni.showToast({ title: resp.message || resp.msg || '作废失败', icon: 'none' })
-						return
-					}
 					uni.showToast({ title: '作废成功', icon: 'success' })
 					loadProducts(true)
-					loadSummaries(true)
 					loadEmployeeDispatchSummary()
 				} catch (e) {
 					console.error('作废失败:', e)
@@ -3448,33 +3234,44 @@ const confirmVoid = async () => {
 		uni.showToast({ title: '缺少记录ID', icon: 'none' })
 		return
 	}
+
+	const rowids = voidRowid.value.split(',').filter(Boolean)
+	if (rowids.length === 0) {
+		uni.showToast({ title: '缺少记录ID', icon: 'none' })
+		return
+	}
+
+	uni.showLoading({ title: '作废中...', mask: true })
+	let successCount = 0
+	let failCount = 0
 	try {
-		const rowids = voidRowid.value.split(',').filter(Boolean)
-		let successCount = 0
-		let failCount = 0
 		for (const rowid of rowids) {
-			const resp = await http.post(PRE_DISPATCH_VOID_URL, {
-				rowid,
-				reason: voidReason.value.trim()
-			})
-			if (resp.status === 1) {
-				failCount++
-			} else {
+			try {
+				await http.post(PRE_DISPATCH_VOID_URL, {
+					rowid,
+					reason: voidReason.value.trim()
+				})
 				successCount++
+			} catch (e) {
+				console.error(`作废失败 rowid=${rowid}:`, e)
+				failCount++
 			}
 		}
 		closeVoidModal()
-		if (failCount > 0) {
-			uni.showToast({ title: `作废完成，成功 ${successCount} 条，失败 ${failCount} 条`, icon: 'none' })
-		} else {
+		if (failCount === 0) {
 			uni.showToast({ title: '作废成功', icon: 'success' })
+		} else if (successCount === 0) {
+			uni.showToast({ title: '作废失败', icon: 'none' })
+		} else {
+			uni.showToast({ title: `作废完成，成功 ${successCount} 条，失败 ${failCount} 条`, icon: 'none' })
 		}
 		loadProducts(true)
-		loadSummaries(true)
 		loadEmployeeDispatchSummary()
 	} catch (e) {
 		console.error('作废失败:', e)
 		uni.showToast({ title: '作废失败', icon: 'none' })
+	} finally {
+		uni.hideLoading()
 	}
 }
 
@@ -3571,21 +3368,16 @@ const confirmEdit = async () => {
 		return
 	}
 	try {
-		const resp = await http.post(PRE_DISPATCH_UPDATE_URL, {
+		await http.post(PRE_DISPATCH_UPDATE_URL, {
 			rowid: editData.value.rowid,
 			dispatchDate: editData.value.dispatchDate,
 			dispatchCount: editData.value.dispatchCount,
 			employeeIds: editData.value.selectedEmployeeIds,
 			employeeNames: editData.value.selectedEmployeeNames
 		})
-		if (resp.status === 1) {
-			uni.showToast({ title: resp.message || resp.msg || '更新失败', icon: 'none' })
-			return
-		}
 		uni.showToast({ title: '更新成功', icon: 'success' })
 		closeEditModal()
 		loadProducts(true)
-		loadSummaries(true)
 		loadEmployeeDispatchSummary()
 	} catch (e) {
 		console.error('更新预派工失败:', e)
@@ -3682,42 +3474,35 @@ const confirmEmployeeEdit = async () => {
 
 	try {
 		uni.showLoading({ title: '保存中...' })
-		const resp = await http.post('/api/workflow/hooks/NmEzYjc5NzIzN2MwOTg0NTBhOTIzMjYw', requestData)
+		await http.post('/api/workflow/hooks/NmEzYjc5NzIzN2MwOTg0NTBhOTIzMjYw', requestData)
 		uni.hideLoading()
-		// 响应可能是字符串 "调整成功" 或对象 {status: 1, message: '...'}
-		const isSuccess = resp === '调整成功' || resp?.status === 1
-		if (isSuccess) {
-			uni.showToast({ title: '保存成功', icon: 'success' })
+		uni.showToast({ title: '保存成功', icon: 'success' })
 
-			// 先关闭编辑弹窗
-			closeEmployeeEditModal()
+		// 先关闭编辑弹窗
+		closeEmployeeEditModal()
 
-			// 延迟刷新，等待后端数据更新完成
-			setTimeout(async () => {
-				// 刷新工序列表的员工数据：清除缓存并重新加载当前选中产品的工序
-				const targetProduct = productList.value.find(p =>
-					p.preDispatchRowids && p.preDispatchRowids.includes(preDispatchRowid)
-				)
-				if (targetProduct) {
-					// 清除该产品的工序缓存
-					const idx = loadedProductIds.value.indexOf(targetProduct.rowid)
-					if (idx > -1) loadedProductIds.value.splice(idx, 1)
-					// 从 processList 中移除该产品的旧工序
-					processList.value = processList.value.filter(p => p.productRowid !== targetProduct.rowid)
-					// 重新加载工序
-					await loadProductProcesses(targetProduct)
-				}
+		// 延迟刷新，等待后端数据更新完成
+		setTimeout(async () => {
+			// 刷新工序列表的员工数据：清除缓存并重新加载当前选中产品的工序
+			const targetProduct = productList.value.find(p =>
+				p.preDispatchRowids && p.preDispatchRowids.includes(preDispatchRowid)
+			)
+			if (targetProduct) {
+				// 清除该产品的工序缓存
+				const idx = loadedProductIds.value.indexOf(targetProduct.rowid)
+				if (idx > -1) loadedProductIds.value.splice(idx, 1)
+				// 从 processList 中移除该产品的旧工序
+				processList.value = processList.value.filter(p => p.productRowid !== targetProduct.rowid)
+				// 重新加载工序
+				await loadProductProcesses(targetProduct)
+			}
 
-				// 刷新底部员工列表
-				loadWorkshopEmployees()
+			// 刷新底部员工列表
+			loadWorkshopEmployees()
 
-				// 刷新汇总
-				loadSummaries(true)
-				loadEmployeeDispatchSummary()
-			}, 500)
-		} else {
-			uni.showToast({ title: resp.message || '保存失败', icon: 'none' })
-		}
+			// 刷新汇总
+			loadEmployeeDispatchSummary()
+		}, 500)
 	} catch (e) {
 		uni.hideLoading()
 		console.error('保存员工编辑失败:', e)
@@ -3812,19 +3597,22 @@ const toggleEmployee = (emp) => {
 	}
 }
 
-onMounted(async () => {
+// 页面首次挂载与从其他页面返回时均刷新数据
+const refreshPage = async () => {
 	loadCraftPositionList()  // 获取工序归类表数据
 	await loadProducts(true)
-	loadSummaries(true)
 	// 进入页面时先同步生成未生成的员工数据，再获取员工列表
 	try {
 		await http.post(ATTENDANCE_SYNC_URL, { date: filterDate.value })
 	} catch (e) {
-		console.error('[onMounted] 同步员工数据失败:', e)
+		console.error('[refreshPage] 同步员工数据失败:', e)
 	}
 	loadWorkshopEmployees()
 	loadEmployeeDispatchSummary()
-})
+}
+
+onMounted(refreshPage)
+onShow(refreshPage)
 </script>
 
 <style scoped lang="scss">
