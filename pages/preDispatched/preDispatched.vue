@@ -175,13 +175,12 @@
 									</view>
 								</view>
 								<view class="product-spec" v-if="expandedIds.includes(product.rowid)">
-									<text v-if="product.thickness">{{ product.thickness }} |</text>
-									<text v-if="product.guokouSpec">{{ product.guokouSpec }} |</text>
-									<text v-if="product.guokouSizeSpec">{{ product.guokouSizeSpec }} |</text>
-									<text v-if="product.craftSpec">{{ product.craftSpec }} |</text>
-									<text v-if="product.paintSpec">{{ product.paintSpec }} |</text>
-									<text v-if="product.polishSpec">{{ product.polishSpec }} |</text>
-									<text v-if="product.materialSizeSpec">{{ product.materialSizeSpec }}</text>
+								<view
+									class="spec-row"
+									v-for="(specItem, sIdx) in (product.specification || '-').split(/[;；]/).filter(Boolean)"
+									:key="sIdx"
+								>
+									<text class="spec-value">{{ specItem.trim() }}</text>
 								</view>
 							</view>
 						</view>
@@ -4643,6 +4642,24 @@ onShow(refreshPage)
 						color: #666;
 						margin-top: px2vw(8px);
 						margin-left: px2vw(50px);
+
+						.spec-row {
+							display: flex;
+							flex-direction: row;
+							padding: px2vw(6px) 0;
+							border-bottom: 1px solid #e0e0e0;
+
+							&:last-child {
+								border-bottom: none;
+							}
+
+							.spec-value {
+								flex: 1;
+								min-width: 0;
+								word-break: break-all;
+								color: #333;
+							}
+						}
 					}
 				}
 			}
