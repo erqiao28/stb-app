@@ -2201,35 +2201,41 @@ const openDispatchModal = (product) => {
 	let dispatchCount = 0
 	let finishCount = 0
 
+	// 获取该产品下的所有工序
+	const productProcesses = processList.value.filter(p => p.productRowid === product.rowid)
+	console.log('[openDispatchModal] productProcesses:', productProcesses.length, productProcesses.map(p => ({ rowid: p.rowid, needCount: p.needCount, finishCount: p.finishCount, preDispatchRowid: p.preDispatchRowid })))
+	// 有预派工关联的工序
+	const associatedProcesses = productProcesses.filter(p => p.preDispatchRowid)
+	// 有预派工rowids
+	const pdRowids = [...new Set(associatedProcesses.map(p => p.preDispatchRowid).filter(Boolean))]
+
+	// 计算完成数量（与可派数量逻辑独立）
+	if (pdRowids.length > 0 && associatedProcesses.length > 0) {
+		const finishVals = associatedProcesses.map(p => parseFloat(p.finishCount) || 0)
+		if (finishVals.length > 0) finishCount = Math.round(finishVals.reduce((a, b) => a + b, 0) / finishVals.length)
+	} else {
+		const checkedProcesses = productProcesses.filter(p => selectedProcessIds.value.includes(p.rowid))
+		if (checkedProcesses.length > 0) {
+			const finishVals = checkedProcesses.map(p => parseFloat(p.finishCount) || 0)
+			if (finishVals.length > 0) finishCount = Math.round(finishVals.reduce((a, b) => a + b, 0) / finishVals.length)
+		}
+	}
+
 	// 优先级1：如果产品行的派工数量字段有值且不为0，直接作为可派数量
 	const productDispatchCount = parseFloat(product.dispatchCount)
+	console.log('[openDispatchModal] product:', product.rowid, 'dispatchCount:', product.dispatchCount, 'productDispatchCount:', productDispatchCount)
 	if (Number.isFinite(productDispatchCount) && productDispatchCount > 0) {
 		dispatchCount = Math.round(productDispatchCount)
+	} else if (pdRowids.length > 0 && associatedProcesses.length > 0) {
+		// 有预派工：获取预派工数据
+		const needVals = associatedProcesses.map(p => parseFloat(p.needCount) || 0)
+		if (needVals.length > 0) dispatchCount = Math.round(needVals.reduce((a, b) => a + b, 0) / needVals.length)
 	} else {
-		// 获取该产品下的所有工序
-		const productProcesses = processList.value.filter(p => p.productRowid === product.rowid)
-		// 有预派工关联的工序
-		const associatedProcesses = productProcesses.filter(p => p.preDispatchRowid)
-		// 有预派工rowids
-		const pdRowids = [...new Set(associatedProcesses.map(p => p.preDispatchRowid).filter(Boolean))]
-
-		if (pdRowids.length > 0) {
-			// 有预派工：获取预派工数据
-			if (associatedProcesses.length > 0) {
-				const needVals = associatedProcesses.map(p => parseFloat(p.needCount) || 0)
-				const finishVals = associatedProcesses.map(p => parseFloat(p.finishCount) || 0)
-				if (needVals.length > 0) dispatchCount = Math.round(needVals.reduce((a, b) => a + b, 0) / needVals.length)
-				if (finishVals.length > 0) finishCount = Math.round(finishVals.reduce((a, b) => a + b, 0) / finishVals.length)
-			}
-		} else {
-			// 无预派工：用勾选的工序
-			const checkedProcesses = productProcesses.filter(p => selectedProcessIds.value.includes(p.rowid))
-			if (checkedProcesses.length > 0) {
-				const needVals = checkedProcesses.map(p => parseFloat(p.needCount) || 0)
-				const finishVals = checkedProcesses.map(p => parseFloat(p.finishCount) || 0)
-				if (needVals.length > 0) dispatchCount = Math.round(needVals.reduce((a, b) => a + b, 0) / needVals.length)
-				if (finishVals.length > 0) finishCount = Math.round(finishVals.reduce((a, b) => a + b, 0) / finishVals.length)
-			}
+		// 无预派工：用勾选的工序
+		const checkedProcesses = productProcesses.filter(p => selectedProcessIds.value.includes(p.rowid))
+		if (checkedProcesses.length > 0) {
+			const needVals = checkedProcesses.map(p => parseFloat(p.needCount) || 0)
+			if (needVals.length > 0) dispatchCount = Math.round(needVals.reduce((a, b) => a + b, 0) / needVals.length)
 		}
 	}
 
