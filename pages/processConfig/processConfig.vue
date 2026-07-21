@@ -77,50 +77,57 @@
 							<text v-else>配置完成</text>
 						</view>
 					</view>
-					<scroll-view class="process-chart-scroll" scroll-y scroll-x>
+					<view class="process-chart-content">
 						<view v-if="!level2List.length" class="chart-empty">
 							<text>暂无工序数据</text>
 						</view>
-						<view v-else class="chart-levels">
-						<view class="level2-row">
-							<view class="level2-column" v-for="node in level2List" :key="node.rowid">
-								<view
-									:id="'level2-' + node.rowid"
-									class="chart-bar"
-									:class="{ 'active': selectedLevel2Id === node.rowid }"
-									@click="selectLevel2(node.rowid)"
-								>
-									<text class="chart-bar-name">{{ node.name || '-' }}</text>
+						<template v-else>
+							<view class="level2-section">
+								<view class="level2-row">
+									<view class="level2-column" v-for="node in level2List" :key="node.rowid">
+										<view
+											:id="'level2-' + node.rowid"
+											class="chart-bar"
+											:class="{ 'active': selectedLevel2Id === node.rowid }"
+											@click="selectLevel2(node.rowid)"
+										>
+											<text class="chart-bar-name">{{ node.name || '-' }}</text>
+										</view>
+									</view>
 								</view>
 							</view>
-						</view>
 
-						<view class="level3-row" v-if="selectedLevel2Id && selectedLevel2Children.length">
-						<view class="level3-column" v-for="child in selectedLevel2Children" :key="child.rowid">
-									<view
-										:id="'level3-' + child.rowid"
-										class="chart-bar level3"
-										:class="{ 'active': selectedLevel3Id === child.rowid, 'selected': selectedLevel3Set.has(child.rowid) }"
-										@click.stop="selectLevel3(child.rowid)"
-									>
-										<view class="selected-marker" v-if="selectedLevel3Set.has(child.rowid)"></view>
-										<text class="chart-bar-name">{{ child.name || '-' }}</text>
-									</view>
-									<view class="children-wrapper" v-if="selectedLevel3Id === child.rowid && child.children.length">
-										<view class="connector-vertical"></view>
-										<view class="children-row">
-											<view class="child-column" v-for="leaf in child.children.slice().reverse()" :key="leaf.rowid">
-												<view class="connector-vertical-short"></view>
-												<view class="chart-bar level4">
-													<text class="chart-bar-name">{{ leaf.name || '-' }}</text>
+							<scroll-view class="level3-section" scroll-y scroll-x>
+								<view class="level3-row" v-if="selectedLevel2Id && selectedLevel2Children.length">
+									<view class="level3-column" v-for="child in selectedLevel2Children" :key="child.rowid">
+										<view
+											:id="'level3-' + child.rowid"
+											class="chart-bar level3"
+											:class="{ 'active': selectedLevel3Id === child.rowid, 'selected': selectedLevel3Set.has(child.rowid) }"
+											@click.stop="selectLevel3(child.rowid)"
+										>
+											<view class="selected-marker" v-if="selectedLevel3Set.has(child.rowid)"></view>
+											<text class="chart-bar-name">{{ child.name || '-' }}</text>
+										</view>
+										<view class="children-wrapper" v-if="selectedLevel3Id === child.rowid && child.children.length">
+											<view class="connector-vertical"></view>
+											<view class="children-row">
+												<view class="child-column" v-for="leaf in child.children.slice().reverse()" :key="leaf.rowid">
+													<view class="connector-vertical-short"></view>
+													<view class="chart-bar level4">
+														<text class="chart-bar-name">{{ leaf.name || '-' }}</text>
+													</view>
 												</view>
 											</view>
 										</view>
 									</view>
-						</view>
+								</view>
+								<view class="chart-empty" v-else-if="selectedLevel2Id && !selectedLevel2Children.length">
+									<text>暂无三级工序</text>
+								</view>
+							</scroll-view>
+						</template>
 					</view>
-				</view>
-					</scroll-view>
 
 					<!-- 已选工序栏 -->
 					<view class="selected-process-panel" v-if="selectedLevel3Sequence.length">
@@ -689,7 +696,32 @@ const selectedLevel2Id = ref('')
 const selectedLevel3Id = ref('')
 const selectedLevel3Sequence = ref([])
 
-const level2List = computed(() => [...processTree.value].reverse())
+const WORKSHOP_LEVEL2_ORDER = {
+	'拉伸车间': ['拉伸', '车边'],
+	'喷涂车间': ['陶瓷', '水性', '过炉'],
+	'抛光车间': ['内抛', '外抛', '手工', '质检'],
+	'组装车间': ['去油', '喷砂', '超声波', '组装', '包装']
+}
+
+const level2List = computed(() => {
+	const list = [...processTree.value]
+	const order = WORKSHOP_LEVEL2_ORDER[loginWorkshop.value] || []
+	const getOrderIndex = (name) => {
+		for (let i = 0; i < order.length; i++) {
+			if (name.includes(order[i])) return i
+		}
+		return -1
+	}
+	list.sort((a, b) => {
+		const idxA = getOrderIndex(a.name || '')
+		const idxB = getOrderIndex(b.name || '')
+		if (idxA !== -1 && idxB !== -1) return idxA - idxB
+		if (idxA !== -1) return -1
+		if (idxB !== -1) return 1
+		return (a.name || '').localeCompare(b.name || '', 'zh-CN')
+	})
+	return list
+})
 
 const selectedLevel2Children = computed(() => {
 	const node = level2List.value.find(n => n.rowid === selectedLevel2Id.value)
@@ -1239,9 +1271,12 @@ onMounted(() => {
 				}
 			}
 
-			.process-chart-scroll {
+			.process-chart-content {
 				flex: 1;
+				display: flex;
+				flex-direction: column;
 				background-color: #f8f9fa;
+				overflow: hidden;
 
 				.chart-empty {
 					display: flex;
@@ -1255,12 +1290,11 @@ onMounted(() => {
 					}
 				}
 
-				.chart-levels {
-					position: relative;
-					display: inline-flex;
-					flex-direction: column;
-					min-width: 100%;
+				.level2-section {
+					flex-shrink: 0;
 					padding: px2vw(20px);
+					background-color: #f8f9fa;
+					border-bottom: 1px solid #eee;
 
 					.level2-row {
 						display: flex;
@@ -1278,14 +1312,19 @@ onMounted(() => {
 						margin: px2vw(10px);
 						min-width: px2vw(80px);
 					}
+				}
+
+				.level3-section {
+					flex: 1;
+					background-color: #f8f9fa;
 
 					.level3-row {
-						display: flex;
+						display: inline-flex;
 						justify-content: flex-start;
 						align-items: flex-start;
 						gap: px2vw(16px);
-						width: 100%;
-						margin-top: px2vw(20px);
+						padding: px2vw(20px);
+						min-width: 100%;
 					}
 
 					.level3-column {
@@ -1333,7 +1372,6 @@ onMounted(() => {
 							}
 						}
 					}
-
 				}
 			}
 

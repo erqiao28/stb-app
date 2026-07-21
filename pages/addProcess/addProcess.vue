@@ -83,8 +83,7 @@
 import { ref, computed } from 'vue';
 import {
 	onLoad,
-	onPullDownRefresh,
-	onReachBottom
+	onPullDownRefresh
 } from '@dcloudio/uni-app'
 import { callWorkflowListAPIPaged } from '../../utils/workflow';
 import http from '../../utils/request.js'
@@ -197,13 +196,9 @@ const onWorkshopChange = (e) => {
 	getProcessList(1, true)
 }
 
-onPullDownRefresh(() => {
-	getProcessList(1, true)
+onPullDownRefresh(async () => {
+	await getProcessList(1, true)
 	uni.stopPullDownRefresh()
-})
-
-onReachBottom(() => {
-	loadMore()
 })
 
 const loadMore = () => {

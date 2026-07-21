@@ -2827,6 +2827,17 @@ const loadProcessActionList = async () => {
 			{ controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
 			{ controlId: '6a324e7d6d70ffabc66cbe5f', dataType: 30, spliceType: 1, filterType: 2, values: ['1'] }
 		]
+		// 按当前登录车间筛选工序
+		const ws = loginWorkshop.value
+		if (ws) {
+			filters.push({
+				controlId: '691e8522d50c894e2e798d03',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: [ws]
+			})
+		}
 		const nameSearch = processActionSearch.value.trim()
 		if (nameSearch) {
 			filters.push({
@@ -2845,7 +2856,7 @@ const loadProcessActionList = async () => {
 			silent: true
 		})
 		const rows = Array.isArray(res?.data) ? res.data : []
-		processActionList.value = rows.map((item) => ({
+		processActionList.value = rows.reverse().map((item) => ({
 			rowid: item.rowid || '',
 			processName: item['Name'] || '-'
 		}))
