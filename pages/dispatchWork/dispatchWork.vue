@@ -2550,7 +2550,7 @@ const search = async () => {
 
     return {
       orderGoods,
-      orderCount: item['69e33354665ab27f3916f758'],
+      orderCount: item['6a5f19556d70ffabc67f0ce9'],
       productionCount: item['67de8eb5c5377d50a523ef9b'],
       reworkFieldQty: item['653f1c62df3ac906c8a8f4f6'],
       name: item['6937d255ff2b019b3cb34be3'],
