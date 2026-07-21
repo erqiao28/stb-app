@@ -775,7 +775,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onShow, computed, getCurrentInstance, watch } from 'vue'
+import { ref, onMounted, computed, getCurrentInstance, watch } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
