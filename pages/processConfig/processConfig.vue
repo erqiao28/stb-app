@@ -43,14 +43,12 @@
 									</text>
 								</view>
 								<view class="product-spec" v-if="expandedIds.includes(product.rowid)">
-									<view class="spec-row">
-										<text class="spec-label">生产单号：</text>
-										<text class="spec-value">{{ product.productionCode || '-' }}</text>
-									</view>
-									<view class="spec-row">
-										<text class="spec-label">规格型号：</text>
-										<text class="spec-value">{{ product.models || '-' }}</text>
-									</view>
+								<view
+									class="spec-row"
+									v-for="(specItem, sIdx) in (product.models || '-').split(/[;；]/).filter(Boolean)"
+									:key="sIdx"
+								>
+									<text class="spec-value">{{ specItem.trim() }}</text>
 								</view>
 							</view>
 						</view>
@@ -1067,21 +1065,18 @@ onMounted(() => {
 					.spec-row {
 						display: flex;
 						flex-direction: row;
-						margin-bottom: px2vw(4px);
+						padding: px2vw(6px) 0;
+						border-bottom: 1px solid #e0e0e0;
 
 						&:last-child {
-							margin-bottom: 0;
-						}
-
-						.spec-label {
-							flex-shrink: 0;
-							color: #888;
+							border-bottom: none;
 						}
 
 						.spec-value {
 							flex: 1;
 							min-width: 0;
 							word-break: break-all;
+							color: #333;
 						}
 					}
 				}
