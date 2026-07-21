@@ -53,6 +53,7 @@
 							</view>
 						</view>
 					</view>
+				</view>
 					<view class="empty-wrap" v-if="!productList.length && !loadingProducts">
 						<text class="empty-text">暂无产品</text>
 					</view>
