@@ -96,9 +96,8 @@
 							</view>
 						</view>
 
-						<view class="level3-row" v-show="selectedLevel2Id && selectedLevel2Children.length">
-							<view class="level3-wrapper" :style="{ marginLeft: level3ContainerOffset + 'px' }">
-								<view class="level3-column" v-for="child in selectedLevel2Children" :key="child.rowid">
+						<view class="level3-row" v-if="selectedLevel2Id && selectedLevel2Children.length">
+						<view class="level3-column" v-for="child in selectedLevel2Children" :key="child.rowid">
 									<view
 										:id="'level3-' + child.rowid"
 										class="chart-bar level3"
@@ -119,10 +118,9 @@
 											</view>
 										</view>
 									</view>
-								</view>
-							</view>
 						</view>
 					</view>
+				</view>
 					</scroll-view>
 
 					<!-- 已选工序栏 -->
@@ -153,7 +151,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import http from '../../utils/request'
 import { PROCESS_CONFIG_COMPLETE_URL } from '../../utils/api'
@@ -699,47 +697,6 @@ const selectedLevel2Children = computed(() => {
 	return node ? [...node.children].reverse() : []
 })
 
-// 三级工序容器偏移量（动态计算）
-const level3ContainerOffset = ref(0)
-
-// 动态计算三级工序容器偏移量，使三级工序的中间那个对齐到二级工序下方
-const calculateLevel3Offset = async () => {
-	if (!selectedLevel2Id.value || selectedLevel2Children.value.length === 0) {
-		level3ContainerOffset.value = 0
-		return
-	}
-	
-	// 先清零之前的偏移量，让三级工序回到初始位置，避免偏移量累积
-	level3ContainerOffset.value = 0
-	await nextTick()
-	
-	// 获取选中二级工序的位置
-	const l2Rect = await getRect('#level2-' + selectedLevel2Id.value)
-	if (!l2Rect) {
-		level3ContainerOffset.value = 0
-		return
-	}
-	
-	// 获取三级工序中间那个的位置
-	const middleIndex = Math.floor(selectedLevel2Children.value.length / 2)
-	const middleChild = selectedLevel2Children.value[middleIndex]
-	if (!middleChild) {
-		level3ContainerOffset.value = 0
-		return
-	}
-	
-	const l3Rect = await getRect('#level3-' + middleChild.rowid)
-	if (!l3Rect) {
-		level3ContainerOffset.value = 0
-		return
-	}
-	
-	// 计算偏移量：选中二级工序中心 - 三级工序中间那个中心
-	const l2Center = l2Rect.left + l2Rect.width / 2
-	const l3Center = l3Rect.left + l3Rect.width / 2
-	level3ContainerOffset.value = l2Center - l3Center
-}
-
 const selectedLevel3Processes = computed(() => {
 	const allLevel3 = []
 	processTree.value.forEach(node => {
@@ -751,20 +708,6 @@ const selectedLevel3Processes = computed(() => {
 })
 
 const selectedLevel3Set = computed(() => new Set(selectedLevel3Sequence.value))
-
-// 监听选中二级工序变化，重新计算三级工序偏移量
-watch(selectedLevel2Id, (newVal) => {
-	if (newVal) {
-		// 等待 DOM 更新并展开动画完成后计算偏移量
-		nextTick().then(() => {
-			setTimeout(() => {
-				calculateLevel3Offset()
-			}, 100)
-		})
-	} else {
-		level3ContainerOffset.value = 0
-	}
-})
 
 const selectLevel2 = (rowid) => {
 	selectedLevel2Id.value = rowid === selectedLevel2Id.value ? '' : rowid
@@ -1322,8 +1265,6 @@ onMounted(() => {
 					flex-direction: column;
 					min-width: 100%;
 					padding: px2vw(20px);
-					// 确保内容不会被裁剪
-					overflow: visible;
 
 					.level2-row {
 						display: flex;
@@ -1338,23 +1279,17 @@ onMounted(() => {
 						flex-direction: column;
 						align-items: center;
 						flex-shrink: 0;
-						width: px2vw(76px);
+						margin: px2vw(10px);
+						min-width: px2vw(80px);
 					}
 
 					.level3-row {
 						display: flex;
 						justify-content: flex-start;
 						align-items: flex-start;
-						width: auto;
-						min-width: 100%;
-						margin-top: px2vw(20px);
-					}
-
-					.level3-wrapper {
-						display: flex;
-						justify-content: flex-start;
-						align-items: flex-start;
 						gap: px2vw(16px);
+						width: 100%;
+						margin-top: px2vw(20px);
 					}
 
 					.level3-column {
