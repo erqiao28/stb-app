@@ -2192,8 +2192,15 @@ const handleProductClick = (product) => {
 	}
 }
 
-const openDispatchModal = (product) => {
+const openDispatchModal = async (product) => {
 	if (!product || !product.rowid) return
+
+	// 如果该产品的工序还没加载，先加载工序数据
+	const existingProcesses = processList.value.filter(p => p.productRowid === product.rowid)
+	if (existingProcesses.length === 0 && !loadedProductIds.value.includes(product.rowid)) {
+		await loadProductProcesses(product)
+	}
+
 	dispatchModalProduct.value = product
 	dispatchModalInput.value = productDispatchCounts.value[product.rowid] || '0'
 
