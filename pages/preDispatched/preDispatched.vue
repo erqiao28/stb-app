@@ -4005,18 +4005,18 @@ onShow(refreshPage)
 			}
 
 			.employee-chart {
-				height: calc(100% - #{px2vw(30px)});
+				height: 100%;
 				display: inline-flex;
 				align-items: flex-end;
 				gap: px2vw(24px);
-				padding: px2vw(30px) px2vw(10px) px2vw(10px);
+				padding: px2vw(10px);
 				min-width: 100%;
 				box-sizing: content-box;
 
 				.employee-chart-column {
 					flex: 0 0 auto;
 					width: px2vw(52px);
-					height: 100%;
+					height: 87%;
 					display: inline-flex;
 					flex-direction: column;
 					align-items: center;
@@ -4025,10 +4025,11 @@ onShow(refreshPage)
 					.employee-chart-bar {
 						width: 100%;
 						min-height: px2vw(40px);
+						height: 100%;
 						display: flex;
 						align-items: center;
 						justify-content: center;
-						border-radius: px2vw(8px) px2vw(8px) 0 0;
+						border-radius: px2vw(8px);
 						writing-mode: vertical-rl;
 						overflow: hidden;
 
@@ -4088,7 +4089,7 @@ onShow(refreshPage)
 					margin-right: px2vw(12px);
 					flex: 0 0 auto;
 					width: px2vw(220px);
-					height: 100%;
+					height: 87%;
 					display: flex;
 					flex-direction: column;
 					align-items: stretch;
@@ -4098,6 +4099,7 @@ onShow(refreshPage)
 
 					.expand-process-item {
 						flex: 1;
+						width: 100%;
 						min-height: px2vw(40px);
 						display: flex;
 						align-items: center;
