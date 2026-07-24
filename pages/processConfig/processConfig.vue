@@ -191,12 +191,14 @@ const PRODUCT_FIELD_MAP = {
 	productCategory: '68f835eafb278c23add30994'
 }
 
-// 产品分类选项 rowId：成品配件 / 套装产品
-// 这两类分类的产品只在组装车间工艺配置中显示
+// 产品分类选项 rowId：成品配件 / 套装产品 / 不锈钢盖子
+// 成品配件、套装产品：只在组装车间显示
+// 不锈钢盖子：在拉伸、抛光、组装车间显示，不在喷涂车间显示
 const ASSEMBLY_ONLY_CATEGORY_IDS = [
 	'27a4f2d1-bbcf-4c4e-8ff9-ff0cd4caff7b', // 成品配件
 	'0d72201a-334c-4a00-816d-88d591452244'  // 套装产品
 ]
+const STAINLESS_STEEL_LID_CATEGORY_ID = '0acf728f-195c-4569-87a4-5bc2a6c94622' // 不锈钢盖子
 
 /**
  * 从产品分类字段原始值中解析出级联选择选项 rowId 数组。
@@ -226,11 +228,17 @@ const parseProductCategoryIds = (rawValue) => {
 }
 
 /**
- * 判断某产品分类是否属于仅允许在组装车间显示的分类。
+ * 判断某产品分类在当前车间是否可见。
  */
-const isAssemblyOnlyCategory = (rawValue) => {
+const isProductVisibleInWorkshop = (rawValue, workshop) => {
 	const categoryIds = parseProductCategoryIds(rawValue)
-	return categoryIds.some(id => ASSEMBLY_ONLY_CATEGORY_IDS.includes(id))
+	if (categoryIds.some(id => ASSEMBLY_ONLY_CATEGORY_IDS.includes(id))) {
+		return workshop === '组装车间'
+	}
+	if (categoryIds.includes(STAINLESS_STEEL_LID_CATEGORY_ID)) {
+		return ['拉伸车间', '抛光车间', '组装车间'].includes(workshop)
+	}
+	return true
 }
 
 // 下拉选项 key（根据字段对照表）
@@ -540,11 +548,7 @@ const loadProducts = async () => {
 			// 前端二次筛选：先按工艺单过滤，再按产品分类与当前车间过滤
 			const filteredByCraftBill = await filterByCraftBill(mapped)
 			const filtered = filteredByCraftBill.filter(product => {
-				// 成品配件/套装产品仅在组装车间显示
-				if (isAssemblyOnlyCategory(product.productCategory)) {
-					return loginWorkshop.value === '组装车间'
-				}
-				return true
+				return isProductVisibleInWorkshop(product.productCategory, loginWorkshop.value)
 			})
 			productList.value.push(...filtered)
 			
