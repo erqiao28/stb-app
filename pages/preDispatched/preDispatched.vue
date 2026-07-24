@@ -3933,7 +3933,7 @@ onShow(refreshPage)
 				align-content: flex-start;
 				gap: px2vw(16px);
 				overflow-y: auto;
-				padding: px2vw(10px);
+				padding: px2vw(60px) px2vw(10px) px2vw(10px);
 
 				.spray-item {
 					width: px2vw(140px);
@@ -4681,7 +4681,7 @@ onShow(refreshPage)
 						.spec-row {
 							display: flex;
 							flex-direction: row;
-							padding: px2vw(6px) 0;
+							padding: px2vw(3px) 0;
 							border-bottom: 1px solid #e0e0e0;
 
 							&:last-child {
@@ -4693,6 +4693,7 @@ onShow(refreshPage)
 								min-width: 0;
 								word-break: break-all;
 								color: #333;
+								font-size: px2vw(22px);
 							}
 						}
 					}

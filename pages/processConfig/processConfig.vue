@@ -187,7 +187,50 @@ const PRODUCT_FIELD_MAP = {
 	productionStatus: '6968eb149223cfe3a0c3ad86',
 	craftBill: '66976f982503723eec1b00ea',
 	orderDeliveryDate: '6a58683d6d70ffabc67c630f',
-	productExchangeDate: '69808f5d3b5e707f84ce9841'
+	productExchangeDate: '69808f5d3b5e707f84ce9841',
+	productCategory: '68f835eafb278c23add30994'
+}
+
+// 产品分类选项 rowId：成品配件 / 套装产品
+// 这两类分类的产品只在组装车间工艺配置中显示
+const ASSEMBLY_ONLY_CATEGORY_IDS = [
+	'27a4f2d1-bbcf-4c4e-8ff9-ff0cd4caff7b', // 成品配件
+	'0d72201a-334c-4a00-816d-88d591452244'  // 套装产品
+]
+
+/**
+ * 从产品分类字段原始值中解析出级联选择选项 rowId 数组。
+ * 兼容多种返回格式：逗号分隔字符串、JSON 字符串、对象数组、单对象等。
+ */
+const parseProductCategoryIds = (rawValue) => {
+	if (rawValue == null || rawValue === '') return []
+	if (typeof rawValue === 'string') {
+		const t = rawValue.trim()
+		if (t.startsWith('[') && t.endsWith(']')) {
+			try {
+				return parseProductCategoryIds(JSON.parse(t))
+			} catch {
+				return []
+			}
+		}
+		return t.split(/[,，]/).map(s => s.trim()).filter(Boolean)
+	}
+	if (Array.isArray(rawValue)) {
+		return rawValue.flatMap(item => parseProductCategoryIds(item))
+	}
+	if (typeof rawValue === 'object') {
+		const id = rawValue.rowid || rawValue.id || rawValue.sid || rawValue.value || ''
+		return id ? String(id).trim().split(/[,，]/).map(s => s.trim()).filter(Boolean) : []
+	}
+	return [String(rawValue).trim()].filter(Boolean)
+}
+
+/**
+ * 判断某产品分类是否属于仅允许在组装车间显示的分类。
+ */
+const isAssemblyOnlyCategory = (rawValue) => {
+	const categoryIds = parseProductCategoryIds(rawValue)
+	return categoryIds.some(id => ASSEMBLY_ONLY_CATEGORY_IDS.includes(id))
 }
 
 // 下拉选项 key（根据字段对照表）
@@ -490,11 +533,19 @@ const loadProducts = async () => {
 				models: formatFieldValue(item[PRODUCT_FIELD_MAP.models]) || '',
 				orderDeliveryDate: formatFieldValue(item[PRODUCT_FIELD_MAP.orderDeliveryDate]) || '',
 				productExchangeDate: formatFieldValue(item[PRODUCT_FIELD_MAP.productExchangeDate]) || '',
-				craftBillSids: extractRelationSids(item[PRODUCT_FIELD_MAP.craftBill])
+				craftBillSids: extractRelationSids(item[PRODUCT_FIELD_MAP.craftBill]),
+				productCategory: item[PRODUCT_FIELD_MAP.productCategory]
 			}))
 			
-			// 前端二次筛选并追加
-			const filtered = await filterByCraftBill(mapped)
+			// 前端二次筛选：先按工艺单过滤，再按产品分类与当前车间过滤
+			const filteredByCraftBill = await filterByCraftBill(mapped)
+			const filtered = filteredByCraftBill.filter(product => {
+				// 成品配件/套装产品仅在组装车间显示
+				if (isAssemblyOnlyCategory(product.productCategory)) {
+					return loginWorkshop.value === '组装车间'
+				}
+				return true
+			})
 			productList.value.push(...filtered)
 			
 			// 判断是否有更多数据
@@ -1098,7 +1149,7 @@ onMounted(() => {
 					.spec-row {
 						display: flex;
 						flex-direction: row;
-						padding: px2vw(6px) 0;
+						padding: px2vw(3px) 0;
 						border-bottom: 1px solid #e0e0e0;
 
 						&:last-child {
@@ -1110,6 +1161,7 @@ onMounted(() => {
 							min-width: 0;
 							word-break: break-all;
 							color: #333;
+							font-size: px2vw(22px);
 						}
 					}
 				}
