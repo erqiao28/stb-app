@@ -188,7 +188,8 @@ const PRODUCT_FIELD_MAP = {
 	craftBill: '66976f982503723eec1b00ea',
 	orderDeliveryDate: '6a58683d6d70ffabc67c630f',
 	productExchangeDate: '69808f5d3b5e707f84ce9841',
-	productCategory: '68f835eafb278c23add30994'
+	productCategory: '68f835eafb278c23add30994',
+	productType: '69672ae19223cfe3a0c2d946'
 }
 
 // 产品分类选项 rowId：成品配件 / 套装产品 / 不锈钢盖子
@@ -249,6 +250,9 @@ const DROPDOWN_KEYS = {
 	configStatus: {
 		pending: 'cb755fdb-ffe0-48c4-9d94-e0b80fdf12d3',  // 待配置
 		configured: 'afea38f8-9200-44d8-b1f1-a9321de965bb'  // 已配置
+	},
+	productType: {
+		orderProduct: 'a2c45079-6923-4658-8cd4-2a3d6ebb068d'  // 订单产品
 	}
 }
 
@@ -381,6 +385,14 @@ const parseNumber = (v) => {
 	return isNaN(n) ? 0 : n
 }
 
+/**
+ * 判断工艺单某车间数量是否属于"未配置"。
+ * 兼容 null、undefined、空字符串、0、"0" 等场景。
+ */
+const isUnconfiguredQty = (v) => {
+	return parseNumber(v) === 0
+}
+
 // 获取当前车间对应的工艺单工序数量字段
 const getCraftBillQtyField = () => {
 	const ws = loginWorkshop.value
@@ -404,7 +416,7 @@ const filterByCraftBill = async (products) => {
 		return emptyProducts
 	}
 	
-	// 2. 收集未缓存的工艺单 rowid
+	// 2. 收集未缓存的工艺单 rowid（缓存 key 需要带上当前车间字段，避免切换车间时串数据）
 	const qtyField = getCraftBillQtyField()
 	if (!qtyField) {
 		console.warn('[工艺单筛选] 当前账号车间权限未配置，无法按工艺单过滤：', loginWorkshop.value)
@@ -412,7 +424,10 @@ const filterByCraftBill = async (products) => {
 		return emptyProducts
 	}
 	
-	const uncachedSids = [...new Set(hasBillProducts.flatMap(p => p.craftBillSids))].filter(sid => !craftBillQtyCache.has(sid))
+	const getQtyCacheKey = (sid) => `${sid}_${qtyField}`
+	
+	const uncachedSids = [...new Set(hasBillProducts.flatMap(p => p.craftBillSids))]
+		.filter(sid => !craftBillQtyCache.has(getQtyCacheKey(sid)))
 	
 	// 3. 查询未缓存的工艺单
 	if (uncachedSids.length > 0) {
@@ -433,13 +448,13 @@ const filterByCraftBill = async (products) => {
 			const rows = Array.isArray(res?.data) ? res.data : []
 			rows.forEach(item => {
 				if (item.rowid) {
-					craftBillQtyCache.set(item.rowid, parseNumber(item[qtyField]))
+					craftBillQtyCache.set(getQtyCacheKey(item.rowid), item[qtyField])
 				}
 			})
 			// 未查询到的也缓存为 null，避免重复查询
 			uncachedSids.forEach(sid => {
-				if (!craftBillQtyCache.has(sid)) {
-					craftBillQtyCache.set(sid, null)
+				if (!craftBillQtyCache.has(getQtyCacheKey(sid))) {
+					craftBillQtyCache.set(getQtyCacheKey(sid), null)
 				}
 			})
 		} catch (e) {
@@ -447,9 +462,11 @@ const filterByCraftBill = async (products) => {
 		}
 	}
 	
-	// 4. 判断每个产品的工艺单工序数量是否等于0
+	// 4. 判断当前车间是否还有待配置的工艺单：任一工艺单在当前车间数量为 0（或为空）即视为未配置，需要显示
 	const zeroQtyProducts = hasBillProducts.filter(p => {
-		return p.craftBillSids.some(sid => craftBillQtyCache.get(sid) === 0)
+		return p.craftBillSids.some(sid => {
+			return isUnconfiguredQty(craftBillQtyCache.get(getQtyCacheKey(sid)))
+		})
 	})
 	
 	return [...emptyProducts, ...zeroQtyProducts]
@@ -498,8 +515,8 @@ const loadProducts = async () => {
 						controlId: PRODUCT_FIELD_MAP.configStatus,
 						dataType: 11,
 						spliceType: 1,
-						filterType: 6,
-						values: [DROPDOWN_KEYS.configStatus.configured]
+						filterType: 2,
+						values: [DROPDOWN_KEYS.configStatus.pending]
 					},
 					{
 						controlId: PRODUCT_FIELD_MAP.productionStatus,
@@ -507,6 +524,13 @@ const loadProducts = async () => {
 						spliceType: 1,
 						filterType: 6,
 						values: ['已全部出库']
+					},
+					{
+						controlId: PRODUCT_FIELD_MAP.productType,
+						dataType: 11,
+						spliceType: 1,
+						filterType: 2,
+						values: [DROPDOWN_KEYS.productType.orderProduct]
 					}
 				],
 				pageSize,
