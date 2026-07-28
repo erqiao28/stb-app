@@ -1860,10 +1860,10 @@ const confirmSelectedProducts = async () => {
 		selectedProductKeys.value.includes(getProductKey(product))
 	)
 	
-	// 获取选中产品的 rowid 数组
-	const rowids = selectedProducts.map(p => p.rowid).filter(Boolean)
+	// 产品选择框只支持选择一个产品，传单个 rowid
+	const rowid = selectedProducts[0]?.rowid
 	
-	if (rowids.length === 0) {
+	if (!rowid) {
 		uni.showToast({ title: '数据异常，无法获取产品ID', icon: 'none' })
 		return
 	}
@@ -1873,7 +1873,7 @@ const confirmSelectedProducts = async () => {
 	try {
 		await http.post(PRE_DISPATCH_PRODUCT_ADD_URL, {
 			dispatchDate: filterDate.value,  // 筛选日期
-			rowids: rowids  // 选中产品的 rowid 数组
+			rowid: rowid  // 选中产品的 rowid
 		})
 
 		uni.hideLoading()
