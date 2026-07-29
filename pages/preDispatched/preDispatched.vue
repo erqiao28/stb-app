@@ -777,7 +777,7 @@
 <script setup>
 import { ref, onMounted, computed, getCurrentInstance, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { callWorkflowListAPIPaged } from '../../utils/workflow'
+import { callWorkflowListAPIPaged, callWorkflowListAll } from '../../utils/workflow'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
@@ -1252,13 +1252,11 @@ const loadProcessDropdownList = async (emp) => {
 		const wsFilter = employeeWorkshopFilter.value
 
 		if (wsFilter === '组装车间') {
-			const res = await callWorkflowListAPIPaged({
+			const res = await callWorkflowListAll({
 				worksheetId: ASSEMBLY_POSITION_WORKSHEET_ID,
 				filters: [],
-				pageSize: 500,
-				pageNum: 1,
 				silent: true
-			})
+			}, 100)
 			const rows = Array.isArray(res?.data) ? res.data : []
 			processDropdownList.value = rows.map((item) => ({
 				rowid: item.rowid || '',
@@ -1282,13 +1280,11 @@ const loadProcessDropdownList = async (emp) => {
 			})
 		}
 
-		const res = await callWorkflowListAPIPaged({
+		const res = await callWorkflowListAll({
 			worksheetId: 'shujuzidian',
 			filters,
-			pageSize: 500,
-			pageNum: 1,
 			silent: true
-		})
+		}, 100)
 		const rows = Array.isArray(res?.data) ? res.data : []
 		processDropdownList.value = rows.map((item) => ({
 			rowid: item.rowid || '',
@@ -1442,17 +1438,15 @@ const DICTIONARY_NAME_FIELD = 'Name'
 
 const loadProcessDictionaryMap = async () => {
 	try {
-		const res = await callWorkflowListAPIPaged({
+		const res = await callWorkflowListAll({
 			worksheetId: DICTIONARY_WORKSHEET_ID,
 			filters: [
 				{ controlId: DICTIONARY_PROCESS_TYPE_FIELD, dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
 				{ controlId: DICTIONARY_PROCESS_LEVEL_FIELD, dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
 				{ controlId: DICTIONARY_PROCESS_STATUS_FIELD, dataType: 30, spliceType: 1, filterType: 2, values: ['1'] }
 			],
-			pageSize: 500,
-			pageNum: 1,
 			silent: true
-		})
+		}, 100)
 		const rows = Array.isArray(res?.data) ? res.data : []
 		const map = new Map()
 		rows.forEach(item => {
@@ -1474,12 +1468,10 @@ const loadCraftPositionList = async () => {
 		const processDictMap = await loadProcessDictionaryMap()
 		
 		// 获取工序归类表数据
-		const res = await callWorkflowListAPIPaged({
+		const res = await callWorkflowListAll({
 			worksheetId: CRAFT_POSITION_WORKSHEET_ID,
-			filters: [],
-			pageSize: 500,
-			pageNum: 1
-		})
+			filters: []
+		}, 100)
 		const rows = Array.isArray(res?.data) ? res.data : []
 		
 		// 构建 Map：工序归类名称 -> 工序名称列表
@@ -1936,7 +1928,7 @@ const handleProcessListConfirm = async (productRowid) => {
 	const allProductPreDispatchRowids = Array.isArray(product?.preDispatchRowids) ? product.preDispatchRowids : []
 	let pdRows = []
 	if (allProductPreDispatchRowids.length > 0) {
-		const pdRes = await callWorkflowListAPIPaged({
+		const pdRes = await callWorkflowListAll({
 			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
 			filters: [{
 				controlId: 'rowid',
@@ -1945,10 +1937,8 @@ const handleProcessListConfirm = async (productRowid) => {
 				filterType: 2,
 				values: allProductPreDispatchRowids
 			}],
-			pageSize: 500,
-			pageNum: 1,
 			silent: true
-		})
+		}, 100)
 		pdRows = Array.isArray(pdRes?.data) ? pdRes.data : []
 		console.log('[工序列表确定] 获取预派工数据:', {
 			productRowid,
@@ -2298,8 +2288,6 @@ const loadAssociatedProcessDetails = async (product) => {
 				filterType: 2,
 				values: [product.productionCode]
 			}],
-			pageSize: 500,
-			pageNum: 1,
 			silent: true
 		})
 		let preDispatchRows = Array.isArray(res?.data) ? res.data : []
@@ -2316,7 +2304,7 @@ const loadAssociatedProcessDetails = async (product) => {
 		})
 		const dailyWageMap = new Map()
 		if (dailyWageRowids.size > 0) {
-			const dwRes = await callWorkflowListAPIPaged({
+			const dwRes = await callWorkflowListAll({
 				worksheetId: DAILY_WAGE_WORKSHEET_ID,
 				filters: [{
 					controlId: 'rowid',
@@ -2325,10 +2313,8 @@ const loadAssociatedProcessDetails = async (product) => {
 					filterType: 2,
 					values: [...dailyWageRowids]
 				}],
-				pageSize: 500,
-				pageNum: 1,
 				silent: true
-			})
+			}, 100)
 			const dwRows = Array.isArray(dwRes?.data) ? dwRes.data : []
 			dwRows.forEach((item) => {
 				if (item.rowid) {
@@ -2431,13 +2417,11 @@ const loadProductProcesses = async (product) => {
 				values: [loginWorkshop.value]
 			})
 		}
-		const res = await callWorkflowListAPIPaged({
+		const res = await callWorkflowListAll({
 			worksheetId: PROCESS_DETAIL_WORKSHEET_ID,
 			filters,
-			pageSize: 500,
-			pageNum: 1,
 			silent: true
-		})
+		}, 100)
 		const rows = Array.isArray(res?.data) ? res.data : []
 		const sequenceList = rows
 			.filter((item) => associatedRowids.has(item.rowid))
@@ -2644,10 +2628,8 @@ const loadEmployeeDispatchSummary = async () => {
 					filterType: 2,
 					values: [...preDispatchRowids]
 				}],
-				pageSize: 500,
-				pageNum: 1,
 				silent: true
-			})
+			}, 100)
 			const pdRows = Array.isArray(pdRes?.data) ? pdRes.data.map(mapPreDispatchRow) : []
 			pdRows.forEach((pd) => {
 				preDispatchMap[pd.rowid] = pd
@@ -2905,13 +2887,11 @@ const loadProcessActionList = async () => {
 				values: [nameSearch]
 			})
 		}
-		const res = await callWorkflowListAPIPaged({
+		const res = await callWorkflowListAll({
 			worksheetId: 'shujuzidian',
 			filters,
-			pageSize: 500,
-			pageNum: 1,
 			silent: true
-		})
+		}, 100)
 		const rows = Array.isArray(res?.data) ? res.data : []
 		processActionList.value = rows.reverse().map((item) => ({
 			rowid: item.rowid || '',
@@ -2952,10 +2932,8 @@ const getPreDispatchRowidsWithProcessDetail = async (productRowid) => {
 			filterType: 2,
 			values: rawRowids
 		}],
-		pageSize: 500,
-		pageNum: 1,
 		silent: true
-	})
+	}, 100)
 	const pdRows = Array.isArray(pdRes?.data) ? pdRes.data : []
 	console.log('[同步预派工] 获取预派工数据:', {
 		productRowid,
@@ -3092,13 +3070,11 @@ const loadWorkshopEmployees = async () => {
 			})
 		}
 
-		const res = await callWorkflowListAPIPaged({
+		const res = await callWorkflowListAll({
 			worksheetId: EMPLOYEE_WORKSHEET_ID,
 			filters,
-			pageSize: 500,
-			pageNum: 1,
 			silent: true
-		})
+		}, 100)
 		const rows = Array.isArray(res?.data) ? res.data : []
 		const filtered = rows.filter((item) => formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) === currentDate)
 		const mapped = filtered.map((item) => {
@@ -3146,13 +3122,11 @@ const loadPositionProcessEmployees = async () => {
 			})
 		}
 
-		const res = await callWorkflowListAPIPaged({
+		const res = await callWorkflowListAll({
 			worksheetId: '68f6f149c729de3f57a0a358',
 			filters,
-			pageSize: 500,
-			pageNum: 1,
 			silent: true
-		})
+		}, 100)
 		const rows = Array.isArray(res?.data) ? res.data : []
 		const processFieldIds = wsFilter === '组装车间'
 			? POSITION_PROCESS_FIELD_MAP.assembly
@@ -3175,13 +3149,11 @@ const loadPositionProcessEmployees = async () => {
 
 const loadSprayProcessList = async () => {
 	try {
-		const res = await callWorkflowListAPIPaged({
+		const res = await callWorkflowListAll({
 			worksheetId: SPRAY_PROCESS_WORKSHEET_ID,
 			filters: [],
-			pageSize: 500,
-			pageNum: 1,
 			silent: true
-		})
+		}, 100)
 		const rows = Array.isArray(res?.data) ? res.data : []
 		sprayProcessList.value = rows.map((item) => ({
 			id: item.rowid || '',
@@ -3211,13 +3183,11 @@ const loadSprayEmployees = async () => {
 			})
 		}
 
-		const res = await callWorkflowListAPIPaged({
+		const res = await callWorkflowListAll({
 			worksheetId: '68f6f149c729de3f57a0a358',
 			filters,
-			pageSize: 500,
-			pageNum: 1,
 			silent: true
-		})
+		}, 100)
 		const rows = Array.isArray(res?.data) ? res.data : []
 		sprayEmployeeList.value = rows.map((item) => ({
 			id: item.rowid || '',

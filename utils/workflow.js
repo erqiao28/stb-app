@@ -207,6 +207,37 @@ export const callWorkflowListAPIPaged = async (
 }
 
 /**
+ * 循环获取工作流列表所有数据（pageSize 为 100，循环获取直到没有更多数据）
+ * @param {Object} queryParams - 查询参数
+ * @param {number} pageSize - 每页大小，默认 100
+ * @returns {Promise<{data: Array, total: number}>}
+ */
+export const callWorkflowListAll = async (queryParams = {}, pageSize = 100) => {
+  const silent = queryParams.silent === true
+  let allRows = []
+  let pageNum = 1
+  let hasMore = true
+
+  while (hasMore) {
+    const result = await callWorkflowListAPIPaged(queryParams, pageSize, pageNum, 0)
+    const rows = Array.isArray(result?.data) ? result.data : []
+    allRows.push(...rows)
+
+    // 如果返回的数据少于 pageSize，说明没有更多数据了
+    if (rows.length < pageSize) {
+      hasMore = false
+    } else {
+      pageNum++
+    }
+  }
+
+  return {
+    data: allRows,
+    total: allRows.length
+  }
+}
+
+/**
  * 获取工作表结构（字段定义）
  * @param {string} worksheetId - 工作表ID
  * @returns {Promise} - 返回工作表结构对象
