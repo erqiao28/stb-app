@@ -890,6 +890,8 @@ const chineseNumberMap = {
 const processList = ref([])
 const loadedProductIds = ref([])
 const selectedProcessIds = ref([])
+// 记录用户手动取消勾选的工序ID，用于刷新时保留用户的操作
+const manuallyDeselectedProcessIds = ref(new Set())
 const employeeList = ref([])
 const positionProcessEmployeeList = ref([])
 const employeeDispatchSummary = ref([])
@@ -1969,13 +1971,14 @@ const handleProcessListConfirm = async (productRowid) => {
 
 	// 用户输入的派工数量（优先使用）
 	const rawUserInput = productDispatchCounts.value[productRowid]
-	const userInputDispatchCount = parseFloat(rawUserInput) || 0
-	if (rawUserInput !== undefined && rawUserInput !== '' && (isNaN(parseFloat(rawUserInput)) || userInputDispatchCount < 0)) {
+	// 只有当用户输入了有效数值（包括0）时才使用用户输入，为空时使用可派数量
+	const hasUserInput = rawUserInput !== undefined && rawUserInput !== '' && !isNaN(parseFloat(rawUserInput)) && parseFloat(rawUserInput) >= 0
+	if (rawUserInput !== undefined && rawUserInput !== '' && (isNaN(parseFloat(rawUserInput)) || parseFloat(rawUserInput) < 0)) {
 		uni.showToast({ title: '派工数量无效，请重新设置', icon: 'none' })
 		return
 	}
-	if (userInputDispatchCount > 0) {
-		dispatchCount = userInputDispatchCount
+	if (hasUserInput) {
+		dispatchCount = parseFloat(rawUserInput)
 	} else if (pdRows.length > 0) {
 		// 有预派工：取所有预派工的 dispatchCount 平均值
 		const pdDispatchVals = pdRows.map(item => parseFloat(formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.dispatchCount])) || 0)
@@ -2034,8 +2037,17 @@ const handleProcessListConfirm = async (productRowid) => {
 		})
 		uni.hideLoading()
 		uni.showToast({ title: '提交成功', icon: 'success' })
-		// 刷新该产品工序数据，保留勾选状态
+		
+		// 轮询等待后端工作流完成并把当日工资写入预派工记录
+		const checkedProcessRowids = checkedProcesses.map(p => p.rowid)
 		const product = productList.value.find(item => item.rowid === productRowid)
+		if (product) {
+			uni.showLoading({ title: '正在匹配员工中...', mask: true })
+			await waitForPreDispatchDailyWage(product, checkedProcessRowids)
+			uni.hideLoading()
+		}
+		
+		// 刷新该产品工序数据，保留勾选状态
 		if (product) {
 			// 保存当前勾选状态
 			const savedCheckedRowids = checkedProcesses.map(p => p.rowid)
@@ -2274,20 +2286,28 @@ const saveDispatchModal = () => {
 
 const loadAssociatedProcessDetails = async (product) => {
 	try {
+		// 按生产单号查询预派工记录，避免 product.preDispatchRowids 过期导致员工信息不刷新
+		// 查到后再按当前派工日期过滤
 		const res = await callWorkflowListAPIPaged({
 			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
 			filters: [{
-				controlId: 'rowid',
+				controlId: PRE_DISPATCH_FIELD_MAP.productionCode,
 				dataType: 30,
 				spliceType: 1,
 				filterType: 2,
-				values: product.preDispatchRowids || [product.rowid]
+				values: [product.productionCode]
 			}],
 			pageSize: 500,
 			pageNum: 1,
 			silent: true
 		})
-		const preDispatchRows = Array.isArray(res?.data) ? res.data : []
+		let preDispatchRows = Array.isArray(res?.data) ? res.data : []
+		if (filterDate.value) {
+			preDispatchRows = preDispatchRows.filter(item => {
+				const d = formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.dispatchDate])
+				return d === filterDate.value
+			})
+		}
 		const dailyWageRowids = new Set()
 		preDispatchRows.forEach((item) => {
 			const sids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.dailyWage])
@@ -2358,10 +2378,38 @@ const loadAssociatedProcessDetails = async (product) => {
 	}
 }
 
+/**
+ * 轮询等待已勾选的工序都关联上预派工及当日工资记录。
+ * 当所有 checkedProcessRowids 都能查到 employeeNames 时返回 true，否则超时后返回 false。
+ */
+const waitForPreDispatchDailyWage = async (product, checkedProcessRowids, maxRetries = 15, interval = 1000) => {
+	if (!checkedProcessRowids || checkedProcessRowids.length === 0) return true
+	for (let i = 0; i < maxRetries; i++) {
+		await new Promise(resolve => setTimeout(resolve, interval))
+		const associatedMap = await loadAssociatedProcessDetails(product)
+		const allReady = checkedProcessRowids.every(rowid => {
+			const info = associatedMap.get(rowid)
+			return info && info.employeeNames && info.employeeNames.length > 0
+		})
+		if (allReady) {
+			console.log('[轮询预派工] 已就绪，轮询次数:', i + 1)
+			return true
+		}
+	}
+	console.warn('[轮询预派工] 超时，未全部检测到当日工资:', checkedProcessRowids)
+	return false
+}
+
 const loadProductProcesses = async (product) => {
 	if (!product || !product.rowid || loadedProductIds.value.includes(product.rowid)) return
 	const productionCode = product.productionCode
 	if (!productionCode) return
+	
+	// 记录当前产品的旧工序 rowid，刷新后只清理该产品的选中状态，不影响其他产品
+	const oldProductProcessRowids = new Set(
+		processList.value.filter(p => p.productRowid === product.rowid).map(p => p.rowid)
+	)
+	
 	loadedProductIds.value.push(product.rowid)
 	try {
 		const associatedMap = await loadAssociatedProcessDetails(product)
@@ -2417,9 +2465,17 @@ const loadProductProcesses = async (product) => {
 			}
 		}).sort((a, b) => (parseFloat(a.sequence) || 0) - (parseFloat(b.sequence) || 0))
 		processList.value.push(...newProcesses)
-		// 清理已不存在于当前工序列表中的选中状态
+		// 只清理当前产品中已不存在的工序选中状态，不影响其他产品的勾选
 		const currentProcessRowids = new Set(newProcesses.map(p => p.rowid))
-		selectedProcessIds.value = selectedProcessIds.value.filter(rowid => currentProcessRowids.has(rowid))
+		selectedProcessIds.value = selectedProcessIds.value.filter(rowid => {
+			return !oldProductProcessRowids.has(rowid) || currentProcessRowids.has(rowid)
+		})
+		// 自动勾选关联预派工的工序（排除用户手动取消勾选的）
+		newProcesses.forEach(p => {
+			if (p.isAssociated && !selectedProcessIds.value.includes(p.rowid) && !manuallyDeselectedProcessIds.value.has(p.rowid)) {
+				selectedProcessIds.value.push(p.rowid)
+			}
+		})
 		console.log('[加载工序] productRowid:', product.rowid, '工序数据:', newProcesses.map(p => ({ rowid: p.rowid, processName: p.processName, preDispatchRowid: p.preDispatchRowid, employeeNames: p.employeeNames })))
 	} catch (e) {
 		console.error('加载工序失败:', e)
@@ -2430,8 +2486,11 @@ const toggleProcessSelection = (process) => {
 	if (!process.rowid) return
 	const index = selectedProcessIds.value.indexOf(process.rowid)
 	if (index > -1) {
-		// 取消勾选
+		// 取消勾选，记录该工序ID，刷新时保留取消状态
 		selectedProcessIds.value.splice(index, 1)
+		if (process.isAssociated) {
+			manuallyDeselectedProcessIds.value.add(process.rowid)
+		}
 		// 归类联动：开关开启时才联动
 		if (syncSelectEnabled.value) {
 			autoDeselectRelatedProcesses(process)
@@ -2700,21 +2759,18 @@ const groupedProductList = computed(() => {
 })
 
 const groupedProcessList = computed(() => {
-	const groups = {}
-	processList.value.forEach((p) => {
-		if (!selectedProductIds.value.includes(p.productRowid)) {
-			return
-		}
-		if (!groups[p.productRowid]) {
-			groups[p.productRowid] = {
-				productRowid: p.productRowid,
-				productName: p.productName,
-				processes: []
-			}
-		}
-		groups[p.productRowid].processes.push(p)
+	const groups = []
+	// 按左侧产品列表顺序遍历，保证工序列表顺序与产品列表一致
+	selectedProductIds.value.forEach((productRowid) => {
+		const processes = processList.value.filter(p => p.productRowid === productRowid)
+		if (processes.length === 0) return
+		groups.push({
+			productRowid,
+			productName: processes[0].productName,
+			processes
+		})
 	})
-	return Object.values(groups)
+	return groups
 })
 
 const openEmployeeTaskPopover = async (emp, index) => {
