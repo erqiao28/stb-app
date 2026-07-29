@@ -2279,7 +2279,7 @@ const loadAssociatedProcessDetails = async (product) => {
 	try {
 		// 按生产单号查询预派工记录，避免 product.preDispatchRowids 过期导致员工信息不刷新
 		// 查到后再按当前派工日期过滤
-		const res = await callWorkflowListAPIPaged({
+		const res = await callWorkflowListAll({
 			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
 			filters: [{
 				controlId: PRE_DISPATCH_FIELD_MAP.productionCode,
@@ -2289,7 +2289,7 @@ const loadAssociatedProcessDetails = async (product) => {
 				values: [product.productionCode]
 			}],
 			silent: true
-		})
+		}, 100)
 		let preDispatchRows = Array.isArray(res?.data) ? res.data : []
 		if (filterDate.value) {
 			preDispatchRows = preDispatchRows.filter(item => {
