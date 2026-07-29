@@ -2016,7 +2016,8 @@ const handleProcessListConfirm = async (productRowid) => {
 
 	console.log('[工序列表确定] 提交参数:', {
 		productRowid,
-		userInputDispatchCount,
+		userInput: rawUserInput,
+		hasUserInput,
 		hasPreDispatchRowids,
 		noPreDispatchRowids,
 		noProcessPreDispatchRowid,
