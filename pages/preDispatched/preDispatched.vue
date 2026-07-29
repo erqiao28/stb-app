@@ -1968,15 +1968,10 @@ const handleProcessListConfirm = async (productRowid) => {
 		return
 	}
 	if (hasUserInput) {
+		// 用户输入了有效值，传用户输入的派工数量
 		dispatchCount = parseFloat(rawUserInput)
-	} else if (pdRows.length > 0) {
-		// 有预派工：取所有预派工的 dispatchCount 平均值
-		const pdDispatchVals = pdRows.map(item => parseFloat(formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.dispatchCount])) || 0)
-		if (pdDispatchVals.length > 0) {
-			dispatchCount = Math.round(pdDispatchVals.reduce((a, b) => a + b, 0) / pdDispatchVals.length)
-		}
-	} else if (checkedProcesses.length > 0) {
-		// 无预派工：取工序表的 needCount 平均值
+	} else {
+		// 用户输入为空或0，传可派数量（needCount）
 		const processNeedVals = checkedProcesses.map(p => parseFloat(p.needCount) || 0)
 		if (processNeedVals.length > 0) {
 			dispatchCount = Math.round(processNeedVals.reduce((a, b) => a + b, 0) / processNeedVals.length)
