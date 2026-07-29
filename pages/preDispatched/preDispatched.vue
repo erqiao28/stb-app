@@ -2613,7 +2613,7 @@ const loadEmployeeDispatchSummary = async () => {
 		const res = await callWorkflowListAPIPaged({
 			worksheetId: DAILY_WAGE_WORKSHEET_ID,
 			filters,
-			pageSize: 500,
+			pageSize: 100,
 			pageNum: 1,
 			silent: true
 		})
