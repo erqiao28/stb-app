@@ -185,16 +185,16 @@
 							</view>
 						</view>
 					</view>
+			</view>
+			<view class="empty-wrap" v-if="!productList.length && !loadingProducts">
+				<view class="empty-icon">
+					<text class="empty-icon-plus">+</text>
 				</view>
-					<view class="empty-wrap" v-if="!productList.length && !loadingProducts">
-						<view class="empty-icon">
-							<text class="empty-icon-plus">+</text>
-						</view>
-						<text class="empty-text">暂无产品</text>
-						<text class="empty-tip">点击左下角添加产品</text>
-					</view>
-				</scroll-view>
-				<view class="left-bottom-btns">
+				<text class="empty-text">暂无产品</text>
+				<text class="empty-tip">点击左下角添加产品</text>
+			</view>
+		</scroll-view>
+		<view class="left-bottom-btns">
 					<view class="left-btn left-btn-add" @click="handleAddProduct">添加产品</view>
 					<view class="left-btn left-btn-confirm" @click="handleConfirmDispatch">确认派工</view>
 				</view>
@@ -4517,6 +4517,7 @@ onShow(refreshPage)
 			display: flex;
 			flex-direction: column;
 			flex-shrink: 0;
+			position: relative;
 
 			.panel-title {
 				height: px2vw(60px);
@@ -4815,6 +4816,52 @@ onShow(refreshPage)
 					}
 				}
 			}
+			.empty-wrap {
+				position: absolute;
+				top: px2vw(60px);
+				left: 0;
+				right: 0;
+				bottom: px2vw(60px);
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				padding: px2vw(40px);
+				background: linear-gradient(180deg, #f8f9fa 0%, #ffffff 100%);
+				z-index: 1;
+
+				.empty-icon {
+					width: px2vw(120px);
+					height: px2vw(120px);
+					line-height: px2vw(120px);
+					text-align: center;
+					margin-bottom: px2vw(28px);
+					border: px2vw(4px) dashed #d0d7de;
+					border-radius: px2vw(24px);
+					background-color: #ffffff;
+					box-shadow: 0 px2vw(4px) px2vw(16px) rgba(0, 0, 0, 0.06);
+
+					.empty-icon-plus {
+						font-size: px2vw(56px);
+						color: #c0c7d0;
+						font-weight: 300;
+					}
+				}
+
+				.empty-text {
+					font-size: px2vw(28px);
+					color: #4a4a4a;
+					font-weight: 600;
+					margin-bottom: px2vw(12px);
+					display: block;
+				}
+
+				.empty-tip {
+					font-size: px2vw(20px);
+					color: #8c8c8c;
+					display: block;
+				}
+			}
 		}
 
 		.right-panel {
@@ -5024,45 +5071,6 @@ onShow(refreshPage)
 					}
 				}
 
-				.empty-wrap {
-					padding: px2vw(120px) px2vw(20px);
-					text-align: center;
-					background: linear-gradient(180deg, #f8f9fa 0%, #ffffff 100%);
-
-					.empty-icon {
-						display: flex;
-						align-items: center;
-						justify-content: center;
-						width: px2vw(120px);
-						height: px2vw(120px);
-						margin: 0 auto px2vw(28px);
-						border: px2vw(4px) dashed #d0d7de;
-						border-radius: px2vw(24px);
-						background-color: #ffffff;
-						box-shadow: 0 px2vw(4px) px2vw(16px) rgba(0, 0, 0, 0.06);
-
-						.empty-icon-plus {
-							font-size: px2vw(56px);
-							color: #c0c7d0;
-							font-weight: 300;
-							line-height: 1;
-						}
-					}
-
-					.empty-text {
-						font-size: px2vw(28px);
-						color: #4a4a4a;
-						font-weight: 600;
-						margin-bottom: px2vw(12px);
-						display: block;
-					}
-
-					.empty-tip {
-						font-size: px2vw(20px);
-						color: #8c8c8c;
-						display: block;
-					}
-				}
 			}
 
 			.employee-dispatch-table {
