@@ -187,6 +187,7 @@
 					</view>
 				</view>
 					<view class="empty-wrap" v-if="!productList.length && !loadingProducts">
+						<view class="empty-icon"></view>
 						<text class="empty-text">暂无产品</text>
 					</view>
 				</scroll-view>
@@ -5021,12 +5022,38 @@ onShow(refreshPage)
 				}
 
 				.empty-wrap {
-					padding: px2vw(85px) 0;
+					padding: px2vw(120px) 0;
 					text-align: center;
+					display: flex;
+					flex-direction: column;
+					align-items: center;
+					justify-content: center;
+
+					.empty-icon {
+						width: px2vw(120px);
+						height: px2vw(120px);
+						border: px2vw(3px) solid #e0e0e0;
+						border-radius: px2vw(16px);
+						margin-bottom: px2vw(24px);
+						position: relative;
+
+						&::after {
+							content: '';
+							position: absolute;
+							top: 50%;
+							left: 50%;
+							transform: translate(-50%, -50%);
+							width: px2vw(60px);
+							height: px2vw(4px);
+							background-color: #e0e0e0;
+							border-radius: px2vw(2px);
+						}
+					}
 
 					.empty-text {
-						font-size: px2vw(24px);
-						color: #aaa;
+						font-size: px2vw(30px);
+						color: #666;
+						font-weight: 500;
 					}
 				}
 			}
