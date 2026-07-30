@@ -1817,14 +1817,13 @@ const getProductKey = (product) => {
 	return product.productionCode || product.productCode || `${product.orderCode}-${product.name}`
 }
 
-// 切换产品选中状态
+// 切换产品选中状态（产品选择框为单选）
 const toggleProductSelection = (product) => {
 	const key = getProductKey(product)
-	const idx = selectedProductKeys.value.indexOf(key)
-	if (idx >= 0) {
-		selectedProductKeys.value.splice(idx, 1)
+	if (selectedProductKeys.value.includes(key)) {
+		selectedProductKeys.value = []
 	} else {
-		selectedProductKeys.value.push(key)
+		selectedProductKeys.value = [key]
 	}
 }
 
