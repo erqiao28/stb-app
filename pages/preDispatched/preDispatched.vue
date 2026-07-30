@@ -4178,7 +4178,7 @@ onShow(refreshPage)
 					.expand-process-item {
 						flex: 0 0 auto;
 						width: 100%;
-						min-height: px2vw(80px);
+						min-height: px2vw(50px);
 						display: flex;
 						align-items: center;
 						gap: px2vw(8px);
