@@ -1864,13 +1864,14 @@ const confirmSelectedProducts = async () => {
 	
 	// 产品选择框只支持选择一个产品，传单个 rowid
 	const rowid = selectedProducts[0]?.rowid
+	const selectedProductionCode = selectedProducts[0]?.productionCode || selectedProducts[0]?.productCode
 	
 	if (!rowid) {
 		uni.showToast({ title: '数据异常，无法获取产品ID', icon: 'none' })
 		return
 	}
 	
-	uni.showLoading({ title: '添加中...' })
+	uni.showLoading({ title: '添加中...', mask: true })
 	
 	try {
 		await http.post(PRE_DISPATCH_PRODUCT_ADD_URL, {
@@ -1878,11 +1879,39 @@ const confirmSelectedProducts = async () => {
 			rowid: rowid  // 选中产品的 rowid
 		})
 
-		uni.hideLoading()
+		// 添加成功后轮询等待新产品数据写入完成再刷新渲染
+		uni.showLoading({ title: '添加产品中...', mask: true })
+		const MAX_RETRY = 20
+		const INTERVAL = 500
+		let found = false
 
-		uni.showToast({ title: '添加成功', icon: 'success' })
+		for (let i = 0; i < MAX_RETRY; i++) {
+			await loadProducts(true, true)
+			const nowExists = selectedProductionCode
+				? productList.value.some(p => p.productionCode === selectedProductionCode)
+				: productList.value.length > 0
+			if (nowExists) {
+				found = true
+				break
+			}
+			if (i < MAX_RETRY - 1) {
+				await new Promise(resolve => setTimeout(resolve, INTERVAL))
+			}
+		}
+
+		uni.hideLoading()
 		showSelectProductModal.value = false
-		handleSearch()  // 刷新列表
+		selectedProductKeys.value = []
+
+		if (found) {
+			uni.showToast({ title: '添加成功', icon: 'success' })
+		} else {
+			uni.showToast({ title: '添加成功，数据刷新略有延迟', icon: 'none' })
+		}
+
+		// 同步刷新员工相关数据
+		loadEmployeeDispatchSummary()
+		loadWorkshopEmployees()
 	} catch (e) {
 		uni.hideLoading()
 		console.error('添加预派工失败:', e)
@@ -2086,7 +2115,7 @@ const handleRefresh = () => {
 	handleSearch()
 }
 
-const loadProducts = async (reset = true) => {
+const loadProducts = async (reset = true, forceSilent = false) => {
 	loadingProducts.value = true
 	try {
 		const filters = []
@@ -2136,8 +2165,8 @@ const loadProducts = async (reset = true) => {
 				filters,
 				pageSize,
 				pageNum,
-				// 仅首页沿用原 loading 行为，后续页静默请求
-				silent: pageNum === 1 ? !reset : true
+				// 仅首页沿用原 loading 行为，后续页静默请求；forceSilent 为 true 时全部静默
+				silent: forceSilent || (pageNum === 1 ? !reset : true)
 			})
 			const rows = Array.isArray(res?.data) ? res.data : []
 			raw.push(...rows)
