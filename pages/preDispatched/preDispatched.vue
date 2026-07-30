@@ -187,7 +187,9 @@
 					</view>
 				</view>
 					<view class="empty-wrap" v-if="!productList.length && !loadingProducts">
-						<view class="empty-icon"></view>
+						<view class="empty-icon">
+							<text class="empty-icon-plus">+</text>
+						</view>
 						<text class="empty-text">暂无产品</text>
 						<text class="empty-tip">点击左下角添加产品</text>
 					</view>
@@ -5025,39 +5027,39 @@ onShow(refreshPage)
 				.empty-wrap {
 					padding: px2vw(120px) px2vw(20px);
 					text-align: center;
+					background: linear-gradient(180deg, #f8f9fa 0%, #ffffff 100%);
 
 					.empty-icon {
-						position: relative;
-						width: px2vw(100px);
-						height: px2vw(100px);
-						margin: 0 auto px2vw(24px);
-						border: px2vw(3px) solid #e0e0e0;
-						border-radius: px2vw(16px);
-						background-color: #f5f5f5;
+						display: flex;
+						align-items: center;
+						justify-content: center;
+						width: px2vw(120px);
+						height: px2vw(120px);
+						margin: 0 auto px2vw(28px);
+						border: px2vw(4px) dashed #d0d7de;
+						border-radius: px2vw(24px);
+						background-color: #ffffff;
+						box-shadow: 0 px2vw(4px) px2vw(16px) rgba(0, 0, 0, 0.06);
 
-						&::after {
-							content: '+';
-							position: absolute;
-							top: 50%;
-							left: 50%;
-							transform: translate(-50%, -50%);
-							font-size: px2vw(48px);
-							color: #ccc;
+						.empty-icon-plus {
+							font-size: px2vw(56px);
+							color: #c0c7d0;
 							font-weight: 300;
+							line-height: 1;
 						}
 					}
 
 					.empty-text {
-						font-size: px2vw(26px);
-						color: #666;
-						font-weight: 500;
-						margin-bottom: px2vw(8px);
+						font-size: px2vw(28px);
+						color: #4a4a4a;
+						font-weight: 600;
+						margin-bottom: px2vw(12px);
 						display: block;
 					}
 
 					.empty-tip {
-						font-size: px2vw(18px);
-						color: #aaa;
+						font-size: px2vw(20px);
+						color: #8c8c8c;
 						display: block;
 					}
 				}
