@@ -139,7 +139,7 @@
 						<view class="switch" :class="{ 'switch-on': syncSelectEnabled }"></view>
 					</view>
 				</view>
-				<scroll-view class="product-list" scroll-y>
+				<scroll-view class="product-list" scroll-y v-if="productList.length > 0 || loadingProducts">
 					<view class="order-group" v-for="(group, gIdx) in groupedProductList" :key="group.orderNo">
 						<view class="order-header" @click="toggleOrderCollapse(group.orderNo)">
 						<text class="order-index">{{ chineseNumberMap[gIdx + 1] || (gIdx + 1) }}</text>
@@ -185,12 +185,11 @@
 							</view>
 						</view>
 					</view>
-				</view>
-					<view class="empty-wrap" v-if="!productList.length && !loadingProducts">
-						<view class="empty-icon"></view>
-						<text class="empty-text">暂无产品</text>
-					</view>
 				</scroll-view>
+				<view class="empty-wrap" v-else>
+					<view class="empty-icon"></view>
+					<text class="empty-text">暂无产品</text>
+				</view>
 				<view class="left-bottom-btns">
 					<view class="left-btn left-btn-add" @click="handleAddProduct">添加产品</view>
 					<view class="left-btn left-btn-confirm" @click="handleConfirmDispatch">确认派工</view>
@@ -4597,8 +4596,6 @@ onShow(refreshPage)
 				flex: 1;
 				overflow: hidden;
 				background-color: #f8f9fa;
-				display: flex;
-				flex-direction: column;
 
 				.order-group {
 					margin: px2vw(6px) px2vw(12px);
@@ -5024,12 +5021,14 @@ onShow(refreshPage)
 				}
 
 				.empty-wrap {
-					padding: px2vw(120px) 0;
-					text-align: center;
+					flex: 1;
 					display: flex;
 					flex-direction: column;
 					align-items: center;
 					justify-content: center;
+					background-color: #f8f9fa;
+					padding: px2vw(40px) 0;
+					text-align: center;
 
 					.empty-icon {
 						width: px2vw(120px);
