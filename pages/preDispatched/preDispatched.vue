@@ -1702,6 +1702,7 @@ const loadProductList = async (append = false) => {
 		if (!append) {
 			uni.showLoading({ title: '加载中...' })
 		}
+		const targetOrderCode = selectedOrder.value?.orderCode || ''
 		const res = await callWorkflowListAPIPaged({
 			worksheetId: 'paichanjihua',
 			filters: [
@@ -1738,6 +1739,14 @@ const loadProductList = async (append = false) => {
 					dataType: 30,
 					spliceType: 1,
 					filterType: 8
+				},
+				// 按选中的订单编号筛选，避免目标产品落在后续页导致前端过滤为空
+				{
+					controlId: '655e1cbbbd2094b316347f92',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 2,
+					values: [targetOrderCode]
 				}
 			],
 			pageSize: 100,
@@ -1754,9 +1763,9 @@ const loadProductList = async (append = false) => {
 			models: item['6937d255ff2b019b3cb34be4'] || '',
 			orderCount: item['69e33354665ab27f3916f758'] || '',
 			productionCode: item['698438933b5e707f84cf51fd'] || '',
-		productCode: item['691d6336535b29cbd5c6c0ca'] || '',
-		orderCount: item['6a5f19556d70ffabc67f0ce9'] || ''
-	}))
+			productCode: item['691d6336535b29cbd5c6c0ca'] || '',
+			orderCount: item['6a5f19556d70ffabc67f0ce9'] || ''
+		}))
 		
 		if (append) {
 			selectProductList.value = [...selectProductList.value, ...newProducts]
@@ -1764,11 +1773,8 @@ const loadProductList = async (append = false) => {
 			selectProductList.value = newProducts
 		}
 		
-		// 前端按订单编号过滤（与选择产品页面一致）
-		const targetOrderCode = selectedOrder.value?.orderCode || ''
-		filteredSelectProductList.value = selectProductList.value.filter(product =>
-			(product.orderCode || '').toLowerCase() === targetOrderCode.toLowerCase()
-		)
+		// 后端已按订单编号筛选，前端仅需按搜索关键字过滤
+		filterProductList()
 		
 		productPageNum.value = pageNum + 1
 		productHasMore.value = rows.length >= 100
