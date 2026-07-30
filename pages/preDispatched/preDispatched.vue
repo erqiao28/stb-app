@@ -4597,6 +4597,8 @@ onShow(refreshPage)
 				flex: 1;
 				overflow: hidden;
 				background-color: #f8f9fa;
+				display: flex;
+				flex-direction: column;
 
 				.order-group {
 					margin: px2vw(6px) px2vw(12px);
