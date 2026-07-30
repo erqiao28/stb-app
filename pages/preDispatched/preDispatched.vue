@@ -4167,7 +4167,7 @@ onShow(refreshPage)
 					margin-right: px2vw(12px);
 					flex: 0 0 auto;
 					width: px2vw(220px);
-					height: 87%;
+					height: 100%;
 					display: flex;
 					flex-direction: column;
 					align-items: stretch;
