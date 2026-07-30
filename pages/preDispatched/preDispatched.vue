@@ -139,7 +139,7 @@
 						<view class="switch" :class="{ 'switch-on': syncSelectEnabled }"></view>
 					</view>
 				</view>
-				<scroll-view class="product-list" scroll-y v-if="productList.length > 0 || loadingProducts">
+				<scroll-view class="product-list" scroll-y>
 					<view class="order-group" v-for="(group, gIdx) in groupedProductList" :key="group.orderNo">
 						<view class="order-header" @click="toggleOrderCollapse(group.orderNo)">
 						<text class="order-index">{{ chineseNumberMap[gIdx + 1] || (gIdx + 1) }}</text>
@@ -185,11 +185,13 @@
 							</view>
 						</view>
 					</view>
-				</scroll-view>
-				<view class="empty-wrap" v-else>
-					<view class="empty-icon"></view>
-					<text class="empty-text">暂无产品</text>
 				</view>
+					<view class="empty-wrap" v-if="!productList.length && !loadingProducts">
+						<view class="empty-icon"></view>
+						<text class="empty-text">暂无产品</text>
+						<text class="empty-tip">点击左下角添加产品</text>
+					</view>
+				</scroll-view>
 				<view class="left-bottom-btns">
 					<view class="left-btn left-btn-add" @click="handleAddProduct">添加产品</view>
 					<view class="left-btn left-btn-confirm" @click="handleConfirmDispatch">确认派工</view>
@@ -5021,40 +5023,42 @@ onShow(refreshPage)
 				}
 
 				.empty-wrap {
-					flex: 1;
-					display: flex;
-					flex-direction: column;
-					align-items: center;
-					justify-content: center;
-					background-color: #f8f9fa;
-					padding: px2vw(40px) 0;
+					padding: px2vw(120px) px2vw(20px);
 					text-align: center;
 
 					.empty-icon {
-						width: px2vw(120px);
-						height: px2vw(120px);
+						position: relative;
+						width: px2vw(100px);
+						height: px2vw(100px);
+						margin: 0 auto px2vw(24px);
 						border: px2vw(3px) solid #e0e0e0;
 						border-radius: px2vw(16px);
-						margin-bottom: px2vw(24px);
-						position: relative;
+						background-color: #f5f5f5;
 
 						&::after {
-							content: '';
+							content: '+';
 							position: absolute;
 							top: 50%;
 							left: 50%;
 							transform: translate(-50%, -50%);
-							width: px2vw(60px);
-							height: px2vw(4px);
-							background-color: #e0e0e0;
-							border-radius: px2vw(2px);
+							font-size: px2vw(48px);
+							color: #ccc;
+							font-weight: 300;
 						}
 					}
 
 					.empty-text {
-						font-size: px2vw(30px);
+						font-size: px2vw(26px);
 						color: #666;
 						font-weight: 500;
+						margin-bottom: px2vw(8px);
+						display: block;
+					}
+
+					.empty-tip {
+						font-size: px2vw(18px);
+						color: #aaa;
+						display: block;
 					}
 				}
 			}
