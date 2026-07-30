@@ -120,9 +120,6 @@ export const OPERATE_PROCESS_URL = apiUrl('/api/workflow/hooks/NmEwYmQyNmI4MWZiN
 /** 操作工序后同步预派工关联工序 */
 export const OPERATE_PROCESS_SYNC_URL = apiUrl('/api/workflow/hooks/NmE1OWUzYjMzN2MwOTg0NTBhOTI0MjYz')
 
-/** 员工出勤同步预派工关联工序 */
-export const ATTENDANCE_SYNC_URL = apiUrl('/api/workflow/hooks/NmE1OWU1OGMzN2MwOTg0NTBhOTJiMGE2')
-
 /** 预派工作废 */
 export const PRE_DISPATCH_VOID_URL = apiUrl('/api/workflow/hooks/NmEyYTEzMGMzN2MwOTg0NTBhMDFlMzQ2')
 

@@ -217,14 +217,16 @@ export const callWorkflowListAll = async (queryParams = {}, pageSize = 100) => {
   let allRows = []
   let pageNum = 1
   let hasMore = true
+  // 安全上限，防止后端异常一直返回满页数据导致死循环
+  const MAX_PAGES = 500
 
-  while (hasMore) {
+  while (hasMore && pageNum <= MAX_PAGES) {
     const result = await callWorkflowListAPIPaged(queryParams, pageSize, pageNum, 0)
     const rows = Array.isArray(result?.data) ? result.data : []
     allRows.push(...rows)
 
-    // 如果返回的数据少于 pageSize，说明没有更多数据了
-    if (rows.length < pageSize) {
+    // 返回空数据或不足一页时终止循环
+    if (rows.length === 0 || rows.length < pageSize) {
       hasMore = false
     } else {
       pageNum++

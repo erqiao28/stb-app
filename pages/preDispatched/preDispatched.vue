@@ -781,7 +781,7 @@ import { callWorkflowListAPIPaged, callWorkflowListAll } from '../../utils/workf
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
-import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, PRE_DISPATCH_PROCESS_CONFIRM_URL, PRE_DISPATCH_PRODUCT_ADD_URL, ATTENDANCE_SUBMIT_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, OPERATE_PROCESS_SYNC_URL, ATTENDANCE_SYNC_URL, POSITION_PROCESS_SELECT_URL, POSITION_PROCESS_DELETE_URL, SPRAY_PROCESS_EMPLOYEE_URL } from '../../utils/api'
+import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, PRE_DISPATCH_PROCESS_CONFIRM_URL, PRE_DISPATCH_PRODUCT_ADD_URL, ATTENDANCE_SUBMIT_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, OPERATE_PROCESS_SYNC_URL, POSITION_PROCESS_SELECT_URL, POSITION_PROCESS_DELETE_URL, SPRAY_PROCESS_EMPLOYEE_URL } from '../../utils/api'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -946,8 +946,8 @@ const MAX_EMPLOYEE_HOURS = 11
 
 // 岗位工序匹配表中员工所属工序字段映射
 const POSITION_PROCESS_FIELD_MAP = {
-	stretchAndPolish: ['6a55c3db6d70ffabc67ae835', '6a55c3db6d70ffabc67ae837', '6a55c3db6d70ffabc67ae839'],
-	assembly: ['6a55d98e6d70ffabc67afbe1', '6a55d98e6d70ffabc67afbe3', '6a55d98e6d70ffabc67afbe5']
+	stretchAndPolish: ['6a55c3db6d70ffabc67ae835', '6a55c3db6d70ffabc67ae837', '6a55c3db6d70ffabc67ae839', '6a6975376d70ffabc6822704', '6a6975376d70ffabc6822706'],
+	assembly: ['6a55d98e6d70ffabc67afbe1', '6a55d98e6d70ffabc67afbe3', '6a55d98e6d70ffabc67afbe5', '6a6975596d70ffabc6822737', '6a6975596d70ffabc6822739']
 }
 const ASSEMBLY_POSITION_WORKSHEET_ID = '6a55c4956d70ffabc67ae898'
 const ASSEMBLY_POSITION_FIELD_ID = '6a276ffc6d70ffabc66285f8'
@@ -1249,46 +1249,54 @@ const handleSprayEmployeeClick = async (emp) => {
 
 const loadProcessDropdownList = async (emp) => {
 	try {
-		const wsFilter = employeeWorkshopFilter.value
+		const ws = loginWorkshop.value
 
-		if (wsFilter === '组装车间') {
+		if (ws === '拉伸车间') {
+			// 拉伸车间：从工序字典获取三级工序
+			const filters = [
+				{ controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
+				{ controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
+				{ controlId: '6a324e7d6d70ffabc66cbe5f', dataType: 30, spliceType: 1, filterType: 2, values: ['1'] },
+				{
+					controlId: '691e8522d50c894e2e798d03',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 2,
+					values: [ws]
+				}
+			]
 			const res = await callWorkflowListAll({
-				worksheetId: ASSEMBLY_POSITION_WORKSHEET_ID,
-				filters: [],
+				worksheetId: 'shujuzidian',
+				filters,
 				silent: true
 			}, 100)
 			const rows = Array.isArray(res?.data) ? res.data : []
 			processDropdownList.value = rows.map((item) => ({
 				rowid: item.rowid || '',
-				processName: formatFieldValue(item[ASSEMBLY_POSITION_FIELD_ID]) || '-'
+				processName: item['Name'] || '-'
 			}))
 			return
 		}
 
-		const filters = [
-			{ controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
-			{ controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
-			{ controlId: '6a324e7d6d70ffabc66cbe5f', dataType: 30, spliceType: 1, filterType: 2, values: ['1'] }
-		]
-		if (loginWorkshop.value) {
-			filters.push({
-				controlId: '691e8522d50c894e2e798d03',
-				dataType: 30,
-				spliceType: 1,
-				filterType: 2,
-				values: [loginWorkshop.value]
-			})
-		}
-
+		// 喷涂、抛光、组装车间：从岗位工序表获取岗位
+		const filters = []
+		const workshopFilter = (ws === '喷涂车间' || ws === '组装车间') ? '组装车间' : '抛光车间'
+		filters.push({
+			controlId: '6a3124a86d70ffabc66c8515',
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: [workshopFilter]
+		})
 		const res = await callWorkflowListAll({
-			worksheetId: 'shujuzidian',
+			worksheetId: ASSEMBLY_POSITION_WORKSHEET_ID,
 			filters,
 			silent: true
 		}, 100)
 		const rows = Array.isArray(res?.data) ? res.data : []
 		processDropdownList.value = rows.map((item) => ({
 			rowid: item.rowid || '',
-			processName: item['Name'] || '-'
+			processName: item['Name'] || item[ASSEMBLY_POSITION_FIELD_ID] || '-'
 		}))
 	} catch (e) {
 		console.error('加载工序抽屉数据失败:', e)
@@ -2570,14 +2578,6 @@ const toggleOrderCollapse = (orderNo) => {
 const loadEmployeeDispatchSummary = async () => {
 	try {
 		const currentDate = filterDate.value
-		// 先调用同步接口（finally 保证 Loading 必关闭，避免异常时遮罩卡死页面）
-		uni.showLoading({ title: '加载中...', mask: true })
-		try {
-			await http.post(ATTENDANCE_SYNC_URL, { date: currentDate })
-		} finally {
-			uni.hideLoading()
-		}
-
 		const wsFilter = employeeWorkshopFilter.value
 		const filters = []
 		if (wsFilter) {
@@ -2856,14 +2856,17 @@ const handleProcessActionSearch = () => {
 const loadProcessActionList = async () => {
 	try {
 		processActionLoading.value = true
-		const filters = [
-			{ controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
-			{ controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
-			{ controlId: '6a324e7d6d70ffabc66cbe5f', dataType: 30, spliceType: 1, filterType: 2, values: ['1'] }
-		]
-		// 按当前登录车间筛选工序
 		const ws = loginWorkshop.value
-		if (ws) {
+		console.log('[工序列表] 当前车间:', ws)
+		let rows = []
+		
+		if (ws === '拉伸车间') {
+			// 拉伸车间：从 shujuzidian 获取工序
+			const filters = [
+				{ controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
+				{ controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
+				{ controlId: '6a324e7d6d70ffabc66cbe5f', dataType: 30, spliceType: 1, filterType: 2, values: ['1'] }
+			]
 			filters.push({
 				controlId: '691e8522d50c894e2e798d03',
 				dataType: 30,
@@ -2871,26 +2874,55 @@ const loadProcessActionList = async () => {
 				filterType: 2,
 				values: [ws]
 			})
-		}
-		const nameSearch = processActionSearch.value.trim()
-		if (nameSearch) {
+			const nameSearch = processActionSearch.value.trim()
+			if (nameSearch) {
+				filters.push({
+					controlId: '6614b6721103c1d5d3a08122',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 1,
+					values: [nameSearch]
+				})
+			}
+			const res = await callWorkflowListAll({
+				worksheetId: 'shujuzidian',
+				filters,
+				silent: true
+			}, 100)
+			rows = Array.isArray(res?.data) ? res.data : []
+		} else {
+			// 喷涂、抛光、组装车间：从岗位表获取岗位
+			const filters = []
+			// 根据车间筛选：喷涂车间和组装车间筛选"组装车间"，抛光车间筛选"抛光车间"
+			const workshopFilter = (ws === '喷涂车间' || ws === '组装车间') ? '组装车间' : '抛光车间'
+			console.log('[工序列表] 岗位表筛选车间:', ws, '筛选值:', workshopFilter)
 			filters.push({
-				controlId: '6614b6721103c1d5d3a08122',
+				controlId: '6a3124a86d70ffabc66c8515',
 				dataType: 30,
 				spliceType: 1,
-				filterType: 1,
-				values: [nameSearch]
+				filterType: 2,
+				values: [workshopFilter]
 			})
+			const nameSearch = processActionSearch.value.trim()
+			if (nameSearch) {
+				filters.push({
+					controlId: '6a276ffc6d70ffabc66285f8',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 1,
+					values: [nameSearch]
+				})
+			}
+			const res = await callWorkflowListAll({
+				worksheetId: ASSEMBLY_POSITION_WORKSHEET_ID,
+				filters,
+				silent: true
+			}, 100)
+			rows = Array.isArray(res?.data) ? res.data : []
 		}
-		const res = await callWorkflowListAll({
-			worksheetId: 'shujuzidian',
-			filters,
-			silent: true
-		}, 100)
-		const rows = Array.isArray(res?.data) ? res.data : []
 		processActionList.value = rows.reverse().map((item) => ({
 			rowid: item.rowid || '',
-			processName: item['Name'] || '-'
+			processName: item['Name'] || item[ASSEMBLY_POSITION_FIELD_ID] || '-'
 		}))
 	} catch (e) {
 		console.error('加载工序列表失败:', e)
@@ -3065,14 +3097,43 @@ const loadWorkshopEmployees = async () => {
 			})
 		}
 
-		const res = await callWorkflowListAll({
-			worksheetId: EMPLOYEE_WORKSHEET_ID,
-			filters,
-			silent: true
-		}, 100)
-		const rows = Array.isArray(res?.data) ? res.data : []
-		const filtered = rows.filter((item) => formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) === currentDate)
-		const mapped = filtered.map((item) => {
+		// 由于接口无法按日期筛选，逐页获取并在前端按日期过滤：
+		// 阶段1：找到第一条符合日期的数据前，持续获取；
+		// 阶段2：找到数据后，继续获取后续页，直到某一页筛选后为空或返回不足一页。
+		const pageSize = 100
+		let pageNum = 1
+		let foundData = false
+		let allRows = []
+		let hasMore = true
+		const MAX_PAGES = 500
+
+		while (hasMore && pageNum <= MAX_PAGES) {
+			const res = await callWorkflowListAPIPaged({
+				worksheetId: EMPLOYEE_WORKSHEET_ID,
+				filters,
+				silent: true
+			}, pageSize, pageNum)
+			const rows = Array.isArray(res?.data) ? res.data : []
+			if (rows.length === 0) break
+
+			const filtered = rows.filter((item) => formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) === currentDate)
+			allRows.push(...filtered)
+
+			if (filtered.length > 0) {
+				foundData = true
+			}
+
+			// 已找到数据且当前页筛选后为空，说明后续不再有该日期数据，停止
+			if (foundData && filtered.length === 0) {
+				hasMore = false
+			} else if (rows.length < pageSize) {
+				hasMore = false
+			} else {
+				pageNum++
+			}
+		}
+
+		const mapped = allRows.map((item) => {
 			const totalHours = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.totalHours]) || '0') || 0
 			const wage = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.wage]) || '0') || 0
 			const attendance = formatFieldValue(item[EMPLOYEE_FIELD_MAP.attendance]) || ''
@@ -3123,9 +3184,10 @@ const loadPositionProcessEmployees = async () => {
 			silent: true
 		}, 100)
 		const rows = Array.isArray(res?.data) ? res.data : []
-		const processFieldIds = wsFilter === '组装车间'
-			? POSITION_PROCESS_FIELD_MAP.assembly
-			: POSITION_PROCESS_FIELD_MAP.stretchAndPolish
+		// 拉伸车间获取工序，其他车间（喷涂、抛光、组装）获取岗位
+		const processFieldIds = wsFilter === '拉伸车间'
+			? POSITION_PROCESS_FIELD_MAP.stretchAndPolish
+			: POSITION_PROCESS_FIELD_MAP.assembly
 		const mapped = rows.map((item) => ({
 			id: item.rowid || '',
 			name: formatFieldValue(item['6695dc2a2503723eec1aa766']) || '-',
@@ -3656,12 +3718,6 @@ const toggleEmployee = (emp) => {
 const refreshPage = async () => {
 	loadCraftPositionList()  // 获取工序归类表数据
 	await loadProducts(true)
-	// 进入页面时先同步生成未生成的员工数据，再获取员工列表
-	try {
-		await http.post(ATTENDANCE_SYNC_URL, { date: filterDate.value })
-	} catch (e) {
-		console.error('[refreshPage] 同步员工数据失败:', e)
-	}
 	loadWorkshopEmployees()
 	loadEmployeeDispatchSummary()
 }
@@ -4115,12 +4171,12 @@ onShow(refreshPage)
 					display: flex;
 					flex-direction: column;
 					align-items: stretch;
-					justify-content: flex-end;
+					overflow-y: auto;
 					gap: px2vw(8px);
 					box-sizing: border-box;
 
 					.expand-process-item {
-						flex: 1;
+						flex: 0 0 auto;
 						width: 100%;
 						min-height: px2vw(40px);
 						display: flex;
