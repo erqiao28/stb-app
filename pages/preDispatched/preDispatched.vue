@@ -604,9 +604,28 @@
 						<text v-if="editData.selectedEmployeeIds.includes(emp.id)" class="check-icon">✓</text>
 					</view>
 					<view class="employee-modal-info">
-						<text class="employee-modal-name">{{ emp.name }}</text>
-						<text class="employee-modal-hours">{{ emp.totalHours || 0 }}</text>
-						<text class="employee-modal-wage">{{ emp.wage || 0 }}</text>
+						<view class="employee-modal-info-main">
+							<text class="employee-modal-name">{{ emp.name }}</text>
+							<view class="employee-modal-position-wrap" @click.stop="toggleEmployeePositionExpand(emp.id)">
+								<text class="employee-modal-position-label">岗位</text>
+								<text class="employee-modal-expand-icon">
+									{{ expandedEmployeeIds.includes(emp.id) ? '▼' : '▶' }}
+								</text>
+							</view>
+						</view>
+						<view class="employee-modal-info-extra">
+							<text class="employee-modal-hours">{{ emp.totalHours || 0 }}</text>
+							<text class="employee-modal-wage">{{ emp.wage || 0 }}</text>
+						</view>
+					</view>
+					<view class="employee-modal-position-detail" v-if="expandedEmployeeIds.includes(emp.id) && emp.position" @click.stop>
+						<text
+							class="employee-modal-position-tag"
+							v-for="(pos, pIdx) in emp.position.split(/[,，]/).filter(Boolean)"
+							:key="pIdx"
+						>
+							{{ pos.trim() }}
+						</text>
 					</view>
 				</view>
 				<view class="employee-modal-empty" v-if="allEmployeeOptions.length === 0">
@@ -865,6 +884,7 @@ const loadingProducts = ref(false)
 const selectedProductIds = ref([])
 const syncSelectEnabled = ref(false) // 同组产品同步勾选开关
 const expandedIds = ref([])
+const expandedEmployeeIds = ref([])
 const collapsedOrderIds = ref([])
 const chineseNumberMap = {
 	1: '一',
@@ -940,7 +960,8 @@ const EMPLOYEE_FIELD_MAP = {
 	totalHours: '6a4f304c6d70ffabc67913b8',
 	wage: '6a4f304c6d70ffabc67913b9',
 	employeeName: '6938db8bda0981f67b352af3',
-	attendance: '6959e1077a59e0522d877f8b'
+	attendance: '6959e1077a59e0522d877f8b',
+	position: '6943bf332161a0fc58bad7a4'
 }
 
 const MAX_EMPLOYEE_HOURS = 11
@@ -2686,7 +2707,7 @@ const loadEmployeeDispatchSummary = async () => {
 					group.records.push({
 						orderNo: pd.orderNo || '-',
 						productName: pd.productNameNew || pd.productName || '-',
-						processName: (pd.processDetail?.length || 0) > 1 ? (pd.craftPosition || '-') : pd.processName || '-',
+						processName: pd.craftPosition || pd.processName || '-',
 						dispatchCount: pd.dispatchCount || 0,
 						worktime: pd.worktime || 0,
 						wage: pd.wage || 0
@@ -3172,12 +3193,14 @@ const loadWorkshopEmployees = async () => {
 			const totalHours = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.totalHours]) || '0') || 0
 			const wage = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.wage]) || '0') || 0
 			const attendance = formatFieldValue(item[EMPLOYEE_FIELD_MAP.attendance]) || ''
+			const position = formatFieldValue(item[EMPLOYEE_FIELD_MAP.position]) || ''
 			return {
 				id: item.rowid || '',
 				name: formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName]) || '-',
 				totalHours,
 				wage,
-				attendance
+				attendance,
+				position
 			}
 		})
 		employeeList.value = mapped.map((e) => {
@@ -3547,10 +3570,8 @@ const openEmployeeEditModal = async (processes, idx) => {
 	const groupStartProcess = processes[groupStartIdx]
 	const groupSpan = getEmployeeGroupSpan(processes, groupStartIdx)
 
-	// 判断显示工序名称还是工序归类表
-	const processDisplay = groupSpan > 1
-		? (process.craftPosition || '')
-		: (groupStartProcess.processName || '')
+	// 判断显示工序名称还是岗位工序：岗位工序不为空时优先显示岗位工序
+	const processDisplay = (process.craftPosition || groupStartProcess.processName || '')
 
 	// 设置编辑数据
 	employeeEditData.value = {
@@ -3596,10 +3617,15 @@ const closeEmployeeEditModal = () => {
 }
 
 // 为员工编辑弹窗打开员工选择器
-const openEmployeeSelectorForEdit = () => {
+const openEmployeeSelectorForEdit = async () => {
 	// 同步已选员工到 editData
 	editData.value.selectedEmployeeIds = [...employeeEditData.value.selectedEmployeeIds]
 	editData.value.selectedEmployeeNames = [...employeeEditData.value.selectedEmployeeNames]
+	await loadWorkshopEmployees()
+	await loadEmployeeOptions()
+	expandedEmployeeIds.value = []
+	sortEmployeeOptionsByPosition()
+	autoSelectFirstMatchingEmployee()
 	showEmployeeSelector.value = true
 }
 
@@ -3698,7 +3724,7 @@ const loadEmployeeOptions = async () => {
 		const mappedEmployees = employeeList.value.map(item => ({
 			id: item.id || '',
 			name: item.name || '-',
-			position: '',
+			position: item.position || '',
 			totalHours: item.totalHours || 0,
 			wage: item.wage || 0,
 			dispatchWorkDate: currentDate
@@ -3718,11 +3744,64 @@ const loadEmployeeOptions = async () => {
 const openEmployeeSelector = async () => {
 	await loadWorkshopEmployees()
 	await loadEmployeeOptions()
+	expandedEmployeeIds.value = []
+	sortEmployeeOptionsByPosition()
+	autoSelectFirstMatchingEmployee()
 	showEmployeeSelector.value = true
+}
+
+const getPositionMatchIndex = (positionText, targetName) => {
+	if (!positionText || !targetName) return Infinity
+	const positions = positionText.split(/[,，]/).map(p => p.trim()).filter(Boolean)
+	const index = positions.findIndex(p => p.includes(targetName))
+	return index >= 0 ? index : Infinity
+}
+
+const sortEmployeeOptionsByPosition = () => {
+	const targetName = employeeEditData.value.processName || editData.value.processDisplay || ''
+	console.log('[选择员工排序] 目标工序:', targetName, 'options数量:', allEmployeeOptions.value.length)
+	if (!targetName) return
+
+	const sorted = [...allEmployeeOptions.value].sort((a, b) => {
+		const aIndex = getPositionMatchIndex(a.position, targetName)
+		const bIndex = getPositionMatchIndex(b.position, targetName)
+		console.log('[选择员工排序]', a.name, '岗位:', a.position, 'index:', aIndex, '|', b.name, '岗位:', b.position, 'index:', bIndex)
+		if (aIndex !== bIndex) {
+			return aIndex - bIndex
+		}
+		return String(a.name || '').localeCompare(String(b.name || ''))
+	})
+	allEmployeeOptions.value = sorted
+}
+
+const AUTO_SELECT_PROCESS_NAMES = ['点焊', '喷涂', '去油', '超声波', '喷砂', '喷砂叠锅']
+
+const autoSelectFirstMatchingEmployee = () => {
+	const targetName = employeeEditData.value.processName || editData.value.processDisplay || ''
+	const selectedIds = editData.value.selectedEmployeeIds || []
+	if (!targetName || !AUTO_SELECT_PROCESS_NAMES.includes(targetName) || selectedIds.length > 0) return
+
+	const matchedEmp = allEmployeeOptions.value.find(emp => {
+		if (!emp.position) return false
+		const positions = emp.position.split(/[,，]/).map(p => p.trim()).filter(Boolean)
+		return positions.length > 0 && positions[0].includes(targetName)
+	})
+	if (matchedEmp) {
+		toggleEmployee(matchedEmp)
+	}
 }
 
 const closeEmployeeSelector = () => {
 	showEmployeeSelector.value = false
+}
+
+const toggleEmployeePositionExpand = (empId) => {
+	const index = expandedEmployeeIds.value.indexOf(empId)
+	if (index >= 0) {
+		expandedEmployeeIds.value.splice(index, 1)
+	} else {
+		expandedEmployeeIds.value.push(empId)
+	}
 }
 
 const toggleEmployee = (emp) => {
@@ -5163,8 +5242,9 @@ onShow(refreshPage)
 		}
 
 	}
+}
 
-	.employee-task-popover {
+.employee-task-popover {
 	position: fixed;
 	top: 0;
 	left: 0;
@@ -6107,63 +6187,136 @@ onShow(refreshPage)
 		.employee-modal-item {
 			display: flex;
 			flex-direction: row;
-			align-items: center;
+			align-items: flex-start;
+			flex-wrap: wrap;
 			padding: px2vw(12px) px2vw(16px);
 			border-bottom: 1px solid #f0f0f0;
+			cursor: pointer;
 
 			&.active {
 				background-color: #e8f4ff;
 			}
+		}
 
-			.employee-modal-check {
-				width: px2vw(28px);
-				height: px2vw(28px);
-				border: 2px solid #ddd;
+		.employee-modal-check {
+			width: px2vw(28px);
+			height: px2vw(28px);
+			border: 2px solid #ddd;
+			border-radius: px2vw(6px);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			flex-shrink: 0;
+			margin-right: px2vw(12px);
+			margin-top: px2vw(2px);
+
+			.check-icon {
+				font-size: px2vw(18px);
+				color: #3498db;
+				font-weight: bold;
+			}
+		}
+
+		&.active .employee-modal-check {
+			border-color: #3498db;
+			background-color: #3498db;
+
+			.check-icon {
+				color: #fff;
+			}
+		}
+
+		.employee-modal-info {
+			flex: 1;
+			display: flex;
+			flex-direction: row;
+			align-items: center;
+			justify-content: space-between;
+			overflow: hidden;
+			min-width: 0;
+		}
+
+		.employee-modal-info-main {
+			display: flex;
+			flex-direction: row;
+			align-items: center;
+			flex: 1;
+			min-width: 0;
+			margin-right: px2vw(16px);
+		}
+
+		.employee-modal-info-extra {
+			display: flex;
+			flex-direction: row;
+			align-items: center;
+			flex-shrink: 0;
+		}
+
+		.employee-modal-name {
+			font-size: px2vw(22px);
+			color: #333;
+			margin-right: px2vw(12px);
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			flex-shrink: 0;
+		}
+
+		.employee-modal-position-wrap {
+			display: flex;
+			flex-direction: row;
+			align-items: center;
+			flex-shrink: 0;
+			gap: px2vw(6px);
+			padding: px2vw(4px) px2vw(10px);
+			background-color: #f0f2f5;
+			border-radius: px2vw(6px);
+		}
+
+		.employee-modal-position-label {
+			font-size: px2vw(18px);
+			color: #666;
+		}
+
+		.employee-modal-expand-icon {
+			font-size: px2vw(16px);
+			color: #999;
+			flex-shrink: 0;
+		}
+
+		.employee-modal-hours {
+			font-size: px2vw(22px);
+			color: #f1c40f;
+			margin-right: px2vw(16px);
+		}
+
+		.employee-modal-wage {
+			font-size: px2vw(22px);
+			color: #27ae60;
+		}
+
+		.employee-modal-position-detail {
+			width: 100%;
+			border-top: 1px dashed #e0e0e0;
+			background-color: #fafbfc;
+			padding: px2vw(8px) px2vw(16px) px2vw(12px);
+			margin-top: px2vw(8px);
+			display: flex;
+			flex-direction: row;
+			flex-wrap: wrap;
+			gap: px2vw(8px);
+
+			.employee-modal-position-tag {
+				font-size: px2vw(18px);
+				color: #666;
+				background-color: #e8eefc;
+				border: 1px solid #d0d7de;
 				border-radius: px2vw(6px);
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				flex-shrink: 0;
-				margin-right: px2vw(12px);
-
-				.check-icon {
-					font-size: px2vw(18px);
-					color: #3498db;
-					font-weight: bold;
-				}
-			}
-
-			&.active .employee-modal-check {
-				border-color: #3498db;
-				background-color: #3498db;
-
-				.check-icon {
-					color: #fff;
-				}
-			}
-
-			.employee-modal-info {
-				flex: 1;
-				display: flex;
-				flex-direction: row;
-				align-items: center;
-			}
-
-			.employee-modal-name {
-				font-size: px2vw(22px);
-				color: #333;
-				margin-right: px2vw(16px);
-			}
-
-			.employee-modal-hours {
-				font-size: px2vw(22px);
-				color: #f1c40f;
-				margin-right: px2vw(16px);
-			}
-
-			.employee-modal-wage {
-				font-size: px2vw(22px);
-				color: #27ae60;
+				padding: px2vw(4px) px2vw(10px);
+				white-space: nowrap;
+				max-width: 100%;
+				overflow: hidden;
+				text-overflow: ellipsis;
 			}
 		}
 
