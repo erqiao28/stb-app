@@ -5150,11 +5150,21 @@ onShow(refreshPage)
 					}
 				}
 			}
-		}
-	}
-}
 
-.employee-task-popover {
+			.empty-wrap {
+				padding: px2vw(85px) 0;
+				text-align: center;
+
+				.empty-text {
+					font-size: px2vw(24px);
+					color: #aaa;
+				}
+			}
+		}
+
+	}
+
+	.employee-task-popover {
 	position: fixed;
 	top: 0;
 	left: 0;
