@@ -187,9 +187,6 @@
 					</view>
 			</view>
 			<view class="empty-wrap" v-if="!productList.length && !loadingProducts">
-				<view class="empty-icon">
-					<text class="empty-icon-plus">+</text>
-				</view>
 				<text class="empty-text">暂无产品</text>
 				<text class="empty-tip">点击左下角添加产品</text>
 			</view>
@@ -4829,24 +4826,6 @@ onShow(refreshPage)
 				padding: px2vw(40px);
 				background: linear-gradient(180deg, #f8f9fa 0%, #ffffff 100%);
 				z-index: 1;
-
-				.empty-icon {
-					width: px2vw(120px);
-					height: px2vw(120px);
-					line-height: px2vw(120px);
-					text-align: center;
-					margin-bottom: px2vw(28px);
-					border: px2vw(4px) dashed #d0d7de;
-					border-radius: px2vw(24px);
-					background-color: #ffffff;
-					box-shadow: 0 px2vw(4px) px2vw(16px) rgba(0, 0, 0, 0.06);
-
-					.empty-icon-plus {
-						font-size: px2vw(56px);
-						color: #c0c7d0;
-						font-weight: 300;
-					}
-				}
 
 				.empty-text {
 					font-size: px2vw(28px);
