@@ -2035,10 +2035,34 @@ const handleProcessListConfirm = async (productRowid) => {
 		// 用户输入了有效值，传用户输入的派工数量
 		dispatchCount = parseFloat(rawUserInput)
 	} else {
-		// 用户输入为空或0，传可派数量（needCount）
-		const processNeedVals = checkedProcesses.map(p => parseFloat(p.needCount) || 0)
-		if (processNeedVals.length > 0) {
-			dispatchCount = Math.round(processNeedVals.reduce((a, b) => a + b, 0) / processNeedVals.length)
+		// 用户输入为空时，按以下优先级取值（与 openDispatchModal 逻辑一致）
+		// 优先级1：产品行的 dispatchCount 字段
+		const productDispatchCount = parseFloat(product?.dispatchCount)
+		if (Number.isFinite(productDispatchCount) && productDispatchCount > 0) {
+			dispatchCount = Math.round(productDispatchCount)
+		} else if (hasPreDispatchRowids.length > 0) {
+			// 优先级2：有预派工关联时，取关联工序的 needCount 平均值
+			// hasPreDispatchRowids 对应的工序在 pdRows 中已通过 processDetail 关联
+			// 需要筛选出有预派工关联的工序
+			const associatedProcessRowids = new Set()
+			pdRows.forEach(item => {
+				if (hasPreDispatchRowids.includes(item.rowid)) {
+					extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail]).forEach(sid => associatedProcessRowids.add(sid))
+				}
+			})
+			const associatedProcesses = processList.value.filter(p => associatedProcessRowids.has(p.rowid))
+			if (associatedProcesses.length > 0) {
+				const needVals = associatedProcesses.map(p => parseFloat(p.needCount) || 0)
+				if (needVals.length > 0) {
+					dispatchCount = Math.round(needVals.reduce((a, b) => a + b, 0) / needVals.length)
+				}
+			}
+		} else {
+			// 优先级3：无预派工时，取勾选工序的 needCount 平均值
+			const processNeedVals = checkedProcesses.map(p => parseFloat(p.needCount) || 0)
+			if (processNeedVals.length > 0) {
+				dispatchCount = Math.round(processNeedVals.reduce((a, b) => a + b, 0) / processNeedVals.length)
+			}
 		}
 	}
 
