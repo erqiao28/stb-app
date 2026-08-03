@@ -211,7 +211,7 @@
 					class="grid-product-action"
 					:style="{ backgroundColor: isProcessActionEnabled(group.productRowid) ? '#5884f1' : '#999' }"
 					@click.stop="openProcessActionModalByRowid(group.productRowid)"
-				>操作</view>
+				>工艺调整</view>
 						<view class="grid-product-name-text">{{ group.productName }}</view>
 						<view class="grid-product-confirm" @click.stop="handleProcessListConfirm(group.productRowid)">确定</view>
 					</view>
@@ -744,7 +744,7 @@
 	<view class="process-action-modal" v-if="showProcessActionModal" @click.self="closeProcessActionModal">
 		<view class="process-action-content" @click.stop>
 			<view class="process-action-header">
-				<text class="process-action-title">操作工序</text>
+				<text class="process-action-title">工艺调整</text>
 				<view class="process-action-close" @click="closeProcessActionModal">&times;</view>
 			</view>
 			<view class="process-action-body">
@@ -772,15 +772,15 @@
 						</scroll-view>
 					</view>
 					<view class="process-action-form">
-						<view class="process-action-form-group" v-if="processActionModeOptions[processActionModeIndex] !== '删除'">
-							<text class="process-action-form-label">生产顺序</text>
-							<input type="number" class="process-action-input" placeholder="请输入顺序" v-model="processActionSequence" step="0.01" />
-						</view>
 						<view class="process-action-form-group">
 							<text class="process-action-form-label">操作方式</text>
 							<picker mode="selector" :range="processActionModeOptions" :value="processActionModeIndex" @change="onProcessActionModeChange" class="process-action-picker">
 								<view class="process-action-picker-value">{{ processActionModeOptions[processActionModeIndex] }}</view>
 							</picker>
+						</view>
+						<view class="process-action-form-group" v-if="processActionModeOptions[processActionModeIndex] === '添加'">
+							<text class="process-action-form-label">生产顺序</text>
+							<input type="number" class="process-action-input" placeholder="请输入顺序" v-model="processActionSequence" step="0.01" />
 						</view>
 					</view>
 				</view>
@@ -2918,6 +2918,55 @@ const closeProcessActionModal = () => {
 	processActionSequence.value = ''
 }
 
+/**
+ * 轮询等待工序数据更新
+ * @param {Object} product - 产品对象
+ * @param {Object} options - 轮询配置
+ * @param {number} options.expectedCount - 期望的工序数量变化（添加+1，删除-1，替换不变）
+ * @param {Function} options.checkFunc - 自定义检查函数，返回 true 表示检测到变化
+ */
+const waitForProcessUpdate = async (product, options = {}) => {
+	const { expectedCount, checkFunc } = options
+	const maxAttempts = 30 // 最多轮询30次
+	const intervalMs = 500 // 每500ms轮询一次
+	const productRowid = product?.rowid || ''
+
+	// 获取当前工序快照
+	const getSnapshot = () => {
+		return processList.value
+			.filter(p => p.productRowid === productRowid)
+			.map(p => ({ rowid: p.rowid, processName: p.processName }))
+	}
+
+	const initialSnapshot = getSnapshot()
+	const initialCount = initialSnapshot.length
+
+	// 开始轮询
+	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+		await new Promise(resolve => setTimeout(resolve, intervalMs))
+
+		// 重新获取工序数据（先清除缓存再加载）
+		loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
+		processList.value = processList.value.filter(p => p.productRowid !== productRowid)
+		await loadProductProcesses(product)
+
+		const currentSnapshot = getSnapshot()
+		const currentCount = currentSnapshot.length
+
+		// 检查数量变化
+		const countChanged = expectedCount !== undefined && (currentCount - initialCount) === expectedCount
+
+		// 自定义检查函数
+		const customChanged = checkFunc ? checkFunc(currentSnapshot, initialSnapshot) : false
+
+		if (countChanged || customChanged) {
+			return true
+		}
+	}
+
+	return false
+}
+
 const handleProcessActionSearch = () => {
 	loadProcessActionList()
 }
@@ -3070,25 +3119,21 @@ const confirmProcessAction = async () => {
 			uni.showLoading({ title: '删除中...' })
 			await http.post(DELETE_PROCESS_URL, { rowid: processRowid })
 			uni.hideLoading()
-			// 删除成功后先关闭弹窗，再显示刷新动画并刷新工序列表
 			closeProcessActionModal()
-			uni.showLoading({ title: '刷新中...', mask: true })
-			loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
-			processList.value = processList.value.filter(p => p.productRowid !== productRowid)
-			await loadProductProcesses(product)
-			uni.hideLoading()
 			uni.showToast({ title: '删除成功', icon: 'success' })
-			// 同步预派工关联工序（异步执行，不影响主流程）
+			// 轮询等待工序数量减少
+			const updated = await waitForProcessUpdate(product, { expectedCount: -1 })
+			if (!updated) {
+				// 超时后强制刷新一次
+				loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
+				processList.value = processList.value.filter(p => p.productRowid !== productRowid)
+				await loadProductProcesses(product)
+			}
+			// 同步预派工关联工序
 			const preDispatchRowids = await getPreDispatchRowidsWithProcessDetail(productRowid)
 			if (preDispatchRowids.length > 0) {
 				try {
 					await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
-					// 同步成功后再刷新一次
-					uni.showLoading({ title: '刷新中...', mask: true })
-					loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
-					processList.value = processList.value.filter(p => p.productRowid !== productRowid)
-					await loadProductProcesses(product)
-					uni.hideLoading()
 				} catch (e) {
 					console.error('同步预派工失败:', e)
 				}
@@ -3119,33 +3164,43 @@ const confirmProcessAction = async () => {
 			uni.showLoading({ title: '提交中...', mask: true })
 			await http.post(OPERATE_PROCESS_URL, params)
 			uni.hideLoading()
-			// 操作成功后先关闭弹窗，再显示刷新动画并刷新工序列表
 			closeProcessActionModal()
-			uni.showLoading({ title: '刷新中...', mask: true })
-			loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
-			processList.value = processList.value.filter(p => p.productRowid !== productRowid)
-			await loadProductProcesses(product)
-			uni.hideLoading()
 			uni.showToast({ title: '操作成功', icon: 'success' })
-			// 替换时同步预派工关联工序：只有当产品下有工序的预派工时才调用（预派工存在且工序排产明细不为空）
+
+			// 轮询等待工序数据更新
+			const replaceMode = mode === '替换'
+			// 替换模式：数量不变；添加模式：数量+1
+			const expectedCount = replaceMode ? 0 : 1
+
+			const updated = await waitForProcessUpdate(product, {
+				expectedCount,
+				checkFunc: replaceMode ? (current) => {
+					// 替换时检查：当前选中工序的 processName 是否已经在列表中
+					const selectedProcessRowid = selectedProcessIds.value[0] || ''
+					const selectedProcess = processList.value.find(p => p.rowid === selectedProcessRowid)
+					if (selectedProcess) {
+						return current.some(p => p.processName === selectedProcess.processName)
+					}
+					return false
+				} : undefined
+			})
+
+			if (!updated) {
+				// 超时后强制刷新一次
+				loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
+				processList.value = processList.value.filter(p => p.productRowid !== productRowid)
+				await loadProductProcesses(product)
+			}
+
+			// 替换时同步预派工关联工序
 			if (mode === '替换') {
 				const preDispatchRowids = await getPreDispatchRowidsWithProcessDetail(productRowid)
 				if (preDispatchRowids.length > 0) {
-					console.log('[替换工序] 同步预派工，请求参数:', { rowids: preDispatchRowids })
 					try {
 						await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
-						console.log('[替换工序] 同步预派工成功')
-						// 同步成功后再刷新一次
-						uni.showLoading({ title: '刷新中...', mask: true })
-						loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
-						processList.value = processList.value.filter(p => p.productRowid !== productRowid)
-						await loadProductProcesses(product)
-						uni.hideLoading()
 					} catch (e) {
 						console.error('同步预派工失败:', e)
 					}
-				} else {
-					console.log('[替换工序] 无需同步，无工序的预派工')
 				}
 			}
 		} catch (e) {
