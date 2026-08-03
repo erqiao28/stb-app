@@ -1604,11 +1604,17 @@ const loadOrderList = async (append = false) => {
 			pageNum
 		})
 		uni.hideLoading()
-		
+
 		const rows = res?.data || []
+		// 前端过滤：正常排产时，未完成工序数量 > 0
+		const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
+		const filteredRows = rows.filter(item => {
+			const num = Number(item[FIELD_INCOMPLETE_PROCESS_QTY])
+			return !Number.isNaN(num) && num > 0
+		})
 		// 按订单编号汇总
 		const orderMap = {}
-		rows.forEach(item => {
+		filteredRows.forEach(item => {
 			const orderCode = item['655e1cbbbd2094b316347f92'] || ''
 			if (!orderCode) return
 			if (!orderMap[orderCode]) {
@@ -1706,7 +1712,6 @@ const loadProductList = async (append = false) => {
 		if (!append) {
 			uni.showLoading({ title: '加载中...' })
 		}
-		const targetOrderCode = selectedOrder.value?.orderCode || ''
 		const res = await callWorkflowListAPIPaged({
 			worksheetId: 'paichanjihua',
 			filters: [
@@ -1743,33 +1748,35 @@ const loadProductList = async (append = false) => {
 					dataType: 30,
 					spliceType: 1,
 					filterType: 8
-				},
-				// 按选中的订单编号筛选，避免目标产品落在后续页导致前端过滤为空
-				{
-					controlId: '655e1cbbbd2094b316347f92',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: [targetOrderCode]
 				}
 			],
 			pageSize: 100,
 			pageNum
 		})
 		uni.hideLoading()
-		
+
 		const rows = res?.data || []
-		const newProducts = rows.map(item => ({
-			rowid: item.rowid || '',
-			orderCode: item['655e1cbbbd2094b316347f92'] || '',
-			customerName: item['69a8ed3c3b5e707f84d33f8b'] || '',
-			name: item['6937d255ff2b019b3cb34be3'] || '',
-			models: item['6937d255ff2b019b3cb34be4'] || '',
-			orderCount: item['69e33354665ab27f3916f758'] || '',
-			productionCode: item['698438933b5e707f84cf51fd'] || '',
-			productCode: item['691d6336535b29cbd5c6c0ca'] || '',
-			orderCount: item['6a5f19556d70ffabc67f0ce9'] || ''
-		}))
+		// 前端过滤：正常排产时，未完成工序数量 > 0
+		const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
+		const filteredRows = rows.filter(item => {
+			const num = Number(item[FIELD_INCOMPLETE_PROCESS_QTY])
+			return !Number.isNaN(num) && num > 0
+		})
+		// 映射 + 按订单编号前端筛选
+		const targetOrderCode = selectedOrder.value?.orderCode || ''
+		const newProducts = filteredRows
+			.filter(item => item['655e1cbbbd2094b316347f92'] === targetOrderCode)
+			.map(item => ({
+				rowid: item.rowid || '',
+				orderCode: item['655e1cbbbd2094b316347f92'] || '',
+				customerName: item['69a8ed3c3b5e707f84d33f8b'] || '',
+				name: item['6937d255ff2b019b3cb34be3'] || '',
+				models: item['6937d255ff2b019b3cb34be4'] || '',
+				orderCount: item['69e33354665ab27f3916f758'] || '',
+				productionCode: item['698438933b5e707f84cf51fd'] || '',
+				productCode: item['691d6336535b29cbd5c6c0ca'] || '',
+				orderCount: item['6a5f19556d70ffabc67f0ce9'] || ''
+			}))
 		
 		if (append) {
 			selectProductList.value = [...selectProductList.value, ...newProducts]
