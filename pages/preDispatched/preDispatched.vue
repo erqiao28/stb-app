@@ -866,6 +866,11 @@ const CRAFT_POSITION_FIELD_ID = '6a276ffc6d70ffabc66285f8'
 const CRAFT_POSITION_NAME_FIELD = '6a276ffc6d70ffabc66285f8'  // 工序归类名称
 const CRAFT_POSITION_RELATED_PROCESS_FIELD = '6a276ffc6d70ffabc66285f9'  // 关联工序字段
 
+// 工艺岗位字典（用于 craftPosition ID 转名称）
+const CRAFT_POSITION_DICT_WORKSHEET_ID = '6a6d5f904239d5290f2b5bd2'
+const CRAFT_POSITION_DICT_NAME_FIELD = 'Name'
+const craftPositionDictMap = ref(new Map())  // 工艺岗位ID -> 工艺岗位名称
+
 // 工序归类表数据
 const craftPositionList = ref([])
 const craftPositionMap = ref(new Map())  // 工序归类名称 -> 关联工序列表
@@ -1491,46 +1496,23 @@ const loadProcessDictionaryMap = async () => {
 	}
 }
 
-/** 获取工序归类表数据 */
+/** 加载工艺岗位字典（用于 craftPosition ID 转名称） */
 const loadCraftPositionList = async () => {
 	try {
-		// 获取工序数据字典映射
-		const processDictMap = await loadProcessDictionaryMap()
-		
-		// 获取工序归类表数据
 		const res = await callWorkflowListAll({
-			worksheetId: CRAFT_POSITION_WORKSHEET_ID,
+			worksheetId: CRAFT_POSITION_DICT_WORKSHEET_ID,
 			filters: []
 		}, 100)
 		const rows = Array.isArray(res?.data) ? res.data : []
-		
-		// 构建 Map：工序归类名称 -> 工序名称列表
 		const newMap = new Map()
-		const craftPositions = rows.map(item => {
-			const name = formatFieldValue(item[CRAFT_POSITION_NAME_FIELD]) || ''
-			let sids = item[CRAFT_POSITION_RELATED_PROCESS_FIELD]
-			if (typeof sids === 'string') {
-				try {
-					sids = JSON.parse(sids)
-				} catch {
-					sids = []
-				}
-			}
-			const sidsArray = Array.isArray(sids) ? sids : []
-			const processNames = sidsArray.map(sid => processDictMap.get(sid) || sid).filter(Boolean)
-			newMap.set(name, processNames)
-			return {
-				rowid: item.rowid || '',
-				name: name,
-				sids: sidsArray,
-				processNames: processNames
+		rows.forEach(item => {
+			if (item.rowid) {
+				newMap.set(item.rowid, item[CRAFT_POSITION_DICT_NAME_FIELD] || '')
 			}
 		})
-		
-		craftPositionList.value = craftPositions
-		craftPositionMap.value = newMap
+		craftPositionDictMap.value = newMap
 	} catch (e) {
-		console.error('获取工序归类表失败:', e)
+		console.error('获取工艺岗位字典失败:', e)
 	}
 }
 
@@ -2426,19 +2408,21 @@ const loadAssociatedProcessDetails = async (product) => {
 			})
 		})
 		const resultMap = new Map()
-		// 获取预派工的 craftPosition
+		// 获取预派工的 craftPosition（用工艺岗位字典转换 ID 为名称）
 		const craftPositionMap = new Map()
 		preDispatchRows.forEach((item) => {
 			const pdRowid = item.rowid
-			const craftPosition = formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.craftPosition]) || '工序归类表'
-			craftPositionMap.set(pdRowid, craftPosition)
+			const craftPositionId = formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.craftPosition]) || ''
+			// 尝试用工艺岗位字典转换 ID 为名称，找不到则留空
+			const craftPositionName = craftPositionId ? (craftPositionDictMap.value.get(craftPositionId) || '') : ''
+			craftPositionMap.set(pdRowid, craftPositionName)
 		})
 		nameSetMap.forEach((names, sid) => {
 			const pdRowid = preDispatchRowidMap.get(sid) || ''
 			resultMap.set(sid, {
 				employeeNames: names.size > 0 ? [...names] : [],
 				preDispatchRowid: pdRowid,
-				craftPosition: craftPositionMap.get(pdRowid) || '工序归类表'
+				craftPosition: craftPositionMap.get(pdRowid) || ''
 			})
 		})
 		return resultMap
@@ -2513,7 +2497,7 @@ const loadProductProcesses = async (product) => {
 		const newProcesses = rows.map((item) => {
 			const seq = parseFloat(formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.sequence])) || 0
 			const isAssociated = associatedRowids.has(item.rowid)
-			const associatedInfo = associatedMap.get(item.rowid) || { employeeNames: [], preDispatchRowid: '', craftPosition: '工序归类表' }
+			const associatedInfo = associatedMap.get(item.rowid) || { employeeNames: [], preDispatchRowid: '', craftPosition: '' }
 			return {
 				rowid: item.rowid || '',
 				productRowid: product.rowid,
@@ -2899,14 +2883,19 @@ const isProcessActionEnabled = (productRowid) => {
 }
 
 const openProcessActionModalByRowid = (productRowid) => {
-	// 检查是否只选中了一道工序
-	if (selectedProcessIds.value.length !== 1) {
+	// 获取当前产品下的所有工序 ID
+	const currentProcessIds = processList.value
+		.filter(p => p.productRowid === productRowid)
+		.map(p => p.rowid)
+	// 检查当前产品是否只选中了一道工序
+	const selectedInCurrentProduct = selectedProcessIds.value.filter(rowid => currentProcessIds.includes(rowid))
+	if (selectedInCurrentProduct.length !== 1) {
 		uni.showToast({ title: '请先勾选一道工序', icon: 'none' })
 		return
 	}
-	const selectedProcessId = selectedProcessIds.value[0]
+	const selectedProcessId = selectedInCurrentProduct[0]
 	const selectedProcess = processList.value.find((p) => p.rowid === selectedProcessId)
-	// 校验选中的工序是否属于当前产品
+	// 校验选中的工序是否属于当前产品（双重保险）
 	if (!selectedProcess || selectedProcess.productRowid !== productRowid) {
 		uni.showToast({ title: '请勾选当前产品下的工序', icon: 'none' })
 		return
@@ -3137,12 +3126,14 @@ const confirmProcessAction = async () => {
 			await loadProductProcesses(product)
 			uni.hideLoading()
 			uni.showToast({ title: '操作成功', icon: 'success' })
-			// 替换时才同步预派工关联工序（异步执行，不影响主流程）
+			// 替换时同步预派工关联工序：只有当产品下有工序的预派工时才调用（预派工存在且工序排产明细不为空）
 			if (mode === '替换') {
 				const preDispatchRowids = await getPreDispatchRowidsWithProcessDetail(productRowid)
 				if (preDispatchRowids.length > 0) {
+					console.log('[替换工序] 同步预派工，请求参数:', { rowids: preDispatchRowids })
 					try {
 						await http.post(OPERATE_PROCESS_SYNC_URL, { rowids: preDispatchRowids })
+						console.log('[替换工序] 同步预派工成功')
 						// 同步成功后再刷新一次
 						uni.showLoading({ title: '刷新中...', mask: true })
 						loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
@@ -3152,6 +3143,8 @@ const confirmProcessAction = async () => {
 					} catch (e) {
 						console.error('同步预派工失败:', e)
 					}
+				} else {
+					console.log('[替换工序] 无需同步，无工序的预派工')
 				}
 			}
 		} catch (e) {
@@ -3595,7 +3588,10 @@ const openEmployeeEditModal = async (processes, idx) => {
 	const groupSpan = getEmployeeGroupSpan(processes, groupStartIdx)
 
 	// 判断显示工序名称还是岗位工序：岗位工序不为空时优先显示岗位工序
-	const processDisplay = (process.craftPosition || groupStartProcess.processName || '')
+	// craftPosition 存储的是工艺岗位字典的 ID，需要转换为名称
+	const craftPositionId = process.craftPosition || groupStartProcess.craftPosition || ''
+	const craftPositionName = craftPositionId ? (craftPositionDictMap.value.get(craftPositionId) || '') : ''
+	const processDisplay = (craftPositionName || groupStartProcess.processName || '')
 
 	// 设置编辑数据
 	employeeEditData.value = {
