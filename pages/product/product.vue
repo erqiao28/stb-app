@@ -493,6 +493,7 @@ const confirmAction = async () => {
 
   const params = {
     processName: modalSelectedProcess.value.processName || '',
+    processRowid: modalSelectedProcess.value.rowid || '',
     sequence: parseFloat(modalProductionSequence.value) || 0,
     modifyMode: modifyModeOptions.value[modalModifyModeIndex.value] || '添加',
     selectedProcessId: selectedProcess.value?.rowid || '',

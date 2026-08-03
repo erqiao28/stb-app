@@ -3108,6 +3108,7 @@ const confirmProcessAction = async () => {
 		const productRowid = product?.rowid || ''
 		const params = {
 			processName: selected.processName || '',
+			processRowid: selected.rowid || '',
 			sequence: parseFloat(processActionSequence.value) || 0,
 			modifyMode: mode,
 			selectedProcessId: selectedProcessIds.value[0] || '',
@@ -3661,6 +3662,10 @@ const confirmEmployeeEdit = async () => {
 	const selectedEmployeeIds = employeeEditData.value.selectedEmployeeIds
 	if (!preDispatchRowid) {
 		uni.showToast({ title: '缺少预派工记录', icon: 'none' })
+		return
+	}
+	if (!selectedEmployeeIds || selectedEmployeeIds.length === 0) {
+		uni.showToast({ title: '请选择员工', icon: 'none' })
 		return
 	}
 
