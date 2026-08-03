@@ -14,6 +14,11 @@
 						<text>{{ isLeftPanelCollapsed ? '▶' : '◀' }}</text>
 					</view>
 				</view>
+				<view class="order-filter" v-if="!isLeftPanelCollapsed">
+					<input type="text" v-model="orderFilterKeyword" placeholder="订单编号" class="order-filter-input" />
+					<view class="order-filter-btn" @click="filterByOrderNo">筛选</view>
+					<view class="order-filter-btn reset" @click="resetOrderFilter">重置</view>
+				</view>
 				<scroll-view class="product-list" scroll-y v-if="!isLeftPanelCollapsed">
 					<view class="order-group" v-for="(group, gIdx) in groupedProductList" :key="group.orderNo">
 						<view class="order-header" @click="toggleOrderCollapse(group.orderNo)">
@@ -283,6 +288,8 @@ const selectedProductId = ref('')
 const expandedIds = ref([])
 const collapsedOrderIds = ref([])
 const isLeftPanelCollapsed = ref(false)
+const orderFilterKeyword = ref('')
+const filteredProductList = ref([]) // 筛选后的产品列表
 
 const processDictList = ref([])
 const processTree = ref([])
@@ -599,8 +606,12 @@ const collapseAllOrders = () => {
 
 // 按订单编号分组，并按订单交货日期升序排列
 const groupedProductList = computed(() => {
+	// 根据是否有筛选关键字决定使用哪个列表
+	const list = orderFilterKeyword.value.trim()
+		? filteredProductList.value
+		: productList.value
 	const groups = {}
-	productList.value.forEach(product => {
+	list.forEach(product => {
 		const orderNo = product.orderNo || '未分类'
 		if (!groups[orderNo]) {
 			groups[orderNo] = {
@@ -617,6 +628,25 @@ const groupedProductList = computed(() => {
 		return a.orderDeliveryDate.localeCompare(b.orderDeliveryDate)
 	})
 })
+
+// 按订单编号筛选
+const filterByOrderNo = () => {
+	const keyword = orderFilterKeyword.value.trim().toLowerCase()
+	if (!keyword) {
+		filteredProductList.value = []
+		return
+	}
+	filteredProductList.value = productList.value.filter(product => {
+		const orderNo = (product.orderNo || '').toLowerCase()
+		return orderNo.includes(keyword)
+	})
+}
+
+// 重置订单筛选
+const resetOrderFilter = () => {
+	orderFilterKeyword.value = ''
+	filteredProductList.value = []
+}
 
 const toggleOrderCollapse = (orderNo) => {
 	const idx = collapsedOrderIds.value.indexOf(orderNo)
@@ -997,6 +1027,41 @@ onMounted(() => {
 					right: auto;
 					left: 50%;
 					transform: translateX(-50%);
+				}
+			}
+		}
+
+		.order-filter {
+			display: flex;
+			align-items: center;
+			padding: px2vw(10px) px2vw(12px);
+			background-color: #f5f7fa;
+			border-bottom: 1px solid #eee;
+			flex-shrink: 0;
+
+			.order-filter-input {
+				flex: 1;
+				height: px2vw(40px);
+				line-height: px2vw(40px);
+				padding: 0 px2vw(12px);
+				font-size: px2vw(22px);
+				background-color: #fff;
+				border: 1px solid #ddd;
+				border-radius: px2vw(8px);
+			}
+
+			.order-filter-btn {
+				margin-left: px2vw(10px);
+				padding: 0 px2vw(16px);
+				height: px2vw(40px);
+				line-height: px2vw(40px);
+				font-size: px2vw(22px);
+				color: #fff;
+				background-color: #5884f1;
+				border-radius: px2vw(8px);
+
+				&.reset {
+					background-color: #909399;
 				}
 			}
 		}
