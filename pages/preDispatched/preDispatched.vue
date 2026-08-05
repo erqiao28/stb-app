@@ -854,7 +854,7 @@ const PRE_DISPATCH_FIELD_MAP = {
 	paintSpec: '6a3deb356d70ffabc6702d01',
 	polishSpec: '6a3deb356d70ffabc6702d02',
 	materialSizeSpec: '6a3debe76d70ffabc6702dbb',
-	orderDeliveryDate: '6a587a166d70ffabc67c7982',
+	orderDeliveryDate: '6a41cc716d70ffabc670f3c0',
 	productDeliveryDate: '6a1e7d2c27514927ff33e56b'
 }
 
@@ -2402,7 +2402,11 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 			}
 			groupedMap[key].preDispatchRowids.push(item.rowid)
 		})
-		productList.value = Object.values(groupedMap)
+		productList.value = Object.values(groupedMap).sort((a, b) => {
+			if (!a.orderDeliveryDate) return 1
+			if (!b.orderDeliveryDate) return -1
+			return a.orderDeliveryDate.localeCompare(b.orderDeliveryDate)
+		})
 	} catch (e) {
 		console.error('加载产品失败:', e)
 		uni.showToast({ title: '加载失败', icon: 'none' })
