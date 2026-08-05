@@ -1594,13 +1594,23 @@ const loadProcessDictionaryMap = async () => {
 /** 加载工艺岗位字典（用于 craftPosition ID 转名称） */
 const loadCraftPositionList = async () => {
 	try {
-		const res = await callWorkflowListAll({
-			worksheetId: CRAFT_POSITION_DICT_WORKSHEET_ID,
-			filters: []
-		}, 100)
-		const rows = Array.isArray(res?.data) ? res.data : []
+		let allRows = []
+		let pageNum = 1
+		const pageSize = 100
+		const MAX_PAGES = 5
+		while (pageNum <= MAX_PAGES) {
+			const res = await callWorkflowListAPIPaged({
+				worksheetId: CRAFT_POSITION_DICT_WORKSHEET_ID,
+				filters: [],
+				silent: true
+			}, pageSize, pageNum)
+			const rows = Array.isArray(res?.data) ? res.data : []
+			allRows.push(...rows)
+			if (rows.length < pageSize) break
+			pageNum++
+		}
 		const newMap = new Map()
-		rows.forEach(item => {
+		allRows.forEach(item => {
 			if (item.rowid) {
 				newMap.set(item.rowid, item[CRAFT_POSITION_DICT_NAME_FIELD] || '')
 			}
@@ -1613,13 +1623,23 @@ const loadCraftPositionList = async () => {
 
 const loadPositionProcessDict = async () => {
 	try {
-		const res = await callWorkflowListAll({
-			worksheetId: POSITION_PROCESS_DICT_WORKSHEET_ID,
-			filters: []
-		}, 100)
-		const rows = Array.isArray(res?.data) ? res.data : []
+		let allRows = []
+		let pageNum = 1
+		const pageSize = 100
+		const MAX_PAGES = 5
+		while (pageNum <= MAX_PAGES) {
+			const res = await callWorkflowListAPIPaged({
+				worksheetId: POSITION_PROCESS_DICT_WORKSHEET_ID,
+				filters: [],
+				silent: true
+			}, pageSize, pageNum)
+			const rows = Array.isArray(res?.data) ? res.data : []
+			allRows.push(...rows)
+			if (rows.length < pageSize) break
+			pageNum++
+		}
 		const newMap = new Map()
-		rows.forEach(item => {
+		allRows.forEach(item => {
 			if (item.rowid) {
 				newMap.set(item.rowid, item[POSITION_PROCESS_DICT_NAME_FIELD] || item['Name'] || '')
 			}
@@ -1630,22 +1650,32 @@ const loadPositionProcessDict = async () => {
 	}
 }
 
-// 加载工序字典（用于把归类表中的工序 rowid 解析为名称）
+// 加载工序字典（用于把归类表中的工序 rowid 解析为名称），最多拉取 5 页（500 条）
 const loadProcessDictMap = async () => {
 	try {
-		const res = await callWorkflowListAll({
-			worksheetId: PROCESS_DICT_WORKSHEET_ID,
-			filters: [{
-				controlId: PROCESS_DICT_TYPE_FIELD,
-				dataType: 30,
-				spliceType: 1,
-				filterType: 2,
-				values: ['工序']
-			}]
-		}, 100)
-		const rows = Array.isArray(res?.data) ? res.data : []
+		let allRows = []
+		let pageNum = 1
+		const pageSize = 100
+		const MAX_PAGES = 5
+		while (pageNum <= MAX_PAGES) {
+			const res = await callWorkflowListAPIPaged({
+				worksheetId: PROCESS_DICT_WORKSHEET_ID,
+				filters: [{
+					controlId: PROCESS_DICT_TYPE_FIELD,
+					dataType: 30,
+					spliceType: 1,
+					filterType: 2,
+					values: ['工序']
+				}],
+				silent: true
+			}, pageSize, pageNum)
+			const rows = Array.isArray(res?.data) ? res.data : []
+			allRows.push(...rows)
+			if (rows.length < pageSize) break
+			pageNum++
+		}
 		const newMap = new Map()
-		rows.forEach(item => {
+		allRows.forEach(item => {
 			if (item.rowid) {
 				newMap.set(item.rowid, item['Name'] || '')
 			}
@@ -1656,14 +1686,25 @@ const loadProcessDictMap = async () => {
 	}
 }
 
-// 加载工序归类表（用于同类别工序同步勾选）
+// 加载工序归类表（用于同类别工序同步勾选），最多拉取 5 页
 const loadCraftPositionMap = async () => {
 	try {
-		const res = await callWorkflowListAll({
-			worksheetId: CRAFT_POSITION_WORKSHEET_ID,
-			filters: []
-		}, 100)
-		const rows = Array.isArray(res?.data) ? res.data : []
+		let allRows = []
+		let pageNum = 1
+		const pageSize = 100
+		const MAX_PAGES = 5
+		while (pageNum <= MAX_PAGES) {
+			const res = await callWorkflowListAPIPaged({
+				worksheetId: CRAFT_POSITION_WORKSHEET_ID,
+				filters: [],
+				silent: true
+			}, pageSize, pageNum)
+			const rows = Array.isArray(res?.data) ? res.data : []
+			allRows.push(...rows)
+			if (rows.length < pageSize) break
+			pageNum++
+		}
+		const rows = allRows
 		const newMap = new Map()
 		rows.forEach(item => {
 			const categoryName = formatFieldValue(item[CRAFT_POSITION_FIELD_ID]) || item['Name'] || ''
@@ -2362,12 +2403,13 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 			})
 		}
 
-		// 分页循环拉取全部"未派工"记录，避免只取第一页时目标日期数据落在后续页而丢失
+		// 分页循环拉取"未派工"记录，每页 100 条，最多 10 页（1000 条）兜底，防止后端 total 值偏大时死循环
 		let raw = []
 		let pageNum = 1
 		const pageSize = 100
+		const MAX_PAGES = 10
 		let hasMore = true
-		while (hasMore) {
+		while (hasMore && pageNum <= MAX_PAGES) {
 			const res = await callWorkflowListAPIPaged({
 				worksheetId: PRE_DISPATCH_WORKSHEET_ID,
 				filters,
