@@ -3399,50 +3399,43 @@ const loadWorkshopEmployees = async () => {
 	try {
 		const currentDate = filterDate.value
 		const wsFilter = employeeWorkshopFilter.value
-		const filters = []
-		if (wsFilter) {
-			filters.push({
-				controlId: EMPLOYEE_FIELD_MAP.workshop,
-				dataType: 30,
-				spliceType: 1,
-				filterType: 2,
-				values: [wsFilter]
-			})
-		}
 
-		// 由于接口无法按日期筛选，逐页获取并在前端按日期过滤：
-		// 阶段1：找到第一条符合日期的数据前，持续获取；
-		// 阶段2：找到数据后，继续获取后续页，直到某一页筛选后为空或返回不足一页。
-		const pageSize = 100
-		let pageNum = 1
-		let foundData = false
-		let allRows = []
-		let hasMore = true
-		const MAX_PAGES = 500
+		// 喷涂车间同时获取喷涂和组装车间的员工
+		const workshopList = wsFilter === '喷涂车间' ? ['喷涂车间', '组装车间'] : [wsFilter]
+		const allRows = []
 
-		while (hasMore && pageNum <= MAX_PAGES) {
-			const res = await callWorkflowListAPIPaged({
-				worksheetId: EMPLOYEE_WORKSHEET_ID,
-				filters,
-				silent: true
-			}, pageSize, pageNum)
-			const rows = Array.isArray(res?.data) ? res.data : []
-			if (rows.length === 0) break
+		for (const ws of workshopList) {
+			if (!ws) continue
+			const filters = [
+				{ controlId: EMPLOYEE_FIELD_MAP.workshop, dataType: 30, spliceType: 1, filterType: 2, values: [ws] }
+			]
 
-			const filtered = rows.filter((item) => formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) === currentDate)
-			allRows.push(...filtered)
+			const pageSize = 100
+			let pageNum = 1
+			let foundData = false
+			let hasMore = true
+			const MAX_PAGES = 500
 
-			if (filtered.length > 0) {
-				foundData = true
-			}
+			while (hasMore && pageNum <= MAX_PAGES) {
+				const res = await callWorkflowListAPIPaged({
+					worksheetId: EMPLOYEE_WORKSHEET_ID,
+					filters,
+					silent: true
+				}, pageSize, pageNum)
+				const rows = Array.isArray(res?.data) ? res.data : []
+				if (rows.length === 0) break
 
-			// 已找到数据且当前页筛选后为空，说明后续不再有该日期数据，停止
-			if (foundData && filtered.length === 0) {
-				hasMore = false
-			} else if (rows.length < pageSize) {
-				hasMore = false
-			} else {
-				pageNum++
+				const filtered = rows.filter((item) => formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) === currentDate)
+				allRows.push(...filtered)
+
+				if (filtered.length > 0) foundData = true
+				if (foundData && filtered.length === 0) {
+					hasMore = false
+				} else if (rows.length < pageSize) {
+					hasMore = false
+				} else {
+					pageNum++
+				}
 			}
 		}
 
@@ -3467,11 +3460,7 @@ const loadWorkshopEmployees = async () => {
 			const barHeight = Math.min(100, (e.totalHours / MAX_EMPLOYEE_HOURS) * 100) + '%'
 			const attendance = String(e.attendance).trim()
 			const barColor = attendance === '上班' ? '#27ae60' : '#e74c3c'
-			return {
-				...e,
-				barHeight,
-				barColor
-			}
+			return { ...e, barHeight, barColor }
 		})
 	} catch (e) {
 		console.error('加载员工数据失败:', e)
