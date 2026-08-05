@@ -885,9 +885,14 @@ const POSITION_PROCESS_DICT_WORKSHEET_ID = ASSEMBLY_POSITION_WORKSHEET_ID
 const POSITION_PROCESS_DICT_NAME_FIELD = ASSEMBLY_POSITION_FIELD_ID
 const positionProcessDictMap = ref(new Map())  // 岗位工序ID -> 岗位工序名称
 
+// 工序字典（数据字典 worksheetId 与类型字段，用于把工序 rowid 解析成名称）
+const PROCESS_DICT_WORKSHEET_ID = 'shujuzidian'
+const PROCESS_DICT_TYPE_FIELD = '6614d7ed1f7f1264f3a332c3'
+const processDictMap = ref(new Map())  // 工序字典 rowid -> 工序名称
+
 // 工序归类表数据
 const craftPositionList = ref([])
-const craftPositionMap = ref(new Map())  // 工序归类名称 -> 关联工序列表
+const craftPositionMap = ref(new Map())  // 工序归类名称 -> 关联工序名称列表
 
 const filterOrderCode = ref('')
 const filterProductName = ref('')
@@ -1589,6 +1594,79 @@ const loadPositionProcessDict = async () => {
 		positionProcessDictMap.value = newMap
 	} catch (e) {
 		console.error('获取岗位工序字典失败:', e)
+	}
+}
+
+// 加载工序字典（用于把归类表中的工序 rowid 解析为名称）
+const loadProcessDictMap = async () => {
+	try {
+		const res = await callWorkflowListAll({
+			worksheetId: PROCESS_DICT_WORKSHEET_ID,
+			filters: [{
+				controlId: PROCESS_DICT_TYPE_FIELD,
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: ['工序']
+			}]
+		}, 100)
+		const rows = Array.isArray(res?.data) ? res.data : []
+		const newMap = new Map()
+		rows.forEach(item => {
+			if (item.rowid) {
+				newMap.set(item.rowid, item['Name'] || '')
+			}
+		})
+		processDictMap.value = newMap
+	} catch (e) {
+		console.error('获取工序字典失败:', e)
+	}
+}
+
+// 加载工序归类表（用于同类别工序同步勾选）
+const loadCraftPositionMap = async () => {
+	try {
+		const res = await callWorkflowListAll({
+			worksheetId: CRAFT_POSITION_WORKSHEET_ID,
+			filters: []
+		}, 100)
+		const rows = Array.isArray(res?.data) ? res.data : []
+		const newMap = new Map()
+		rows.forEach(item => {
+			const categoryName = formatFieldValue(item[CRAFT_POSITION_FIELD_ID]) || item['Name'] || ''
+			const rawRelated = item[CRAFT_POSITION_RELATED_PROCESS_FIELD]
+			if (!categoryName) return
+			let processRowids = []
+			if (Array.isArray(rawRelated)) {
+				processRowids = rawRelated
+					.map(p => (typeof p === 'string' ? p.trim() : String(p.sid || p.value || p.id || '').trim()))
+					.filter(Boolean)
+			} else if (typeof rawRelated === 'string' && rawRelated.trim()) {
+				const t = rawRelated.trim()
+				if (t.startsWith('[') && t.endsWith(']')) {
+					try {
+						const parsed = JSON.parse(t)
+						if (Array.isArray(parsed)) {
+							processRowids = parsed
+								.map(p => (typeof p === 'string' ? p.trim() : String(p.sid || p.value || p.id || '').trim()))
+								.filter(Boolean)
+						}
+					} catch {
+						processRowids = []
+					}
+				} else {
+					processRowids = t.split(/[,，]/).map(s => s.trim()).filter(Boolean)
+				}
+			}
+			// 把工序字典 rowid 解析成名称，便于按工序名称匹配
+			const processNames = processRowids
+				.map(rowid => processDictMap.value.get(rowid))
+				.filter(Boolean)
+			newMap.set(categoryName, processNames)
+		})
+		craftPositionMap.value = newMap
+	} catch (e) {
+		console.error('获取工序归类表失败:', e)
 	}
 }
 
@@ -2568,12 +2646,15 @@ const loadProductProcesses = async (product) => {
 			const seq = parseFloat(formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.sequence])) || 0
 			const isAssociated = associatedRowids.has(item.rowid)
 			const associatedInfo = associatedMap.get(item.rowid) || { employeeNames: [], preDispatchRowid: '', craftPosition: '', positionProcess: '' }
+			// 工序名称字段可能是关联到数据字典，提取字典 rowid 用于归类联动匹配
+			const processDictRowids = extractRelationSids(item[PROCESS_DETAIL_FIELD_MAP.processName])
 			return {
 				rowid: item.rowid || '',
 				productRowid: product.rowid,
 				productName: product.productNameNew || product.productName || '-',
 				sequence: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.sequence]),
 				processName: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.processName]),
+				processDictRowid: processDictRowids[0] || '',
 				orderCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.allcount]) || 0,
 				dailyOutput: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.dailyOutput]) || 0,
 				needCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.needCount]) || 0,
@@ -3995,7 +4076,13 @@ const getSelectedNewEmployeeIds = (selectedIds) => {
 
 // 页面首次挂载与从其他页面返回时均刷新数据
 const refreshPage = async () => {
-	await Promise.all([loadCraftPositionList(), loadPositionProcessDict()])  // 获取工序归类/岗位工序表数据
+	// 先加载工序字典，工序归类表解析依赖它
+	await loadProcessDictMap()
+	await Promise.all([
+		loadCraftPositionList(),
+		loadPositionProcessDict(),
+		loadCraftPositionMap()    // 获取工序归类表（用于同类别同步勾选）
+	])
 	await loadProducts(true)
 	loadWorkshopEmployees()
 	loadEmployeeDispatchSummary()
