@@ -907,6 +907,28 @@ const loadingProducts = ref(false)
 
 const selectedProductIds = ref([])
 const syncSelectEnabled = ref(false) // 同组产品同步勾选开关
+const SYNC_SELECT_ENABLED_STORAGE_KEY = 'preDispatched_syncSelectEnabled'
+
+// 持久化同步勾选开关状态
+watch(syncSelectEnabled, (val) => {
+	try {
+		uni.setStorageSync(SYNC_SELECT_ENABLED_STORAGE_KEY, val)
+	} catch (e) {
+		console.error('保存同步勾选开关状态失败:', e)
+	}
+})
+
+const loadSyncSelectEnabled = () => {
+	try {
+		const stored = uni.getStorageSync(SYNC_SELECT_ENABLED_STORAGE_KEY)
+		if (typeof stored === 'boolean') {
+			syncSelectEnabled.value = stored
+		}
+	} catch (e) {
+		console.error('读取同步勾选开关状态失败:', e)
+	}
+}
+
 const expandedIds = ref([])
 const expandedEmployeeIds = ref([])
 const collapsedOrderIds = ref([])
@@ -4076,6 +4098,8 @@ const getSelectedNewEmployeeIds = (selectedIds) => {
 
 // 页面首次挂载与从其他页面返回时均刷新数据
 const refreshPage = async () => {
+	// 读取本地保存的同步勾选开关状态
+	loadSyncSelectEnabled()
 	// 先加载工序字典，工序归类表解析依赖它
 	await loadProcessDictMap()
 	await Promise.all([
