@@ -620,22 +620,40 @@ const loadEmployees = async () => {
 	
 	try {
 		const currentDate = getCurrentDate()
-		console.log('派工查询页面 - 获取员工列表 - 当前日期:', currentDate)
-		const res = await callWorkflowListAPIPaged({
-			worksheetId: 'yggs',
-			filters: [{
-				"controlId": "696075d19223cfe3a0c169dc",
-				"dataType": 30,
-				"spliceType": 1,
-				"filterType": 2,
-				"values": [selectedWorkshop]
-			}],
-			pageSize: 100,
-			pageNum: 1
-		})
+		// 喷涂车间同时查喷涂和组装
+		const workshopList = selectedWorkshop === '喷涂车间' ? ['喷涂车间', '组装车间'] : [selectedWorkshop]
+		const allRows = []
+
+		for (const ws of workshopList) {
+			if (!ws) continue
+			let pageNum = 1
+			let hasMore = true
+			const pageSize = 100
+			while (hasMore) {
+				const res = await callWorkflowListAPIPaged({
+					worksheetId: 'yggs',
+					filters: [{
+						"controlId": "696075d19223cfe3a0c169dc",
+						"dataType": 30,
+						"spliceType": 1,
+						"filterType": 2,
+						"values": [ws]
+					}],
+					pageSize,
+					pageNum
+				})
+				const rows = Array.isArray(res?.data) ? res.data : []
+				allRows.push(...rows)
+				if (rows.length < pageSize) {
+					hasMore = false
+				} else {
+					pageNum++
+				}
+			}
+		}
 		
-		if (res.data && res.data.length > 0) {
-			const mappedEmployees = res.data.map(item => {
+		if (allRows.length > 0) {
+			const mappedEmployees = allRows.map(item => {
 				const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
 				const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
 				
@@ -784,11 +802,9 @@ const closeTransferModal = () => {
 	selectedTransferEmployees.value = []
 }
 
-// 打开选择转派员工模态框（与派工「添加员工」一致：默认车间为喷涂时按组装拉员工）
+// 打开选择转派员工模态框（喷涂车间时同时查喷涂+组装）
 const openSelectEmployeeModal = async () => {
-	let w = modalWorkshop.value || workshop.value
-	if (w === '喷涂车间') w = '组装车间'
-	modalWorkshop.value = w
+	modalWorkshop.value = modalWorkshop.value || workshop.value
 	await loadEmployees()
 	selectedTransferEmployees.value = []
 	showSelectEmployeeModal.value = true

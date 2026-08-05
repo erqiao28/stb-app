@@ -1085,10 +1085,9 @@ const openWorkshopSelectModal = () => {
   showWorkshopModal.value = true
 }
 
-/** 仅打开「添加员工」弹窗时：默认选用车间为喷涂则改为组装（仅影响弹窗内拉员工列表，不改页面 workshop） */
+/** 仅打开「添加员工」弹窗时：默认选用车间（喷涂时会同时查喷涂+组装，不改页面 workshop） */
 const applyWorkshopWhenOpeningAddEmployeeModal = () => {
-  let w = modalWorkshop.value || workshop.value
-  if (w === '喷涂车间') w = '组装车间'
+  const w = modalWorkshop.value || workshop.value
   modalWorkshop.value = w
 }
 
@@ -3917,27 +3916,45 @@ const loadMultiEmployeesForAdd = async () => {
   try {
     const currentDate = getCurrentDate()
     const selectedWorkshop = modalWorkshop.value || workshop.value
-    
-    const res = await callWorkflowListAPIPaged({
-      worksheetId: 'yggs',
-      filters: [{
-        "controlId": "696075d19223cfe3a0c169dc",
-        "dataType": 30,
-        "spliceType": 1,
-        "filterType": 2,
-        "values": [selectedWorkshop]
-      }, {
-        "controlId": "6943bd902161a0fc58bad5ab",
-        "dataType": 30,
-        "spliceType": 1,
-        "filterType": 8
-      }],
-      pageSize: 100,
-      pageNum: 1
-    })
+    // 喷涂车间同时查喷涂和组装
+    const workshopList = selectedWorkshop === '喷涂车间' ? ['喷涂车间', '组装车间'] : [selectedWorkshop]
+    const allRows = []
 
-    if (res.data && res.data.length > 0) {
-      const mappedEmployees = res.data.map(item => {
+    for (const ws of workshopList) {
+      if (!ws) continue
+      let pageNum = 1
+      let hasMore = true
+      const pageSize = 100
+      while (hasMore) {
+        const res = await callWorkflowListAPIPaged({
+          worksheetId: 'yggs',
+          filters: [{
+            "controlId": "696075d19223cfe3a0c169dc",
+            "dataType": 30,
+            "spliceType": 1,
+            "filterType": 2,
+            "values": [ws]
+          }, {
+            "controlId": "6943bd902161a0fc58bad5ab",
+            "dataType": 30,
+            "spliceType": 1,
+            "filterType": 8
+          }],
+          pageSize,
+          pageNum
+        })
+        const rows = Array.isArray(res?.data) ? res.data : []
+        allRows.push(...rows)
+        if (rows.length < pageSize) {
+          hasMore = false
+        } else {
+          pageNum++
+        }
+      }
+    }
+
+    if (allRows.length > 0) {
+      const mappedEmployees = allRows.map(item => {
         const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
         const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
         const dispatchWorkDate = item['69524e7b7a59e0522d855df6'] || ''
@@ -4741,35 +4758,75 @@ const loadEmployees = async (skipWorkshopFilter = false) => {
     const currentDate = getCurrentDate()
     
     // 使用模态框中的车间值，如果没有则使用页面车间值
-    // 喷涂车间会被 applyWorkshopWhenOpeningAddEmployeeModal 改为组装车间
     const selectedWorkshop = modalWorkshop.value || workshop.value
     
-    const filters = [{
-      "controlId": "6943bd902161a0fc58bad5ab",
-      "dataType": 30,
-      "spliceType": 1,
-      "filterType": 8
-    }]
-    // 非预派工模式时，添加车间过滤
-    if (!skipWorkshopFilter && selectedWorkshop) {
-      filters.unshift({
-        "controlId": "696075d19223cfe3a0c169dc",
-        "dataType": 30,
-        "spliceType": 1,
-        "filterType": 2,
-        "values": [selectedWorkshop]
-      })
-    }
-    
-    const res = await callWorkflowListAPIPaged({
-      worksheetId: 'yggs',
-      filters,
-      pageSize: 100,
-      pageNum: 1
-    })
+    // 喷涂车间同时查喷涂和组装
+    const workshopList = (!skipWorkshopFilter && selectedWorkshop === '喷涂车间')
+      ? ['喷涂车间', '组装车间']
+      : (skipWorkshopFilter ? [null] : [selectedWorkshop])
+    const allRows = []
 
-    if (res.data && res.data.length > 0) {
-      const mappedEmployees = res.data.map(item => {
+    for (const ws of workshopList) {
+      if (ws === null || ws === undefined) {
+        // skipWorkshopFilter 模式：不过滤车间，获取全部
+        let pageNum = 1
+        let hasMore = true
+        const pageSize = 100
+        while (hasMore) {
+          const res = await callWorkflowListAPIPaged({
+            worksheetId: 'yggs',
+            filters: [{
+              "controlId": "6943bd902161a0fc58bad5ab",
+              "dataType": 30,
+              "spliceType": 1,
+              "filterType": 8
+            }],
+            pageSize,
+            pageNum
+          })
+          const rows = Array.isArray(res?.data) ? res.data : []
+          allRows.push(...rows)
+          if (rows.length < pageSize) {
+            hasMore = false
+          } else {
+            pageNum++
+          }
+        }
+      } else {
+        let pageNum = 1
+        let hasMore = true
+        const pageSize = 100
+        while (hasMore) {
+          const res = await callWorkflowListAPIPaged({
+            worksheetId: 'yggs',
+            filters: [{
+              "controlId": "696075d19223cfe3a0c169dc",
+              "dataType": 30,
+              "spliceType": 1,
+              "filterType": 2,
+              "values": [ws]
+            }, {
+              "controlId": "6943bd902161a0fc58bad5ab",
+              "dataType": 30,
+              "spliceType": 1,
+              "filterType": 8
+            }],
+            pageSize,
+            pageNum
+          })
+          const rows = Array.isArray(res?.data) ? res.data : []
+          allRows.push(...rows)
+          if (rows.length < pageSize) {
+            hasMore = false
+          } else {
+            pageNum++
+          }
+        }
+      }
+    }
+
+    if (allRows.length > 0) {
+      const mappedEmployees = allRows.map(item => {
         const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
         const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
         const dispatchWorkDate = item['69524e7b7a59e0522d855df6'] || ''

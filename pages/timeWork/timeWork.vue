@@ -267,20 +267,40 @@ const loadEmployeesForAdd = async () => {
 	try {
 		const currentDate = getCurrentDate()
 		const workshop = modalWorkshop.value || workshopForFilter(timeWorkForm.value.workshop)
-		const res = await callWorkflowListAPIPaged({
-			worksheetId: 'yggs',
-			filters: [{
-				controlId: '696075d19223cfe3a0c169dc',
-				dataType: 30,
-				spliceType: 1,
-				filterType: 2,
-				values: [workshop]
-			}],
-			pageSize: 100,
-			pageNum: 1
-		})
-		if (res.data && res.data.length > 0) {
-			const mapped = res.data.map(item => {
+		// 喷涂车间同时查喷涂和组装
+		const workshopList = workshop === '喷涂车间' ? ['喷涂车间', '组装车间'] : [workshop]
+		const allRows = []
+
+		for (const ws of workshopList) {
+			if (!ws) continue
+			let pageNum = 1
+			let hasMore = true
+			const pageSize = 100
+			while (hasMore) {
+				const res = await callWorkflowListAPIPaged({
+					worksheetId: 'yggs',
+					filters: [{
+						controlId: '696075d19223cfe3a0c169dc',
+						dataType: 30,
+						spliceType: 1,
+						filterType: 2,
+						values: [ws]
+					}],
+					pageSize,
+					pageNum
+				})
+				const rows = Array.isArray(res?.data) ? res.data : []
+				allRows.push(...rows)
+				if (rows.length < pageSize) {
+					hasMore = false
+				} else {
+					pageNum++
+				}
+			}
+		}
+
+		if (allRows.length > 0) {
+			const mapped = allRows.map(item => {
 				const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
 				const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
 				const dispatchWorkDate = item['69524e7b7a59e0522d855df6'] || ''
@@ -377,9 +397,7 @@ const loadTimeWorkBills = async () => {
 }
 
 const openAddEmployeeModal = async () => {
-	let w = workshopForFilter(timeWorkForm.value.workshop)
-	if (w === '喷涂车间') w = '组装车间'
-	modalWorkshop.value = w
+	modalWorkshop.value = workshopForFilter(timeWorkForm.value.workshop)
 	await loadEmployeesForAdd()
 	selectedEmployeesForAdd.value = timeWorkEmployeeList.value.map((e) => e.id)
 	showAddEmployeeModal.value = true
