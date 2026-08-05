@@ -617,46 +617,34 @@ const loadEmployees = async () => {
 		})
 		return
 	}
-	
+
 	try {
 		const currentDate = getCurrentDate()
-		// 喷涂车间同时查喷涂和组装
+		// 喷涂车间时同时获取喷涂+组装车间的员工
 		const workshopList = selectedWorkshop === '喷涂车间' ? ['喷涂车间', '组装车间'] : [selectedWorkshop]
 		const allRows = []
 
 		for (const ws of workshopList) {
-			if (!ws) continue
-			let pageNum = 1
-			let hasMore = true
-			const pageSize = 100
-			while (hasMore) {
-				const res = await callWorkflowListAPIPaged({
-					worksheetId: 'yggs',
-					filters: [{
-						"controlId": "696075d19223cfe3a0c169dc",
-						"dataType": 30,
-						"spliceType": 1,
-						"filterType": 2,
-						"values": [ws]
-					}],
-					pageSize,
-					pageNum
-				})
-				const rows = Array.isArray(res?.data) ? res.data : []
-				allRows.push(...rows)
-				if (rows.length < pageSize) {
-					hasMore = false
-				} else {
-					pageNum++
-				}
-			}
+			const res = await callWorkflowListAPIPaged({
+				worksheetId: 'yggs',
+				filters: [{
+					"controlId": "696075d19223cfe3a0c169dc",
+					"dataType": 30,
+					"spliceType": 1,
+					"filterType": 2,
+					"values": [ws]
+				}],
+				pageSize: 100,
+				pageNum: 1
+			})
+			if (res.data && res.data.length > 0) allRows.push(...res.data)
 		}
-		
+
 		if (allRows.length > 0) {
 			const mappedEmployees = allRows.map(item => {
 				const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
 				const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
-				
+
 				return {
 					id: item['6943bd902161a0fc58bad5ab'] || '',
 					name: item['6938db8bda0981f67b352af3'] || '',
@@ -668,7 +656,7 @@ const loadEmployees = async () => {
 			})
 			.filter(emp => emp.id)
 			.filter(emp => emp.dispatchWorkDate === currentDate)
-			
+
 			allEmployeesOptions.value = mappedEmployees.map(emp => ({
 				label: emp.name,
 				value: emp.id,
@@ -676,7 +664,7 @@ const loadEmployees = async () => {
 				totalHours: emp.totalHours || 0,
 				unrecordedHours: emp.unrecordedHours || 0
 			}))
-			
+
 			allEmployeesMap.value = {}
 			mappedEmployees.forEach(emp => {
 				allEmployeesMap.value[emp.id] = emp
@@ -802,9 +790,8 @@ const closeTransferModal = () => {
 	selectedTransferEmployees.value = []
 }
 
-// 打开选择转派员工模态框（喷涂车间时同时查喷涂+组装）
+// 打开选择转派员工模态框
 const openSelectEmployeeModal = async () => {
-	modalWorkshop.value = modalWorkshop.value || workshop.value
 	await loadEmployees()
 	selectedTransferEmployees.value = []
 	showSelectEmployeeModal.value = true

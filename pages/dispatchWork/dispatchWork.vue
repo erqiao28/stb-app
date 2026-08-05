@@ -1085,12 +1085,6 @@ const openWorkshopSelectModal = () => {
   showWorkshopModal.value = true
 }
 
-/** 仅打开「添加员工」弹窗时：默认选用车间（喷涂时会同时查喷涂+组装，不改页面 workshop） */
-const applyWorkshopWhenOpeningAddEmployeeModal = () => {
-  const w = modalWorkshop.value || workshop.value
-  modalWorkshop.value = w
-}
-
 /** 工序列表支持多选：组装/抛光/喷涂（喷涂与组装一致，含多对多派工） */
 const isMultiSelectProcessWorkshop = computed(() => {
   const w = workshop.value
@@ -3799,7 +3793,6 @@ const onOneToManyEmployeeRadioChange = (e) => {
 }
 
 const addOneToManyEmployee = async () => {
-  applyWorkshopWhenOpeningAddEmployeeModal()
   await loadMultiEmployeesForAdd()
   selectedEmployeesForAdd.value = []
   showAddEmployeeModal.value = true
@@ -3903,7 +3896,6 @@ const confirmOneToManyDispatch = async () => {
 
 // 多对多派工添加员工
 const addMultiEmployee = async () => {
-  applyWorkshopWhenOpeningAddEmployeeModal()
   // 加载所有可选的员工列表（用于添加员工模态框）
   await loadMultiEmployeesForAdd()
   
@@ -3916,40 +3908,31 @@ const loadMultiEmployeesForAdd = async () => {
   try {
     const currentDate = getCurrentDate()
     const selectedWorkshop = modalWorkshop.value || workshop.value
-    // 喷涂车间同时查喷涂和组装
+
+    // 喷涂车间时同时获取喷涂+组装车间的员工
     const workshopList = selectedWorkshop === '喷涂车间' ? ['喷涂车间', '组装车间'] : [selectedWorkshop]
     const allRows = []
 
     for (const ws of workshopList) {
-      if (!ws) continue
-      let pageNum = 1
-      let hasMore = true
-      const pageSize = 100
-      while (hasMore) {
-        const res = await callWorkflowListAPIPaged({
-          worksheetId: 'yggs',
-          filters: [{
-            "controlId": "696075d19223cfe3a0c169dc",
-            "dataType": 30,
-            "spliceType": 1,
-            "filterType": 2,
-            "values": [ws]
-          }, {
-            "controlId": "6943bd902161a0fc58bad5ab",
-            "dataType": 30,
-            "spliceType": 1,
-            "filterType": 8
-          }],
-          pageSize,
-          pageNum
-        })
-        const rows = Array.isArray(res?.data) ? res.data : []
-        allRows.push(...rows)
-        if (rows.length < pageSize) {
-          hasMore = false
-        } else {
-          pageNum++
-        }
+      const res = await callWorkflowListAPIPaged({
+        worksheetId: 'yggs',
+        filters: [{
+          "controlId": "696075d19223cfe3a0c169dc",
+          "dataType": 30,
+          "spliceType": 1,
+          "filterType": 2,
+          "values": [ws]
+        }, {
+          "controlId": "6943bd902161a0fc58bad5ab",
+          "dataType": 30,
+          "spliceType": 1,
+          "filterType": 8
+        }],
+        pageSize: 100,
+        pageNum: 1
+      })
+      if (res.data && res.data.length > 0) {
+        allRows.push(...res.data)
       }
     }
 
@@ -4756,73 +4739,44 @@ const loadEmployees = async (skipWorkshopFilter = false) => {
   try {
     // 每次请求时获取当前日期
     const currentDate = getCurrentDate()
-    
+
     // 使用模态框中的车间值，如果没有则使用页面车间值
     const selectedWorkshop = modalWorkshop.value || workshop.value
-    
-    // 喷涂车间同时查喷涂和组装
-    const workshopList = (!skipWorkshopFilter && selectedWorkshop === '喷涂车间')
-      ? ['喷涂车间', '组装车间']
-      : (skipWorkshopFilter ? [null] : [selectedWorkshop])
-    const allRows = []
 
-    for (const ws of workshopList) {
-      if (ws === null || ws === undefined) {
-        // skipWorkshopFilter 模式：不过滤车间，获取全部
-        let pageNum = 1
-        let hasMore = true
-        const pageSize = 100
-        while (hasMore) {
-          const res = await callWorkflowListAPIPaged({
-            worksheetId: 'yggs',
-            filters: [{
-              "controlId": "6943bd902161a0fc58bad5ab",
-              "dataType": 30,
-              "spliceType": 1,
-              "filterType": 8
-            }],
-            pageSize,
-            pageNum
-          })
-          const rows = Array.isArray(res?.data) ? res.data : []
-          allRows.push(...rows)
-          if (rows.length < pageSize) {
-            hasMore = false
-          } else {
-            pageNum++
-          }
-        }
-      } else {
-        let pageNum = 1
-        let hasMore = true
-        const pageSize = 100
-        while (hasMore) {
-          const res = await callWorkflowListAPIPaged({
-            worksheetId: 'yggs',
-            filters: [{
-              "controlId": "696075d19223cfe3a0c169dc",
-              "dataType": 30,
-              "spliceType": 1,
-              "filterType": 2,
-              "values": [ws]
-            }, {
-              "controlId": "6943bd902161a0fc58bad5ab",
-              "dataType": 30,
-              "spliceType": 1,
-              "filterType": 8
-            }],
-            pageSize,
-            pageNum
-          })
-          const rows = Array.isArray(res?.data) ? res.data : []
-          allRows.push(...rows)
-          if (rows.length < pageSize) {
-            hasMore = false
-          } else {
-            pageNum++
-          }
-        }
+    const baseFilters = [{
+      "controlId": "6943bd902161a0fc58bad5ab",
+      "dataType": 30,
+      "spliceType": 1,
+      "filterType": 8
+    }]
+
+    // 非预派工模式时，添加车间过滤；喷涂车间时同时获取喷涂+组装
+    let workshopList = [selectedWorkshop]
+    if (!skipWorkshopFilter && selectedWorkshop) {
+      if (selectedWorkshop === '喷涂车间') {
+        workshopList = ['喷涂车间', '组装车间']
       }
+    }
+
+    const allRows = []
+    for (const ws of workshopList) {
+      if (skipWorkshopFilter && !ws) {
+        const res = await callWorkflowListAPIPaged({
+          worksheetId: 'yggs',
+          filters: baseFilters,
+          pageSize: 100,
+          pageNum: 1
+        })
+        if (res.data && res.data.length > 0) allRows.push(...res.data)
+        break
+      }
+      const res = await callWorkflowListAPIPaged({
+        worksheetId: 'yggs',
+        filters: [{ "controlId": "696075d19223cfe3a0c169dc", "dataType": 30, "spliceType": 1, "filterType": 2, "values": [ws] }, ...baseFilters],
+        pageSize: 100,
+        pageNum: 1
+      })
+      if (res.data && res.data.length > 0) allRows.push(...res.data)
     }
 
     if (allRows.length > 0) {
@@ -4866,7 +4820,6 @@ const loadEmployees = async (skipWorkshopFilter = false) => {
 }
 
 const addEmployee = async () => {
-  applyWorkshopWhenOpeningAddEmployeeModal()
   // 重新加载员工列表，确保使用最新的车间值
   await loadEmployees()
   
