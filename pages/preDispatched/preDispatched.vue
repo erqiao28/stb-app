@@ -826,6 +826,12 @@ const employeeWorkshopFilter = computed(() => {
 	return loginWorkshop.value
 })
 
+// 员工选择框查询车间：喷涂车间时同时查喷涂和组装
+const employeeSelectorWorkshopFilter = computed(() => {
+	const ws = loginWorkshop.value
+	return ws === '喷涂车间' ? ['喷涂车间', '组装车间'] : [ws]
+})
+
 const PRE_DISPATCH_WORKSHEET_ID = '6a1e468d27514927ff33cbae'
 
 const PRE_DISPATCH_FIELD_MAP = {
@@ -3399,9 +3405,83 @@ const loadWorkshopEmployees = async () => {
 	try {
 		const currentDate = filterDate.value
 		const wsFilter = employeeWorkshopFilter.value
+		const filters = []
+		if (wsFilter) {
+			filters.push({
+				controlId: EMPLOYEE_FIELD_MAP.workshop,
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: [wsFilter]
+			})
+		}
 
-		// 喷涂车间同时获取喷涂和组装车间的员工
-		const workshopList = wsFilter === '喷涂车间' ? ['喷涂车间', '组装车间'] : [wsFilter]
+		// 由于接口无法按日期筛选，逐页获取并在前端按日期过滤：
+		// 阶段1：找到第一条符合日期的数据前，持续获取；
+		// 阶段2：找到数据后，继续获取后续页，直到某一页筛选后为空或返回不足一页。
+		const pageSize = 100
+		let pageNum = 1
+		let foundData = false
+		let allRows = []
+		let hasMore = true
+		const MAX_PAGES = 500
+
+		while (hasMore && pageNum <= MAX_PAGES) {
+			const res = await callWorkflowListAPIPaged({
+				worksheetId: EMPLOYEE_WORKSHEET_ID,
+				filters,
+				silent: true
+			}, pageSize, pageNum)
+			const rows = Array.isArray(res?.data) ? res.data : []
+			if (rows.length === 0) break
+
+			const filtered = rows.filter((item) => formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) === currentDate)
+			allRows.push(...filtered)
+
+			if (filtered.length > 0) foundData = true
+			if (foundData && filtered.length === 0) {
+				hasMore = false
+			} else if (rows.length < pageSize) {
+				hasMore = false
+			} else {
+				pageNum++
+			}
+		}
+
+		const mapped = allRows.map((item) => {
+			const totalHours = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.totalHours]) || '0') || 0
+			const wage = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.wage]) || '0') || 0
+			const attendance = formatFieldValue(item[EMPLOYEE_FIELD_MAP.attendance]) || ''
+			const position = formatFieldValue(item[EMPLOYEE_FIELD_MAP.position]) || ''
+			const isNewEmployeeRaw = formatFieldValue(item[EMPLOYEE_FIELD_MAP.isNewEmployee])
+			const isNewEmployee = String(isNewEmployeeRaw).trim() === '1'
+			return {
+				id: item.rowid || '',
+				name: formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName]) || '-',
+				totalHours,
+				wage,
+				attendance,
+				position,
+				isNewEmployee
+			}
+		})
+		employeeList.value = mapped.map((e) => {
+			const barHeight = Math.min(100, (e.totalHours / MAX_EMPLOYEE_HOURS) * 100) + '%'
+			const attendance = String(e.attendance).trim()
+			const barColor = attendance === '上班' ? '#27ae60' : '#e74c3c'
+			return { ...e, barHeight, barColor }
+		})
+	} catch (e) {
+		console.error('加载员工数据失败:', e)
+		employeeList.value = []
+	}
+}
+
+// 员工选择框专用：喷涂车间时同时查喷涂+组装
+const loadWorkshopEmployeesForSelector = async () => {
+	try {
+		const currentDate = filterDate.value
+		const workshopList = employeeSelectorWorkshopFilter.value
 		const allRows = []
 
 		for (const ws of workshopList) {
@@ -3456,7 +3536,7 @@ const loadWorkshopEmployees = async () => {
 				isNewEmployee
 			}
 		})
-		employeeList.value = mapped.map((e) => {
+		return mapped.map((e) => {
 			const barHeight = Math.min(100, (e.totalHours / MAX_EMPLOYEE_HOURS) * 100) + '%'
 			const attendance = String(e.attendance).trim()
 			const barColor = attendance === '上班' ? '#27ae60' : '#e74c3c'
@@ -3464,7 +3544,7 @@ const loadWorkshopEmployees = async () => {
 		})
 	} catch (e) {
 		console.error('加载员工数据失败:', e)
-		employeeList.value = []
+		return []
 	}
 }
 
@@ -3977,12 +4057,10 @@ function getYesterdayDate() {
 
 const loadEmployeeOptions = async () => {
 	try {
-		// 优先复用员工出勤已加载的数据，避免重复查询且保证数据一致
-		if (employeeList.value.length === 0) {
-			await loadWorkshopEmployees()
-		}
+		// 员工选择框使用专用接口：喷涂车间时同时查喷涂+组装
+		const empList = await loadWorkshopEmployeesForSelector()
 		const currentDate = filterDate.value
-		const mappedEmployees = employeeList.value.map(item => ({
+		allEmployeeOptions.value = empList.map(item => ({
 			id: item.id || '',
 			name: item.name || '-',
 			position: item.position || '',
@@ -3991,7 +4069,6 @@ const loadEmployeeOptions = async () => {
 			isNewEmployee: item.isNewEmployee || false,
 			dispatchWorkDate: currentDate
 		}))
-		allEmployeeOptions.value = mappedEmployees
 	} catch (error) {
 		console.error('加载员工列表失败:', error)
 		allEmployeeOptions.value = []
