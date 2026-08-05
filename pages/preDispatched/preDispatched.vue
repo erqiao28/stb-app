@@ -2222,14 +2222,19 @@ const handleProcessListConfirm = async (productRowid) => {
 		}, 100)
 		pdRows = Array.isArray(pdRes?.data) ? pdRes.data : []
 
-	// 按工序排产明细是否为空分类预派工
+	// 按工序排产明细是否为空分类预派工；只有关联工序被勾选了才传给接口
+	const checkedProcessRowidSet = new Set(checkedProcesses.map(p => p.rowid))
 	pdRows.forEach(item => {
 			const sids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail])
-			if (sids && sids.length > 0) {
+			const hasRelatedProcess = sids && sids.length > 0
+			const anyProcessChecked = hasRelatedProcess && sids.some(sid => checkedProcessRowidSet.has(sid))
+			if (hasRelatedProcess && anyProcessChecked) {
 				hasPreDispatchRowids.push(item.rowid)
-			} else {
+			} else if (!hasRelatedProcess) {
+				// 只有完全没有关联工序的才归到 noProcessPreDispatchRowid
 				noProcessPreDispatchRowid = item.rowid
 			}
+			// 有工序但没勾选 → 跳过，不传
 		})
 	}
 
@@ -3217,68 +3222,40 @@ const loadProcessActionList = async () => {
 	try {
 		processActionLoading.value = true
 		const ws = loginWorkshop.value
-		let rows = []
-		
-		if (ws === '拉伸车间') {
-			// 拉伸车间：从 shujuzidian 获取工序
-			const filters = [
-				{ controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
-				{ controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
-				{ controlId: '6a324e7d6d70ffabc66cbe5f', dataType: 30, spliceType: 1, filterType: 2, values: ['1'] }
-			]
+		const filters = [
+			{ controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
+			{ controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
+			{ controlId: '6a324e7d6d70ffabc66cbe5f', dataType: 30, spliceType: 1, filterType: 2, values: ['1'] },
+			{ controlId: '691e8522d50c894e2e798d03', dataType: 30, spliceType: 1, filterType: 2, values: [ws] }
+		]
+		const nameSearch = processActionSearch.value.trim()
+		if (nameSearch) {
 			filters.push({
-				controlId: '691e8522d50c894e2e798d03',
+				controlId: '6614b6721103c1d5d3a08122',
 				dataType: 30,
 				spliceType: 1,
-				filterType: 2,
-				values: [ws]
+				filterType: 1,
+				values: [nameSearch]
 			})
-			const nameSearch = processActionSearch.value.trim()
-			if (nameSearch) {
-				filters.push({
-					controlId: '6614b6721103c1d5d3a08122',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 1,
-					values: [nameSearch]
-				})
-			}
-			const res = await callWorkflowListAll({
+		}
+		let allRows = []
+		let pageNum = 1
+		const pageSize = 100
+		const MAX_PAGES = 5
+		while (pageNum <= MAX_PAGES) {
+			const res = await callWorkflowListAPIPaged({
 				worksheetId: 'shujuzidian',
 				filters,
 				silent: true
-			}, 100)
-			rows = Array.isArray(res?.data) ? res.data : []
-		} else {
-			// 喷涂、抛光、组装车间：从岗位表获取岗位
-			const filters = []
-			filters.push({
-				controlId: '6a3124a86d70ffabc66c8515',
-				dataType: 30,
-				spliceType: 1,
-				filterType: 2,
-				values: [ws]
-			})
-			const nameSearch = processActionSearch.value.trim()
-			if (nameSearch) {
-				filters.push({
-					controlId: '6a276ffc6d70ffabc66285f8',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 1,
-					values: [nameSearch]
-				})
-			}
-			const res = await callWorkflowListAll({
-				worksheetId: ASSEMBLY_POSITION_WORKSHEET_ID,
-				filters,
-				silent: true
-			}, 100)
-			rows = Array.isArray(res?.data) ? res.data : []
+			}, pageSize, pageNum)
+			const rows = Array.isArray(res?.data) ? res.data : []
+			allRows.push(...rows)
+			if (rows.length < pageSize) break
+			pageNum++
 		}
-		processActionList.value = rows.reverse().map((item) => ({
+		processActionList.value = allRows.reverse().map((item) => ({
 			rowid: item.rowid || '',
-			processName: item['Name'] || item[ASSEMBLY_POSITION_FIELD_ID] || '-'
+			processName: item['Name'] || '-'
 		}))
 	} catch (e) {
 		console.error('加载工序列表失败:', e)
