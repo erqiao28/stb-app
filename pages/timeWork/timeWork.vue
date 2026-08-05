@@ -214,13 +214,11 @@ const workshopForFilter = (w) => {
 	return w
 }
 
-/** 默认车间：与登录权限 loginLimits 一致；若为喷涂则在记时派工页默认改为组装（仅本页） */
+/** 默认车间：与登录权限 loginLimits 一致 */
 const getDefaultTimeWorkshop = () => {
 	const raw = (userStore.loginLimits && userStore.loginLimits.trim()) || ''
 	if (raw && workshopOptions.value.includes(raw)) {
-		let w = workshopForFilter(raw)
-		if (w === '喷涂车间') w = '组装车间'
-		return w
+		return workshopForFilter(raw)
 	}
 	return '拉伸车间'
 }
@@ -267,36 +265,25 @@ const loadEmployeesForAdd = async () => {
 	try {
 		const currentDate = getCurrentDate()
 		const workshop = modalWorkshop.value || workshopForFilter(timeWorkForm.value.workshop)
-		// 喷涂车间同时查喷涂和组装
+		// 喷涂车间时同时获取喷涂+组装车间的员工
 		const workshopList = workshop === '喷涂车间' ? ['喷涂车间', '组装车间'] : [workshop]
 		const allRows = []
 
 		for (const ws of workshopList) {
 			if (!ws) continue
-			let pageNum = 1
-			let hasMore = true
-			const pageSize = 100
-			while (hasMore) {
-				const res = await callWorkflowListAPIPaged({
-					worksheetId: 'yggs',
-					filters: [{
-						controlId: '696075d19223cfe3a0c169dc',
-						dataType: 30,
-						spliceType: 1,
-						filterType: 2,
-						values: [ws]
-					}],
-					pageSize,
-					pageNum
-				})
-				const rows = Array.isArray(res?.data) ? res.data : []
-				allRows.push(...rows)
-				if (rows.length < pageSize) {
-					hasMore = false
-				} else {
-					pageNum++
-				}
-			}
+			const res = await callWorkflowListAPIPaged({
+				worksheetId: 'yggs',
+				filters: [{
+					controlId: '696075d19223cfe3a0c169dc',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 2,
+					values: [ws]
+				}],
+				pageSize: 100,
+				pageNum: 1
+			})
+			if (res.data && res.data.length > 0) allRows.push(...res.data)
 		}
 
 		if (allRows.length > 0) {
@@ -591,10 +578,8 @@ onLoad((options) => {
 	if (options && options.workshop) {
 		const w = decodeURIComponent(options.workshop)
 		if (workshopOptions.value.includes(w)) {
-			let ws = w
-			if (ws === '喷涂车间') ws = '组装车间'
-			timeWorkForm.value.workshop = ws
-			modalWorkshop.value = workshopForFilter(ws)
+			timeWorkForm.value.workshop = w
+			modalWorkshop.value = workshopForFilter(w)
 		}
 	} else {
 		timeWorkForm.value.workshop = getDefaultTimeWorkshop()
