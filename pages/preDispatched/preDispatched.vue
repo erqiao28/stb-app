@@ -821,10 +821,9 @@ const loginWorkshop = computed(() => {
 	return workshopOptions.includes(lim) ? lim : ''
 })
 
-// 员工相关数据查询车间：喷涂车间员工合并到组装车间
+// 员工相关数据查询车间：权限车间是什么就查什么
 const employeeWorkshopFilter = computed(() => {
-	const ws = loginWorkshop.value
-	return ws === '喷涂车间' ? '组装车间' : ws
+	return loginWorkshop.value
 })
 
 const PRE_DISPATCH_WORKSHEET_ID = '6a1e468d27514927ff33cbae'
@@ -1383,21 +1382,27 @@ const loadProcessDropdownList = async (emp) => {
 
 		// 喷涂、抛光、组装车间：从岗位工序表获取岗位
 		const filters = []
-		const workshopFilter = (ws === '喷涂车间' || ws === '组装车间') ? '组装车间' : '抛光车间'
 		filters.push({
 			controlId: '6a3124a86d70ffabc66c8515',
 			dataType: 30,
 			spliceType: 1,
 			filterType: 2,
-			values: [workshopFilter]
+			values: [ws]
 		})
-		const res = await callWorkflowListAll({
-			worksheetId: ASSEMBLY_POSITION_WORKSHEET_ID,
-			filters,
-			silent: true
-		}, 100)
-		const rows = Array.isArray(res?.data) ? res.data : []
-		processDropdownList.value = rows.map((item) => ({
+
+		// 喷涂车间同时获取喷涂和组装车间的岗位
+		const workshopList = ws === '喷涂车间' ? ['喷涂车间', '组装车间'] : [ws]
+		const allRows = []
+		for (const w of workshopList) {
+			const res = await callWorkflowListAll({
+				worksheetId: ASSEMBLY_POSITION_WORKSHEET_ID,
+				filters: [{ controlId: '6a3124a86d70ffabc66c8515', dataType: 30, spliceType: 1, filterType: 2, values: [w] }],
+				silent: true
+			}, 100)
+			const rows = Array.isArray(res?.data) ? res.data : []
+			allRows.push(...rows)
+		}
+		processDropdownList.value = allRows.map((item) => ({
 			rowid: item.rowid || '',
 			processName: item['Name'] || item[ASSEMBLY_POSITION_FIELD_ID] || '-'
 		}))
@@ -3199,14 +3204,12 @@ const loadProcessActionList = async () => {
 		} else {
 			// 喷涂、抛光、组装车间：从岗位表获取岗位
 			const filters = []
-			// 根据车间筛选：喷涂车间和组装车间筛选"组装车间"，抛光车间筛选"抛光车间"
-			const workshopFilter = (ws === '喷涂车间' || ws === '组装车间') ? '组装车间' : '抛光车间'
 			filters.push({
 				controlId: '6a3124a86d70ffabc66c8515',
 				dataType: 30,
 				spliceType: 1,
 				filterType: 2,
-				values: [workshopFilter]
+				values: [ws]
 			})
 			const nameSearch = processActionSearch.value.trim()
 			if (nameSearch) {
