@@ -593,12 +593,29 @@
 	</view>
 
 	<view class="employee-modal" :class="{ show: showEmployeeSelector }" @click.self="closeEmployeeSelector">
-		<view class="employee-modal-content" @click.stop>
-			<view class="employee-modal-header">
-				<text class="employee-modal-title">选择员工</text>
-				<view class="employee-modal-close" @click="closeEmployeeSelector">×</view>
-			</view>
-			<scroll-view scroll-y class="employee-modal-list">
+			<view class="employee-modal-content" @click.stop>
+				<view class="employee-modal-header" @click="showWorkshopDropdown = false">
+					<text class="employee-modal-title">选择员工</text>
+					<view class="workshop-picker-wrap">
+						<view class="workshop-picker" @click.stop="toggleWorkshopDropdown">
+							<text>{{ selectedSelectorWorkshop || '请选择车间' }}</text>
+							<text class="picker-arrow">{{ showWorkshopDropdown ? '▲' : '▼' }}</text>
+						</view>
+						<view class="workshop-dropdown" v-if="showWorkshopDropdown" @click.stop>
+							<view
+								v-for="ws in workshopOptions"
+								:key="ws"
+								class="workshop-dropdown-item"
+								:class="{ active: ws === selectedSelectorWorkshop }"
+								@click="selectWorkshop(ws)"
+							>
+								{{ ws }}
+							</view>
+						</view>
+					</view>
+					<view class="employee-modal-close" @click="closeEmployeeSelector">×</view>
+				</view>
+				<scroll-view scroll-y class="employee-modal-list">
 				<view
 					v-for="emp in allEmployeeOptions"
 					:key="emp.id"
@@ -826,10 +843,14 @@ const employeeWorkshopFilter = computed(() => {
 	return loginWorkshop.value
 })
 
-// 员工选择框查询车间：喷涂车间时同时查喷涂和组装
-const employeeSelectorWorkshopFilter = computed(() => {
-	const ws = loginWorkshop.value
-	return ws === '喷涂车间' ? ['喷涂车间', '组装车间'] : [ws]
+// 员工选择框查询车间：默认为权限车间，支持手动切换
+const selectedSelectorWorkshop = ref(loginWorkshop.value || '')
+const showWorkshopDropdown = ref(false)
+// 监听权限车间变化，同步更新选择器车间
+watch(loginWorkshop, (newVal) => {
+	if (newVal && !selectedSelectorWorkshop.value) {
+		selectedSelectorWorkshop.value = newVal
+	}
 })
 
 const PRE_DISPATCH_WORKSHEET_ID = '6a1e468d27514927ff33cbae'
@@ -2163,18 +2184,44 @@ const confirmSelectedProducts = async () => {
 	}
 }
 
-const handleConfirmDispatch = () => {
+const handleConfirmDispatch = async () => {
 	// 只获取选中产品的预派工 rowid
-	const rowids = productList.value
+	const allRowids = productList.value
 		.filter(item => selectedProductIds.value.includes(item.rowid))
-		.flatMap(item => item.preDispatchRowids || [item.rowid])
+		.flatMap(item => item.preDispatchRowids || [])
 		.filter(Boolean)
-	if (rowids.length === 0) {
+	if (allRowids.length === 0) {
 		uni.showToast({ title: '没有可确认的预派工', icon: 'none' })
 		return
 	}
-	confirmDispatchCount.value = rowids.length
-	confirmDispatchRowids.value = rowids
+	// 过滤出有员工的预派工
+	let validRowids = []
+	if (allRowids.length > 0) {
+		const res = await callWorkflowListAll({
+			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
+			filters: [{
+				controlId: 'rowid',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: allRowids
+			}],
+			silent: true
+		}, 100)
+		const rows = Array.isArray(res?.data) ? res.data : []
+		validRowids = rows
+			.filter(item => {
+				const dailyWage = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.dailyWage])
+				return dailyWage && dailyWage.length > 0
+			})
+			.map(item => item.rowid)
+	}
+	if (validRowids.length === 0) {
+		uni.showToast({ title: '没有可确认的预派工（均无员工）', icon: 'none' })
+		return
+	}
+	confirmDispatchCount.value = validRowids.length
+	confirmDispatchRowids.value = validRowids
 	showConfirmDispatchModal.value = true
 }
 
@@ -3500,7 +3547,7 @@ const loadWorkshopEmployees = async () => {
 const loadWorkshopEmployeesForSelector = async () => {
 	try {
 		const currentDate = filterDate.value
-		const workshopList = employeeSelectorWorkshopFilter.value
+		const workshopList = selectedSelectorWorkshop.value ? [selectedSelectorWorkshop.value] : []
 		const allRows = []
 
 		for (const ws of workshopList) {
@@ -3983,6 +4030,20 @@ const openEmployeeSelectorForEdit = async () => {
 	showEmployeeSelector.value = true
 }
 
+// 切换车间下拉框显示
+const toggleWorkshopDropdown = () => {
+	showWorkshopDropdown.value = !showWorkshopDropdown.value
+}
+
+// 选择车间
+const selectWorkshop = async (ws) => {
+	selectedSelectorWorkshop.value = ws
+	showWorkshopDropdown.value = false
+	uni.showLoading({ title: '加载中...' })
+	await loadEmployeeOptions()
+	uni.hideLoading()
+}
+
 // 从员工编辑中移除员工
 const removeEmployeeFromEdit = (idx) => {
 	employeeEditData.value.selectedEmployeeIds.splice(idx, 1)
@@ -4000,14 +4061,11 @@ const confirmEmployeeEdit = async () => {
 		uni.showToast({ title: '缺少预派工记录', icon: 'none' })
 		return
 	}
-	if (!selectedEmployeeIds || selectedEmployeeIds.length === 0) {
-		uni.showToast({ title: '请选择员工', icon: 'none' })
-		return
-	}
 
+	// 构建请求数据：员工始终传递，没选择员工时传空数组
 	const requestData = {
 		rowid: preDispatchRowid,
-		employees: selectedEmployeeIds
+		employees: selectedEmployeeIds || []
 	}
 
 	try {
@@ -4190,6 +4248,7 @@ const getSelectedNewEmployeeIds = (selectedIds) => {
 
 // 页面首次挂载与从其他页面返回时均刷新数据
 const refreshPage = async () => {
+	uni.showLoading({ title: '加载中...', mask: true })
 	// 读取本地保存的同步勾选开关状态
 	loadSyncSelectEnabled()
 	// 先加载工序字典，工序归类表解析依赖它
@@ -4202,6 +4261,7 @@ const refreshPage = async () => {
 	await loadProducts(true)
 	loadWorkshopEmployees()
 	loadEmployeeDispatchSummary()
+	uni.hideLoading()
 }
 
 onMounted(refreshPage)
@@ -6548,6 +6608,54 @@ onShow(refreshPage)
 			font-size: px2vw(40px);
 			color: #999;
 			line-height: 1;
+		}
+
+		.workshop-picker-wrap {
+			position: relative;
+		}
+
+		.workshop-picker {
+			display: flex;
+			align-items: center;
+			padding: px2vw(8px) px2vw(16px);
+			background-color: #f5f5f5;
+			border-radius: px2vw(8px);
+			font-size: px2vw(24px);
+			color: #666;
+
+			.picker-arrow {
+				margin-left: px2vw(8px);
+				font-size: px2vw(20px);
+				color: #999;
+			}
+		}
+
+		.workshop-dropdown {
+			position: absolute;
+			top: 100%;
+			left: 0;
+			margin-top: px2vw(8px);
+			background-color: #fff;
+			border: 1px solid #eee;
+			border-radius: px2vw(8px);
+			box-shadow: 0 px2vw(8px) px2vw(16px) rgba(0, 0, 0, 0.1);
+			z-index: 1010;
+
+			.workshop-dropdown-item {
+				padding: px2vw(16px) px2vw(24px);
+				font-size: px2vw(24px);
+				color: #666;
+				white-space: nowrap;
+
+				&.active {
+					color: #007aff;
+					background-color: #f0f8ff;
+				}
+
+				&:active {
+					background-color: #f5f5f5;
+				}
+			}
 		}
 	}
 
