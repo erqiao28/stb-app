@@ -4,7 +4,7 @@
         <view class="modal-header">
           <text class="modal-title">{{ title }}</text>
         </view>
-        <view class="modal-toolbar-row" :class="{ 'modal-toolbar-row--no-filters': !showPositionFilterBar }">
+        <view class="modal-toolbar-row" :class="{ 'modal-toolbar-row--no-filters': !showPositionFilterBar && !showEmployeeTypeSwitch }">
           <view class="modal-workshop-selector">
             <text class="workshop-label">车间：</text>
             <picker mode="selector" :range="workshopOptions" :value="workshopIndex" @change="onWorkshopChange">
@@ -12,6 +12,18 @@
                 {{ workshop || '请选择车间' }}
               </view>
             </picker>
+          </view>
+          <view v-if="showEmployeeTypeSwitch" class="employee-type-switch">
+            <view
+              class="switch-btn"
+              :class="{ 'switch-btn--active': employeeTypeFilter === 'normal' }"
+              @click="onEmployeeTypeSwitch('normal')"
+            >普</view>
+            <view
+              class="switch-btn"
+              :class="{ 'switch-btn--active': employeeTypeFilter === 'temp' }"
+              @click="onEmployeeTypeSwitch('temp')"
+            >临</view>
           </view>
           <view v-if="showPositionFilterBar" class="position-filter-bar">
             <scroll-view scroll-x class="position-filter-scroll" :show-scrollbar="false">
@@ -177,10 +189,20 @@ const props = defineProps({
   autoSelectMatching: {
     type: Boolean,
     default: false
+  },
+  /** 是否显示员工类型切换按钮（普/临） */
+  showEmployeeTypeSwitch: {
+    type: Boolean,
+    default: false
+  },
+  /** 当前员工类型筛选：normal-正常员工，temp-临时工 */
+  employeeTypeFilter: {
+    type: String,
+    default: 'normal'
   }
 })
 
-const emit = defineEmits(['update:modelValue', 'update:visible', 'update:workshop', 'confirm'])
+const emit = defineEmits(['update:modelValue', 'update:visible', 'update:workshop', 'update:employeeTypeFilter', 'confirm'])
 
 // 车间选择相关
 const workshopIndex = computed(() => {
@@ -192,6 +214,11 @@ const onWorkshopChange = (e) => {
   const selectedIndex = e.detail.value
   const selectedWorkshop = props.workshopOptions[selectedIndex]
   emit('update:workshop', selectedWorkshop)
+}
+
+// 切换员工类型
+const onEmployeeTypeSwitch = (type) => {
+  emit('update:employeeTypeFilter', type)
 }
 
 // 处理 options 为字符串数组或对象数组的情况，并去重
@@ -461,6 +488,25 @@ const onCheckboxChange = (e) => {
     align-items: center;
     box-sizing: border-box;
     cursor: pointer;
+  }
+}
+
+.employee-type-switch {
+  display: flex;
+  background-color: #f0f0f0;
+  border-radius: px2vw(6px);
+  overflow: hidden;
+
+  .switch-btn {
+    padding: px2vw(8px) px2vw(14px);
+    font-size: px2vw(24px);
+    color: #666;
+    background-color: transparent;
+
+    &.switch-btn--active {
+      color: #fff;
+      background-color: #1890ff;
+    }
   }
 }
 

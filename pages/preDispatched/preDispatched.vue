@@ -593,9 +593,22 @@
 	</view>
 
 	<view class="employee-modal" :class="{ show: showEmployeeSelector }" @click.self="closeEmployeeSelector">
-			<view class="employee-modal-content" @click.stop>
-				<view class="employee-modal-header" @click="showWorkshopDropdown = false">
-					<text class="employee-modal-title">选择员工</text>
+		<view class="employee-modal-content" @click.stop>
+			<view class="employee-modal-header" @click="showWorkshopDropdown = false">
+				<text class="employee-modal-title">选择员工</text>
+				<view class="header-controls">
+					<view class="employee-type-switch">
+						<view
+							class="switch-btn"
+							:class="{ active: employeeTypeFilter === 'normal' }"
+							@click.stop="switchEmployeeType('normal')"
+						>普</view>
+						<view
+							class="switch-btn"
+							:class="{ active: employeeTypeFilter === 'temp' }"
+							@click.stop="switchEmployeeType('temp')"
+						>临</view>
+					</view>
 					<view class="workshop-picker-wrap">
 						<view class="workshop-picker" @click.stop="toggleWorkshopDropdown">
 							<text>{{ selectedSelectorWorkshop || '请选择车间' }}</text>
@@ -613,11 +626,12 @@
 							</view>
 						</view>
 					</view>
-					<view class="employee-modal-close" @click="closeEmployeeSelector">×</view>
 				</view>
-				<scroll-view scroll-y class="employee-modal-list">
+				<view class="employee-modal-close" @click="closeEmployeeSelector">×</view>
+			</view>
+			<scroll-view scroll-y class="employee-modal-list">
 				<view
-					v-for="emp in allEmployeeOptions"
+					v-for="emp in filteredEmployees"
 					:key="emp.id"
 					class="employee-modal-item"
 					:class="{ active: editData.selectedEmployeeIds.includes(emp.id) }"
@@ -637,25 +651,25 @@
 								</text>
 							</view>
 						</view>
-					<view class="employee-modal-info-extra">
-						<text class="employee-modal-hours">{{ emp.totalHours || 0 }}</text>
-						<text class="employee-modal-wage">{{ emp.wage || 0 }}</text>
+						<view class="employee-modal-info-extra">
+							<text class="employee-modal-hours">{{ emp.totalHours || 0 }}</text>
+							<text class="employee-modal-wage">{{ emp.wage || 0 }}</text>
+						</view>
+						<view class="employee-modal-position-detail" v-if="expandedEmployeeIds.includes(emp.id) && emp.position" @click.stop>
+							<text
+								class="employee-modal-position-tag"
+								v-for="(pos, pIdx) in emp.position.split(/[,，]/).filter(Boolean)"
+								:key="pIdx"
+							>
+								{{ pos.trim() }}
+							</text>
+						</view>
 					</view>
-					<view class="employee-modal-position-detail" v-if="expandedEmployeeIds.includes(emp.id) && emp.position" @click.stop>
-						<text
-							class="employee-modal-position-tag"
-							v-for="(pos, pIdx) in emp.position.split(/[,，]/).filter(Boolean)"
-							:key="pIdx"
-						>
-							{{ pos.trim() }}
-						</text>
-					</view>
-				</view>
-			</view>
-			<view class="employee-modal-empty" v-if="allEmployeeOptions.length === 0">
-					<text>暂无员工</text>
 				</view>
 			</scroll-view>
+			<view class="employee-modal-empty" v-if="allEmployeeOptions.length === 0">
+				<text>暂无员工</text>
+			</view>
 		</view>
 	</view>
 
@@ -1034,7 +1048,8 @@ const EMPLOYEE_FIELD_MAP = {
 	employeeName: '6938db8bda0981f67b352af3',
 	attendance: '6959e1077a59e0522d877f8b',
 	position: '6943bf332161a0fc58bad7a4',
-	isNewEmployee: '6a7155014239d5290f2ca6db'
+	isNewEmployee: '6a7155014239d5290f2ca6db',
+	isTempEmployee: '6a744cdb4239d5290f2f6e4a'
 }
 
 const MAX_EMPLOYEE_HOURS = 11
@@ -1115,6 +1130,14 @@ const employeeEditData = ref({
 
 const showEmployeeSelector = ref(false)
 const allEmployeeOptions = ref([])
+
+// 员工类型切换：normal-正常员工，temp-临时工
+const employeeTypeFilter = ref('normal')
+
+// 筛选后的员工列表（获取数据时已筛选）
+const filteredEmployees = computed(() => {
+	return allEmployeeOptions.value
+})
 
 const showProcessActionModal = ref(false)
 const processActionProduct = ref(null)
@@ -3501,7 +3524,12 @@ const loadWorkshopEmployees = async () => {
 			const rows = Array.isArray(res?.data) ? res.data : []
 			if (rows.length === 0) break
 
-			const filtered = rows.filter((item) => formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) === currentDate)
+			const filtered = rows.filter((item) => {
+				if (formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) !== currentDate) return false
+				// 过滤掉临时工
+				const isTemp = String(formatFieldValue(item[EMPLOYEE_FIELD_MAP.isTempEmployee]) || '').trim() === '1'
+				return !isTemp
+			})
 			allRows.push(...filtered)
 
 			if (filtered.length > 0) foundData = true
@@ -3521,6 +3549,8 @@ const loadWorkshopEmployees = async () => {
 			const position = formatFieldValue(item[EMPLOYEE_FIELD_MAP.position]) || ''
 			const isNewEmployeeRaw = formatFieldValue(item[EMPLOYEE_FIELD_MAP.isNewEmployee])
 			const isNewEmployee = String(isNewEmployeeRaw).trim() === '1'
+			const isTempEmployeeRaw = formatFieldValue(item[EMPLOYEE_FIELD_MAP.isTempEmployee])
+			const isTempEmployee = String(isTempEmployeeRaw).trim() === '1'
 			return {
 				id: item.rowid || '',
 				name: formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName]) || '-',
@@ -3528,7 +3558,8 @@ const loadWorkshopEmployees = async () => {
 				wage,
 				attendance,
 				position,
-				isNewEmployee
+				isNewEmployee,
+				isTempEmployee
 			}
 		})
 		employeeList.value = mapped.map((e) => {
@@ -3571,7 +3602,17 @@ const loadWorkshopEmployeesForSelector = async () => {
 				const rows = Array.isArray(res?.data) ? res.data : []
 				if (rows.length === 0) break
 
-				const filtered = rows.filter((item) => formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) === currentDate)
+				const filtered = rows.filter((item) => {
+				if (formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) !== currentDate) return false
+				// 根据员工类型筛选
+				const isTemp = String(formatFieldValue(item[EMPLOYEE_FIELD_MAP.isTempEmployee]) || '').trim() === '1'
+				if (employeeTypeFilter.value === 'normal') {
+					return !isTemp  // 普：排除临时工
+				} else if (employeeTypeFilter.value === 'temp') {
+					return isTemp  // 临：只选临时工
+				}
+				return true
+			})
 				allRows.push(...filtered)
 
 				if (filtered.length > 0) foundData = true
@@ -3641,7 +3682,11 @@ const loadPositionProcessEmployees = async () => {
 		const processFieldIds = wsFilter === '拉伸车间'
 			? POSITION_PROCESS_FIELD_MAP.stretchAndPolish
 			: POSITION_PROCESS_FIELD_MAP.assembly
-		const mapped = rows.map((item) => {
+		const mapped = rows.filter((item) => {
+			// 过滤掉临时工
+			const isTemp = String(item['6a744cdb4239d5290f2f6e4a'] || '').trim() === '1'
+			return !isTemp
+		}).map((item) => {
 			const isNewEmployee = item['6a7154c54239d5290f2ca6d4'] == '1'
 			return {
 				id: item.rowid || '',
@@ -4039,6 +4084,15 @@ const toggleWorkshopDropdown = () => {
 const selectWorkshop = async (ws) => {
 	selectedSelectorWorkshop.value = ws
 	showWorkshopDropdown.value = false
+	uni.showLoading({ title: '加载中...' })
+	await loadEmployeeOptions()
+	uni.hideLoading()
+}
+
+// 切换员工类型（普/临）
+const switchEmployeeType = async (type) => {
+	if (employeeTypeFilter.value === type) return
+	employeeTypeFilter.value = type
 	uni.showLoading({ title: '加载中...' })
 	await loadEmployeeOptions()
 	uni.hideLoading()
@@ -6594,14 +6648,39 @@ onShow(refreshPage)
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: px2vw(30px);
+		padding: px2vw(20px);
 		border-bottom: 1px solid #eee;
 		flex-shrink: 0;
 
 		.employee-modal-title {
-			font-size: px2vw(28px);
+			font-size: px2vw(22px);
 			font-weight: bold;
 			color: #333;
+		}
+
+		.header-controls {
+			display: flex;
+			align-items: center;
+			gap: px2vw(16px);
+		}
+
+		.employee-type-switch {
+			display: flex;
+			background-color: #f0f0f0;
+			border-radius: px2vw(6px);
+			overflow: hidden;
+
+			.switch-btn {
+				padding: px2vw(4px) px2vw(10px);
+				font-size: px2vw(18px);
+				color: #666;
+				background-color: transparent;
+
+				&.active {
+					color: #fff;
+					background-color: #1890ff;
+				}
+			}
 		}
 
 		.employee-modal-close {
@@ -6758,6 +6837,23 @@ onShow(refreshPage)
 				color: #fff;
 				background-color: #1890ff;
 			}
+
+			&.is-temp {
+				color: #fff;
+				background-color: #fa8c16;
+			}
+		}
+
+		.employee-section-title {
+			font-size: px2vw(24px);
+			font-weight: bold;
+			color: #333;
+			padding: px2vw(16px) px2vw(16px) px2vw(8px);
+			background-color: #fafafa;
+		}
+
+		.employee-modal-item-temp {
+			background-color: #fffbf0;
 		}
 
 		.employee-modal-position-wrap {

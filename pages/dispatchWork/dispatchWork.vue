@@ -17,7 +17,10 @@
       :maxSelection="addEmployeeMaxSelection"
       :position-priority-keywords="employeeModalPositionKeywords"
       :position-fallback-keywords="employeeModalFallbackKeywords"
-      :auto-select-matching="employeeModalAutoSelectMatching" />
+      :auto-select-matching="employeeModalAutoSelectMatching"
+      :showEmployeeTypeSwitch="true"
+      :employeeTypeFilter="employeeTypeFilter"
+      @update:employeeTypeFilter="switchEmployeeType" />
     
     <!-- 图片预览模态框（多图轮播） -->
     <view class="image-preview-modal" v-if="showImagePreview" @click="closeImagePreview" :style="{ paddingTop: statusBarHeight + 'px' }">
@@ -1688,6 +1691,8 @@ const showAddEmployeeModal = ref(false)
 const selectedEmployeesForAdd = ref([])
 const allEmployeesOptions = ref([])
 const allEmployeesMap = ref({})
+// 员工类型筛选：normal-正常员工，temp-临时工
+const employeeTypeFilter = ref('normal')
 
 // ---------- 多对多派工相关 ----------
 const showMultiDispatchModal = ref(false)
@@ -4414,6 +4419,13 @@ const onModalWorkshopChange = (value) => {
   loadEmployees()
 }
 
+// 切换员工类型（普/临）
+const switchEmployeeType = async (type) => {
+  if (employeeTypeFilter.value === type) return
+  employeeTypeFilter.value = type
+  await loadEmployees()
+}
+
 // 计薪方式选择变化处理
 const onSalaryMethodChange = (e) => {
   salaryMethodIndex.value = e.detail.value
@@ -4780,10 +4792,14 @@ const loadEmployees = async (skipWorkshopFilter = false) => {
     }
 
     if (allRows.length > 0) {
+      // 临时工字段
+      const isTempField = '6a744cdb4239d5290f2f6e4a'
       const mappedEmployees = allRows.map(item => {
         const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
         const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
         const dispatchWorkDate = item['69524e7b7a59e0522d855df6'] || ''
+        // 用宽松比较，同时兼容字符串 '1' 和数字 1
+        const isTemp = item[isTempField] == 1
 
         return {
           id: item['6943bd902161a0fc58bad5ab'] || '',
@@ -4791,10 +4807,20 @@ const loadEmployees = async (skipWorkshopFilter = false) => {
           position: item['6943bf332161a0fc58bad7a4'] || '',
           totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
           unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
-          dispatchWorkDate: dispatchWorkDate
+          dispatchWorkDate: dispatchWorkDate,
+          isTemp
         }
       })
       const filteredEmployees = mappedEmployees.filter(emp => emp.dispatchWorkDate === currentDate)
+        .filter(emp => {
+          // 根据员工类型筛选
+          if (employeeTypeFilter.value === 'normal') {
+            return !emp.isTemp  // 普：排除临时工
+          } else if (employeeTypeFilter.value === 'temp') {
+            return emp.isTemp  // 临：只选临时工
+          }
+          return true
+        })
 
       allEmployeesOptions.value = filteredEmployees.map(emp => ({
         label: emp.name,
