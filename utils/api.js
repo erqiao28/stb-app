@@ -18,8 +18,17 @@ export const API_BASE = 'https://www.dachen.vip'
  */
 export function getApiRequestBase() {
   try {
+    // 优先使用构建时的环境变量
     if (typeof process !== 'undefined' && process.env && process.env.UNI_PLATFORM === 'h5') {
       return ''
+    }
+    // 备用：使用运行时的平台信息（仅在非 H5 构建时有效）
+    if (typeof uni !== 'undefined' && uni.getSystemInfoSync) {
+      const systemInfo = uni.getSystemInfoSync()
+      const platform = systemInfo.platform?.toLowerCase() || ''
+      if (platform === 'h5' || platform === 'devtools') {
+        return ''
+      }
     }
   } catch (_) {
     /* ignore */

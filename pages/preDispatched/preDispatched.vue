@@ -147,16 +147,16 @@
 						<text class="order-index">{{ chineseNumberMap[gIdx + 1] || (gIdx + 1) }}</text>
 						<view class="order-header-main">
 							<text class="order-no">{{ group.orderNo || '-' }}</text>
-							<text class="order-delivery-date" v-if="group.orderDeliveryDate">{{ group.orderDeliveryDate }}</text>
+							<text class="order-delivery-date" v-if="group.productDeliveryDate">{{ group.productDeliveryDate }}</text>
 						</view>
 						<text class="order-count">({{ group.products.length }})</text>
 					</view>
 						<view class="order-products" v-show="!isOrderCollapsed(group.orderNo)">
 							<view
 								v-for="(product, idx) in group.products"
-								:key="product.rowid || ('product-' + idx)"
+								:key="product.uniqueKey || ('product-' + idx)"
 								class="product-item"
-								:class="{ 'product-active': selectedProductIds.includes(product.rowid) }"
+								:class="{ 'product-active': selectedProductIds.includes(product.uniqueKey) }"
 								@click="handleProductClick(product)"
 								@longpress="handleLongPress(product)"
 								@mousedown="onMouseDown(product)"
@@ -169,14 +169,14 @@
 									<text class="product-delivery-date" v-if="product.productDeliveryDate">{{ product.productDeliveryDate }}</text>
 								</view>
 								<view class="product-btns">
-									<text class="expand-btn" @click.stop="toggleExpand(product.rowid)">{{ expandedIds.includes(product.rowid) ? '▼' : '▲' }}</text>
+									<text class="expand-btn" @click.stop="toggleExpand(product.uniqueKey)">{{ expandedIds.includes(product.uniqueKey) ? '▼' : '▲' }}</text>
 									<view class="dispatch-icon" @click.stop="openDispatchModal(product)">
 										<view class="dispatch-icon-line"></view>
 										<view class="dispatch-icon-line"></view>
 										<view class="dispatch-icon-line"></view>
 									</view>
 								</view>
-								<view class="product-spec" v-if="expandedIds.includes(product.rowid)">
+								<view class="product-spec" v-if="expandedIds.includes(product.uniqueKey)">
 								<view
 									class="spec-row"
 									v-for="(specItem, sIdx) in (product.specification || '-').split(/[;；]/).filter(Boolean)"
@@ -894,7 +894,6 @@ const PRE_DISPATCH_FIELD_MAP = {
 	paintSpec: '6a3deb356d70ffabc6702d01',
 	polishSpec: '6a3deb356d70ffabc6702d02',
 	materialSizeSpec: '6a3debe76d70ffabc6702dbb',
-	orderDeliveryDate: '6a41cc716d70ffabc670f3c0',
 	productDeliveryDate: '6a1e7d2c27514927ff33e56b'
 }
 
@@ -997,6 +996,10 @@ const chineseNumberMap = {
 const processList = ref([])
 const loadedProductIds = ref([])
 const selectedProcessIds = ref([])
+// 记录产品列表的排列顺序（首次加载产品列表时记录），用于工序列表按此顺序排列
+const productOrderMap = ref(new Map())
+// 记录用户主动勾选过的工序ID，刷新时只对这些工序进行关联预派工自动勾选
+const userCheckedProcessIds = ref(new Set())
 // 记录用户手动取消勾选的工序ID，用于刷新时保留用户的操作
 const manuallyDeselectedProcessIds = ref(new Set())
 const employeeList = ref([])
@@ -1599,7 +1602,6 @@ const mapPreDispatchRow = (item) => ({
 	paintSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.paintSpec]),
 	polishSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.polishSpec]),
 	materialSizeSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.materialSizeSpec]),
-	orderDeliveryDate: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.orderDeliveryDate]) || '',
 	productDeliveryDate: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.productDeliveryDate]) || ''
 })
 
@@ -1700,7 +1702,7 @@ const loadProcessDictMap = async () => {
 		let allRows = []
 		let pageNum = 1
 		const pageSize = 100
-		const MAX_PAGES = 5
+		const MAX_PAGES = 50  // 增加页数上限
 		while (pageNum <= MAX_PAGES) {
 			const res = await callWorkflowListAPIPaged({
 				worksheetId: PROCESS_DICT_WORKSHEET_ID,
@@ -1736,7 +1738,7 @@ const loadCraftPositionMap = async () => {
 		let allRows = []
 		let pageNum = 1
 		const pageSize = 100
-		const MAX_PAGES = 5
+		const MAX_PAGES = 50  // 增加页数上限
 		while (pageNum <= MAX_PAGES) {
 			const res = await callWorkflowListAPIPaged({
 				worksheetId: CRAFT_POSITION_WORKSHEET_ID,
@@ -2210,7 +2212,7 @@ const confirmSelectedProducts = async () => {
 const handleConfirmDispatch = async () => {
 	// 只获取选中产品的预派工 rowid
 	const allRowids = productList.value
-		.filter(item => selectedProductIds.value.includes(item.rowid))
+		.filter(item => selectedProductIds.value.includes(item.uniqueKey))
 		.flatMap(item => item.preDispatchRowids || [])
 		.filter(Boolean)
 	if (allRowids.length === 0) {
@@ -2275,7 +2277,7 @@ const handleProcessListConfirm = async (productRowid) => {
 	let noProcessPreDispatchRowid = ''
 
 	// 获取该产品下所有预派工rowids（包括有工序和无工序的）
-	const product = productList.value.find(item => item.rowid === productRowid)
+	const product = productList.value.find(item => item.uniqueKey === productRowid)
 	const allProductPreDispatchRowids = Array.isArray(product?.preDispatchRowids) ? product.preDispatchRowids : []
 	let pdRows = []
 	if (allProductPreDispatchRowids.length > 0) {
@@ -2387,7 +2389,7 @@ const handleProcessListConfirm = async (productRowid) => {
 		
 		// 轮询等待后端工作流完成并把当日工资写入预派工记录
 		const checkedProcessRowids = checkedProcesses.map(p => p.rowid)
-		const product = productList.value.find(item => item.rowid === productRowid)
+		const product = productList.value.find(item => item.uniqueKey === productRowid)
 		if (product) {
 			uni.showLoading({ title: '正在匹配员工中...', mask: true })
 			await waitForPreDispatchDailyWage(product, checkedProcessRowids)
@@ -2526,14 +2528,25 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 		mapped.forEach((item) => {
 			const key = `${item.orderNo || ''}|${item.productNameNew || ''}|${item.productionCode || ''}`
 			if (!groupedMap[key]) {
-				groupedMap[key] = { ...item, rowid: key, preDispatchRowids: [] }
+				groupedMap[key] = { ...item, uniqueKey: key, preDispatchRowids: [] }
 			}
 			groupedMap[key].preDispatchRowids.push(item.rowid)
 		})
 		productList.value = Object.values(groupedMap).sort((a, b) => {
-			if (!a.orderDeliveryDate) return 1
-			if (!b.orderDeliveryDate) return -1
-			return a.orderDeliveryDate.localeCompare(b.orderDeliveryDate)
+			// 优先按交货日期排序
+			if (!a.productDeliveryDate) return 1
+			if (!b.productDeliveryDate) return -1
+			const dateCompare = a.productDeliveryDate.localeCompare(b.productDeliveryDate)
+			if (dateCompare !== 0) return dateCompare
+			// 交货日期相同时，按 rowid 字典序排序
+			const aId = a.rowid || ''
+			const bId = b.rowid || ''
+			return aId.localeCompare(bId)
+		})
+		// 记录产品列表的排列顺序（使用 uniqueKey）
+		productOrderMap.value = new Map()
+		productList.value.forEach((product, index) => {
+			productOrderMap.value.set(product.uniqueKey, index)
 		})
 	} catch (e) {
 		console.error('加载产品失败:', e)
@@ -2546,34 +2559,34 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 
 
 const handleProductClick = (product) => {
-	if (!product || !product.rowid) return
-	const idx = selectedProductIds.value.indexOf(product.rowid)
+	if (!product || !product.uniqueKey) return
+	const idx = selectedProductIds.value.indexOf(product.uniqueKey)
 	if (idx >= 0) {
 		selectedProductIds.value.splice(idx, 1)
 	} else {
-		selectedProductIds.value.push(product.rowid)
+		selectedProductIds.value.push(product.uniqueKey)
 		loadProductProcesses(product)
 	}
 }
 
 const openDispatchModal = async (product) => {
-	if (!product || !product.rowid) return
+	if (!product || !product.uniqueKey) return
 
 	// 如果该产品的工序还没加载，先加载工序数据
-	const existingProcesses = processList.value.filter(p => p.productRowid === product.rowid)
-	if (existingProcesses.length === 0 && !loadedProductIds.value.includes(product.rowid)) {
+	const existingProcesses = processList.value.filter(p => p.productRowid === product.uniqueKey)
+	if (existingProcesses.length === 0 && !loadedProductIds.value.includes(product.uniqueKey)) {
 		await loadProductProcesses(product)
 	}
 
 	dispatchModalProduct.value = product
-	dispatchModalInput.value = productDispatchCounts.value[product.rowid] || '0'
+	dispatchModalInput.value = productDispatchCounts.value[product.uniqueKey] || '0'
 
 	// 计算可派数量和完成数量
 	let dispatchCount = 0
 	let finishCount = 0
 
 	// 获取该产品下的所有工序
-	const productProcesses = processList.value.filter(p => p.productRowid === product.rowid)
+	const productProcesses = processList.value.filter(p => p.productRowid === product.uniqueKey)
 	// 有预派工关联的工序
 	const associatedProcesses = productProcesses.filter(p => p.preDispatchRowid)
 	// 有预派工rowids
@@ -2630,7 +2643,7 @@ const saveDispatchModal = () => {
 		return
 	}
 
-	productDispatchCounts.value[dispatchModalProduct.value.rowid] = String(num)
+	productDispatchCounts.value[dispatchModalProduct.value.uniqueKey] = String(num)
 	closeDispatchModal()
 }
 
@@ -2757,16 +2770,16 @@ const waitForPreDispatchDailyWage = async (product, checkedProcessRowids, maxRet
 }
 
 const loadProductProcesses = async (product) => {
-	if (!product || !product.rowid || loadedProductIds.value.includes(product.rowid)) return
+	if (!product || !product.uniqueKey || loadedProductIds.value.includes(product.uniqueKey)) return
 	const productionCode = product.productionCode
 	if (!productionCode) return
 	
 	// 记录当前产品的旧工序 rowid，刷新后只清理该产品的选中状态，不影响其他产品
 	const oldProductProcessRowids = new Set(
-		processList.value.filter(p => p.productRowid === product.rowid).map(p => p.rowid)
+		processList.value.filter(p => p.productRowid === product.uniqueKey).map(p => p.rowid)
 	)
 	
-	loadedProductIds.value.push(product.rowid)
+	loadedProductIds.value.push(product.uniqueKey)
 	try {
 		const associatedMap = await loadAssociatedProcessDetails(product)
 		const associatedRowids = new Set(associatedMap.keys())
@@ -2804,7 +2817,7 @@ const loadProductProcesses = async (product) => {
 			const processDictRowids = extractRelationSids(item[PROCESS_DETAIL_FIELD_MAP.processName])
 			return {
 				rowid: item.rowid || '',
-				productRowid: product.rowid,
+				productRowid: product.uniqueKey,
 				productName: product.productNameNew || product.productName || '-',
 				sequence: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.sequence]),
 				processName: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.processName]),
@@ -2828,9 +2841,9 @@ const loadProductProcesses = async (product) => {
 		selectedProcessIds.value = selectedProcessIds.value.filter(rowid => {
 			return !oldProductProcessRowids.has(rowid) || currentProcessRowids.has(rowid)
 		})
-		// 自动勾选关联预派工的工序（排除用户手动取消勾选的）
+		// 只对用户主动勾选过的工序进行关联预派工自动勾选
 		newProcesses.forEach(p => {
-			if (p.isAssociated && !selectedProcessIds.value.includes(p.rowid) && !manuallyDeselectedProcessIds.value.has(p.rowid)) {
+			if (p.isAssociated && userCheckedProcessIds.value.has(p.rowid) && !manuallyDeselectedProcessIds.value.has(p.rowid)) {
 				selectedProcessIds.value.push(p.rowid)
 			}
 		})
@@ -2859,7 +2872,8 @@ const toggleProcessSelection = (process) => {
 			uni.showToast({ title: '产品已完成该工序', icon: 'none' })
 		}
 		selectedProcessIds.value.push(process.rowid)
-
+		// 记录用户主动勾选，刷新时保留勾选状态
+		userCheckedProcessIds.value.add(process.rowid)
 		// 归类联动：开关开启时才联动
 		if (syncSelectEnabled.value) {
 			autoSelectRelatedProcesses(process)
@@ -2871,11 +2885,20 @@ const toggleProcessSelection = (process) => {
 const autoDeselectRelatedProcesses = (process) => {
 	if (!process.processName || !craftPositionMap.value || craftPositionMap.value.size === 0) return
 
-	// 查找该工序所属的归类名称
+	// 查找该工序所属的归类名称（使用前缀匹配）
 	let craftPositionName = ''
 	craftPositionMap.value.forEach((processNames, name) => {
+		// 检查工序名称是否在归类的工序列表中，或者工序名称是否是某个归类工序的前缀
 		if (processNames.includes(process.processName)) {
 			craftPositionName = name
+		} else {
+			// 检查工序名称是否是归类工序的前缀
+			for (const classifiedProcess of processNames) {
+				if (classifiedProcess.startsWith(process.processName) || process.processName.startsWith(classifiedProcess)) {
+					craftPositionName = name
+					break
+				}
+			}
 		}
 	})
 
@@ -2886,10 +2909,15 @@ const autoDeselectRelatedProcesses = (process) => {
 
 	// 在当前已加载的产品工序中，找出同归类的工序并取消勾选
 	processList.value.forEach(p => {
-		if (p.rowid && p.productRowid === process.productRowid && relatedProcessNames.includes(p.processName)) {
-			const idx = selectedProcessIds.value.indexOf(p.rowid)
-			if (idx > -1) {
-				selectedProcessIds.value.splice(idx, 1)
+		if (p.rowid && p.productRowid === process.productRowid) {
+			// 检查工序名称是否匹配
+			const isMatch = relatedProcessNames.includes(p.processName) ||
+				relatedProcessNames.some(cp => p.processName.startsWith(cp) || cp.startsWith(p.processName))
+			if (isMatch) {
+				const idx = selectedProcessIds.value.indexOf(p.rowid)
+				if (idx > -1) {
+					selectedProcessIds.value.splice(idx, 1)
+				}
 			}
 		}
 	})
@@ -2897,13 +2925,24 @@ const autoDeselectRelatedProcesses = (process) => {
 
 // 根据工序归类自动勾选同类别工序
 const autoSelectRelatedProcesses = (process) => {
-	if (!process.processName || !craftPositionMap.value || craftPositionMap.value.size === 0) return
+	if (!process.processName || !craftPositionMap.value || craftPositionMap.value.size === 0) {
+		return
+	}
 	
-	// 查找该工序所属的归类名称
+	// 查找该工序所属的归类名称（使用前缀匹配）
 	let craftPositionName = ''
 	craftPositionMap.value.forEach((processNames, name) => {
+		// 检查工序名称是否在归类的工序列表中，或者工序名称是否是某个归类工序的前缀
 		if (processNames.includes(process.processName)) {
 			craftPositionName = name
+		} else {
+			// 检查工序名称是否是归类工序的前缀
+			for (const classifiedProcess of processNames) {
+				if (classifiedProcess.startsWith(process.processName) || process.processName.startsWith(classifiedProcess)) {
+					craftPositionName = name
+					break
+				}
+			}
 		}
 	})
 	
@@ -2914,9 +2953,13 @@ const autoSelectRelatedProcesses = (process) => {
 	
 	// 在当前已加载的产品工序中，找出同归类的工序并勾选
 	processList.value.forEach(p => {
-		if (p.rowid && p.productRowid === process.productRowid && relatedProcessNames.includes(p.processName)) {
-			if (!selectedProcessIds.value.includes(p.rowid)) {
+		if (p.rowid && p.productRowid === process.productRowid) {
+			// 检查工序名称是否匹配
+			const isMatch = relatedProcessNames.includes(p.processName) ||
+				relatedProcessNames.some(cp => p.processName.startsWith(cp) || cp.startsWith(p.processName))
+			if (isMatch && !selectedProcessIds.value.includes(p.rowid)) {
 				selectedProcessIds.value.push(p.rowid)
+				userCheckedProcessIds.value.add(p.rowid)  // 记录用户主动勾选
 			}
 		}
 	})
@@ -3105,26 +3148,39 @@ const groupedProductList = computed(() => {
 	productList.value.forEach((product) => {
 		const key = product.orderNo || '未分类'
 		if (!groups[key]) {
-			groups[key] = { orderNo: key, orderDeliveryDate: product.orderDeliveryDate || '', products: [] }
+			groups[key] = { orderNo: key, productDeliveryDate: product.productDeliveryDate || '', products: [] }
 		}
 		groups[key].products.push(product)
 	})
 	return Object.values(groups).sort((a, b) => {
-		if (!a.orderDeliveryDate) return 1
-		if (!b.orderDeliveryDate) return -1
-		return a.orderDeliveryDate.localeCompare(b.orderDeliveryDate)
+		// 优先按交货日期排序
+		if (!a.productDeliveryDate) return 1
+		if (!b.productDeliveryDate) return -1
+		const dateCompare = a.productDeliveryDate.localeCompare(b.productDeliveryDate)
+		if (dateCompare !== 0) return dateCompare
+		// 交货日期相同时，按第一个产品的 rowid 字典序排序
+		const aId = a.products[0]?.rowid || ''
+		const bId = b.products[0]?.rowid || ''
+		return aId.localeCompare(bId)
 	})
 })
 
 const groupedProcessList = computed(() => {
 	const groups = []
-	// 按左侧产品列表顺序遍历，保证工序列表顺序与产品列表一致（不受点击顺序影响）
-	productList.value.forEach((product) => {
-		if (!selectedProductIds.value.includes(product.rowid)) return
-		const processes = processList.value.filter(p => p.productRowid === product.rowid)
+	// 按 productOrderMap 记录的顺序遍历，保证工序列表顺序与产品列表一致（不受点击顺序影响）
+	// 使用 uniqueKey 作为产品唯一标识
+	const sortedProducts = [...productList.value].sort((a, b) => {
+		const orderA = productOrderMap.value.get(a.uniqueKey) ?? Infinity
+		const orderB = productOrderMap.value.get(b.uniqueKey) ?? Infinity
+		return orderA - orderB
+	})
+	sortedProducts.forEach((product) => {
+		// 使用 uniqueKey 判断是否选中
+		if (!selectedProductIds.value.includes(product.uniqueKey)) return
+		const processes = processList.value.filter(p => p.productRowid === product.uniqueKey)
 		if (processes.length === 0) return
 		groups.push({
-			productRowid: product.rowid,
+			productRowid: product.uniqueKey,
 			productName: product.productNameNew || product.productName || '-',
 			processes
 		})
@@ -3221,8 +3277,8 @@ const openProcessActionModalByRowid = (productRowid) => {
 	const selectedSeq = selectedProcess ? parseFloat(selectedProcess.sequence) || 0 : 0
 	// 生产顺序默认为选中工序顺序 + 0.01
 	processActionSequence.value = (selectedSeq + 0.01).toFixed(2)
-	const product = productList.value.find((p) => p.rowid === productRowid)
-	openProcessActionModal(product || { rowid: productRowid, productName: '' })
+	const product = productList.value.find((p) => p.uniqueKey === productRowid)
+	openProcessActionModal(product || { uniqueKey: productRowid, productName: '' })
 }
 
 const closeProcessActionModal = () => {
@@ -3246,7 +3302,7 @@ const waitForProcessUpdate = async (product, options = {}) => {
 	const { expectedCount, checkFunc } = options
 	const maxAttempts = 30 // 最多轮询30次
 	const intervalMs = 500 // 每500ms轮询一次
-	const productRowid = product?.rowid || ''
+	const productRowid = product?.uniqueKey || ''
 
 	// 获取当前工序快照
 	const getSnapshot = () => {
@@ -3393,7 +3449,7 @@ const confirmProcessAction = async () => {
 			uni.showToast({ title: '工序ID不存在', icon: 'none' })
 			return
 		}
-		const productRowid = product?.rowid || ''
+		const productRowid = product?.uniqueKey || ''
 		try {
 			uni.showLoading({ title: '删除中...' })
 			await http.post(DELETE_PROCESS_URL, { rowid: processRowid })
@@ -3429,7 +3485,7 @@ const confirmProcessAction = async () => {
 			uni.showToast({ title: '缺少产品编号', icon: 'none' })
 			return
 		}
-		const productRowid = product?.rowid || ''
+		const productRowid = product?.uniqueKey || ''
 		const params = {
 			processName: selected.processName || '',
 			processRowid: selected.rowid || '',
@@ -3813,7 +3869,7 @@ const handleVoidClick = async (item) => {
 const handleLongPress = (product) => {
 	showVoidModal.value = true
 	voidReason.value = ''
-	const rowids = product.preDispatchRowids || [product.rowid]
+	const rowids = product.preDispatchRowids || [product.uniqueKey]
 	voidRowid.value = rowids.filter(Boolean).join(',')
 }
 
@@ -3991,8 +4047,7 @@ const confirmEdit = async () => {
 			rowid: editData.value.rowid,
 			dispatchDate: editData.value.dispatchDate,
 			dispatchCount: editData.value.dispatchCount,
-			employeeIds: editData.value.selectedEmployeeIds,
-			employeeNames: editData.value.selectedEmployeeNames
+			employees: editData.value.selectedEmployeeIds
 		})
 		uni.showToast({ title: '更新成功', icon: 'success' })
 		closeEditModal()
@@ -4110,7 +4165,7 @@ const removeEmployeeFromEdit = (idx) => {
 // 确认员工编辑
 const confirmEmployeeEdit = async () => {
 	const preDispatchRowid = employeeEditData.value.preDispatchRowid
-	const selectedEmployeeIds = employeeEditData.value.selectedEmployeeIds
+	const selectedEmployeeIds = employeeEditData.value.selectedEmployeeIds || []
 	if (!preDispatchRowid) {
 		uni.showToast({ title: '缺少预派工记录', icon: 'none' })
 		return
@@ -4119,12 +4174,12 @@ const confirmEmployeeEdit = async () => {
 	// 构建请求数据：员工始终传递，没选择员工时传空数组
 	const requestData = {
 		rowid: preDispatchRowid,
-		employees: selectedEmployeeIds || []
+		employees: selectedEmployeeIds
 	}
 
 	try {
 		uni.showLoading({ title: '保存中...' })
-		await http.post('/api/workflow/hooks/NmEzYjc5NzIzN2MwOTg0NTBhOTIzMjYw', requestData)
+		await http.post(PRE_DISPATCH_UPDATE_URL, requestData)
 		uni.hideLoading()
 		uni.showToast({ title: '保存成功', icon: 'success' })
 
@@ -4139,10 +4194,10 @@ const confirmEmployeeEdit = async () => {
 			)
 			if (targetProduct) {
 				// 清除该产品的工序缓存
-				const idx = loadedProductIds.value.indexOf(targetProduct.rowid)
+				const idx = loadedProductIds.value.indexOf(targetProduct.uniqueKey)
 				if (idx > -1) loadedProductIds.value.splice(idx, 1)
 				// 从 processList 中移除该产品的旧工序
-				processList.value = processList.value.filter(p => p.productRowid !== targetProduct.rowid)
+				processList.value = processList.value.filter(p => p.productRowid !== targetProduct.uniqueKey)
 				// 重新加载工序
 				await loadProductProcesses(targetProduct)
 			}
