@@ -593,7 +593,7 @@
 	</view>
 
 	<view class="employee-modal" :class="{ show: showEmployeeSelector }" @click.self="closeEmployeeSelector">
-		<view class="employee-modal-content" @click.stop>
+		<view class="employee-modal-content" @click.stop :style="{ paddingTop: statusBarHeight + 'px' }">
 			<view class="employee-modal-header" @click="showWorkshopDropdown = false">
 				<text class="employee-modal-title">选择员工</text>
 				<view class="header-controls">
