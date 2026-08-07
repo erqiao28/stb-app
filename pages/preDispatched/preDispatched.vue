@@ -1134,6 +1134,13 @@ const employeeEditData = ref({
 const showEmployeeSelector = ref(false)
 const allEmployeeOptions = ref([])
 
+// 记录上次加载员工列表时的筛选条件，用于判断是否需要重新加载
+const lastEmployeeOptionsParams = ref({
+	workshop: '',
+	date: '',
+	type: 'normal'
+})
+
 // 员工类型切换：normal-正常员工，temp-临时工
 const employeeTypeFilter = ref('normal')
 
@@ -2769,6 +2776,41 @@ const waitForPreDispatchDailyWage = async (product, checkedProcessRowids, maxRet
 	return false
 }
 
+/**
+ * 轮询等待单个预派工记录的员工信息更新完成。
+ * 通过比对 dailyWage 中的员工 ID 与目标员工 ID 是否一致来判断是否更新完成。
+ */
+const waitForPreDispatchEmployeeUpdate = async (preDispatchRowid, targetEmployeeIds, maxRetries = 15, interval = 1000) => {
+	for (let i = 0; i < maxRetries; i++) {
+		await new Promise(resolve => setTimeout(resolve, interval))
+		// 查询该预派工记录
+		const res = await callWorkflowListAll({
+			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
+			filters: [{
+				controlId: 'rowid',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 1,
+				values: [preDispatchRowid]
+			}],
+			silent: true
+		}, 10)
+		const rows = Array.isArray(res?.data) ? res.data : []
+		const row = rows.find(item => item.rowid === preDispatchRowid)
+		if (!row) continue
+		// 获取 dailyWage 关联的员工 ID
+		const sids = extractRelationSids(row[PRE_DISPATCH_FIELD_MAP.dailyWage])
+		// 比对员工 ID 是否一致
+		const targetSet = new Set(targetEmployeeIds)
+		const sidSet = new Set(sids)
+		const isMatch = targetSet.size === sidSet.size && [...targetSet].every(id => sidSet.has(id))
+		if (isMatch) {
+			return true
+		}
+	}
+	return false
+}
+
 const loadProductProcesses = async (product) => {
 	if (!product || !product.uniqueKey || loadedProductIds.value.includes(product.uniqueKey)) return
 	const productionCode = product.productionCode
@@ -3633,6 +3675,7 @@ const loadWorkshopEmployees = async () => {
 // 员工选择框专用：喷涂车间时同时查喷涂+组装
 const loadWorkshopEmployeesForSelector = async () => {
 	try {
+		const t0 = Date.now()
 		const currentDate = filterDate.value
 		const workshopList = selectedSelectorWorkshop.value ? [selectedSelectorWorkshop.value] : []
 		const allRows = []
@@ -3648,8 +3691,10 @@ const loadWorkshopEmployeesForSelector = async () => {
 			let foundData = false
 			let hasMore = true
 			const MAX_PAGES = 500
+			let totalPages = 0
 
 			while (hasMore && pageNum <= MAX_PAGES) {
+				totalPages++
 				const res = await callWorkflowListAPIPaged({
 					worksheetId: EMPLOYEE_WORKSHEET_ID,
 					filters,
@@ -3680,6 +3725,7 @@ const loadWorkshopEmployeesForSelector = async () => {
 					pageNum++
 				}
 			}
+			console.log(`loadWorkshopEmployeesForSelector [${ws}] pages=${totalPages} filtered=${allRows.length} cost=${Date.now() - t0}ms`)
 		}
 
 		const mapped = allRows.map((item) => {
@@ -4061,6 +4107,7 @@ const confirmEdit = async () => {
 
 // 打开员工编辑弹窗
 const openEmployeeEditModal = async (processes, idx) => {
+	const t0 = Date.now()
 	const process = processes[idx]
 	if (!process) return
 
@@ -4068,6 +4115,7 @@ const openEmployeeEditModal = async (processes, idx) => {
 	const groupStartIdx = getEmployeeGroupStart(processes, idx)
 	const groupStartProcess = processes[groupStartIdx]
 	const groupSpan = getEmployeeGroupSpan(processes, groupStartIdx)
+	console.log('openEmployeeEditModal 1:', Date.now() - t0, 'ms')
 
 	// 判断显示工序名称还是岗位工序：岗位工序不为空时优先显示岗位工序
 	// 注意：process.positionProcess / craftPosition 在 loadAssociatedProcessDetails 中已从字典 ID 转换为名称
@@ -4083,8 +4131,22 @@ const openEmployeeEditModal = async (processes, idx) => {
 		selectedEmployeeIds: [],
 		selectedEmployeeNames: []
 	}
-	// 加载员工列表
-	await loadEmployeeOptions()
+	console.log('openEmployeeEditModal 2:', Date.now() - t0, 'ms')
+
+	// 复用已有员工列表：检查筛选条件是否变化
+	const currentParams = {
+		workshop: selectedSelectorWorkshop.value,
+		date: filterDate.value,
+		type: employeeTypeFilter.value
+	}
+	const paramsChanged = lastEmployeeOptionsParams.value.workshop !== currentParams.workshop ||
+		lastEmployeeOptionsParams.value.date !== currentParams.date ||
+		lastEmployeeOptionsParams.value.type !== currentParams.type
+	console.log('openEmployeeEditModal 3:', Date.now() - t0, 'ms', 'needLoad:', allEmployeeOptions.value.length === 0 || paramsChanged)
+	if (allEmployeeOptions.value.length === 0 || paramsChanged) {
+		await loadEmployeeOptions()
+	}
+	console.log('openEmployeeEditModal 4:', Date.now() - t0, 'ms')
 
 	// 匹配当前员工
 	const currentNames = groupStartProcess.employeeNames || []
@@ -4100,6 +4162,7 @@ const openEmployeeEditModal = async (processes, idx) => {
 		employeeEditData.value.selectedEmployeeIds = matchedIds
 		employeeEditData.value.selectedEmployeeNames = matchedNames
 	}
+	console.log('openEmployeeEditModal 5:', Date.now() - t0, 'ms')
 
 	showEmployeeEditModal.value = true
 }
@@ -4122,11 +4185,20 @@ const openEmployeeSelectorForEdit = async () => {
 	// 同步已选员工到 editData
 	editData.value.selectedEmployeeIds = [...employeeEditData.value.selectedEmployeeIds]
 	editData.value.selectedEmployeeNames = [...employeeEditData.value.selectedEmployeeNames]
-	await loadWorkshopEmployees()
-	await loadEmployeeOptions()
+	// 复用已有员工列表：检查筛选条件是否变化
+	const currentParams = {
+		workshop: selectedSelectorWorkshop.value,
+		date: filterDate.value,
+		type: employeeTypeFilter.value
+	}
+	const paramsChanged = lastEmployeeOptionsParams.value.workshop !== currentParams.workshop ||
+		lastEmployeeOptionsParams.value.date !== currentParams.date ||
+		lastEmployeeOptionsParams.value.type !== currentParams.type
+	if (allEmployeeOptions.value.length === 0 || paramsChanged) {
+		await loadEmployeeOptions()
+	}
 	expandedEmployeeIds.value = []
 	sortEmployeeOptionsByPosition()
-	autoSelectFirstMatchingEmployee()
 	showEmployeeSelector.value = true
 }
 
@@ -4186,28 +4258,31 @@ const confirmEmployeeEdit = async () => {
 		// 先关闭编辑弹窗
 		closeEmployeeEditModal()
 
-		// 延迟刷新，等待后端数据更新完成
-		setTimeout(async () => {
-			// 刷新工序列表的员工数据：清除缓存并重新加载当前选中产品的工序
-			const targetProduct = productList.value.find(p =>
-				p.preDispatchRowids && p.preDispatchRowids.includes(preDispatchRowid)
-			)
-			if (targetProduct) {
-				// 清除该产品的工序缓存
-				const idx = loadedProductIds.value.indexOf(targetProduct.uniqueKey)
-				if (idx > -1) loadedProductIds.value.splice(idx, 1)
-				// 从 processList 中移除该产品的旧工序
-				processList.value = processList.value.filter(p => p.productRowid !== targetProduct.uniqueKey)
-				// 重新加载工序
-				await loadProductProcesses(targetProduct)
-			}
+		// 轮询等待预派工记录的员工信息更新完成后再刷新
+		const updateSuccess = await waitForPreDispatchEmployeeUpdate(preDispatchRowid, selectedEmployeeIds)
+		if (!updateSuccess) {
+			console.warn('员工信息更新超时，但仍继续刷新')
+		}
 
-			// 刷新底部员工列表
-			loadWorkshopEmployees()
+		// 刷新工序列表的员工数据：清除缓存并重新加载当前选中产品的工序
+		const targetProduct = productList.value.find(p =>
+			p.preDispatchRowids && p.preDispatchRowids.includes(preDispatchRowid)
+		)
+		if (targetProduct) {
+			// 清除该产品的工序缓存
+			const idx = loadedProductIds.value.indexOf(targetProduct.uniqueKey)
+			if (idx > -1) loadedProductIds.value.splice(idx, 1)
+			// 从 processList 中移除该产品的旧工序
+			processList.value = processList.value.filter(p => p.productRowid !== targetProduct.uniqueKey)
+			// 重新加载工序
+			await loadProductProcesses(targetProduct)
+		}
 
-			// 刷新汇总
-			loadEmployeeDispatchSummary()
-		}, 500)
+		// 刷新底部员工列表
+		loadWorkshopEmployees()
+
+		// 刷新汇总
+		loadEmployeeDispatchSummary()
 	} catch (e) {
 		uni.hideLoading()
 		console.error('保存员工编辑失败:', e)
@@ -4255,6 +4330,12 @@ const loadEmployeeOptions = async () => {
 			isNewEmployee: item.isNewEmployee || false,
 			dispatchWorkDate: currentDate
 		}))
+		// 记录当前筛选条件
+		lastEmployeeOptionsParams.value = {
+			workshop: selectedSelectorWorkshop.value,
+			date: currentDate,
+			type: employeeTypeFilter.value
+		}
 	} catch (error) {
 		console.error('加载员工列表失败:', error)
 		allEmployeeOptions.value = []
@@ -4266,7 +4347,6 @@ const openEmployeeSelector = async () => {
 	await loadEmployeeOptions()
 	expandedEmployeeIds.value = []
 	sortEmployeeOptionsByPosition()
-	autoSelectFirstMatchingEmployee()
 	showEmployeeSelector.value = true
 }
 
@@ -4290,23 +4370,6 @@ const sortEmployeeOptionsByPosition = () => {
 		return String(a.name || '').localeCompare(String(b.name || ''))
 	})
 	allEmployeeOptions.value = sorted
-}
-
-const AUTO_SELECT_PROCESS_NAMES = ['点焊', '喷涂', '去油', '超声波', '喷砂', '喷砂叠锅']
-
-const autoSelectFirstMatchingEmployee = () => {
-	const targetName = employeeEditData.value.processName || editData.value.processDisplay || ''
-	const selectedIds = editData.value.selectedEmployeeIds || []
-	if (!targetName || !AUTO_SELECT_PROCESS_NAMES.includes(targetName) || selectedIds.length > 0) return
-
-	const matchedEmp = allEmployeeOptions.value.find(emp => {
-		if (!emp.position) return false
-		const positions = emp.position.split(/[,，]/).map(p => p.trim()).filter(Boolean)
-		return positions.length > 0 && positions[0].includes(targetName)
-	})
-	if (matchedEmp) {
-		toggleEmployee(matchedEmp)
-	}
 }
 
 const closeEmployeeSelector = () => {
