@@ -236,7 +236,7 @@
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.orderCount || 0 }}</view>
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ p.needCount || 0 }}</view>
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 7, gridColumn: 3 + idx }">{{ p.finishCount || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 8, gridColumn: 3 + idx }">{{ selectedProcessIds.includes(p.rowid) ? (productDispatchCounts[p.productRowid] || 0) : '' }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 8, gridColumn: 3 + idx }">{{ p.dispatchCount || 0 }}</view>
 							<view
 							v-if="isEmployeeGroupStart(group.processes, idx)"
 							class="grid-cell employee-cell"
@@ -2394,13 +2394,24 @@ const handleProcessListConfirm = async (productRowid) => {
 		uni.hideLoading()
 		uni.showToast({ title: '提交成功', icon: 'success' })
 		
-		// 轮询等待后端工作流完成并把当日工资写入预派工记录
+		// 轮询等待后端工作流完成
 		const checkedProcessRowids = checkedProcesses.map(p => p.rowid)
 		const product = productList.value.find(item => item.uniqueKey === productRowid)
+		const isStretchWorkshop = loginWorkshop.value === '拉伸车间'
+		const hasOldProcess = checkedProcesses.some(p => !p.isNewProcess)
+		
 		if (product) {
-			uni.showLoading({ title: '正在匹配员工中...', mask: true })
-			await waitForPreDispatchDailyWage(product, checkedProcessRowids)
-			uni.hideLoading()
+			// 拉伸车间 + 老工序：检查工序是否关联了预派工
+			// 其他情况：检查工序的员工是否都匹配了当日工资
+			if (isStretchWorkshop && hasOldProcess) {
+				uni.showLoading({ title: '正在关联预派工中...', mask: true })
+				await waitForPreDispatchAssociation(product, checkedProcessRowids)
+				uni.hideLoading()
+			} else {
+				uni.showLoading({ title: '正在匹配员工中...', mask: true })
+				await waitForPreDispatchDailyWage(product, checkedProcessRowids)
+				uni.hideLoading()
+			}
 		}
 		
 		// 刷新该产品工序数据，保留勾选状态
@@ -2726,6 +2737,8 @@ const loadAssociatedProcessDetails = async (product) => {
 		const craftPositionMap = new Map()
 		// 获取预派工的 positionProcess（用岗位工序表转换 ID 为名称）
 		const positionProcessMap = new Map()
+		// 获取预派工的派工数量
+		const dispatchCountMap = new Map()
 		preDispatchRows.forEach((item) => {
 			const pdRowid = item.rowid
 			const craftPositionId = formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.craftPosition]) || ''
@@ -2739,6 +2752,10 @@ const loadAssociatedProcessDetails = async (product) => {
 				.filter(Boolean)
 				.join('、')
 			positionProcessMap.set(pdRowid, positionProcessName)
+
+			// 提取预派工的派工数量
+			const dispatchCount = formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.dispatchCount]) || 0
+			dispatchCountMap.set(pdRowid, dispatchCount)
 		})
 		nameSetMap.forEach((names, sid) => {
 			const pdRowid = preDispatchRowidMap.get(sid) || ''
@@ -2746,7 +2763,8 @@ const loadAssociatedProcessDetails = async (product) => {
 				employeeNames: names.size > 0 ? [...names] : [],
 				preDispatchRowid: pdRowid,
 				craftPosition: craftPositionMap.get(pdRowid) || '',
-				positionProcess: positionProcessMap.get(pdRowid) || ''
+				positionProcess: positionProcessMap.get(pdRowid) || '',
+				dispatchCount: dispatchCountMap.get(pdRowid) || 0
 			})
 		})
 		return resultMap
@@ -2811,6 +2829,25 @@ const waitForPreDispatchEmployeeUpdate = async (preDispatchRowid, targetEmployee
 	return false
 }
 
+/**
+ * 轮询等待工序关联预派工记录完成。
+ * 检查勾选的工序是否都关联了预派工（preDispatchRowid 不为空）。
+ */
+const waitForPreDispatchAssociation = async (product, checkedProcessRowids, maxRetries = 15, interval = 1000) => {
+	for (let i = 0; i < maxRetries; i++) {
+		await new Promise(resolve => setTimeout(resolve, interval))
+		const associatedMap = await loadAssociatedProcessDetails(product)
+		const allAssociated = checkedProcessRowids.every(rowid => {
+			const info = associatedMap.get(rowid)
+			return info && info.preDispatchRowid && info.preDispatchRowid.length > 0
+		})
+		if (allAssociated) {
+			return true
+		}
+	}
+	return false
+}
+
 const loadProductProcesses = async (product) => {
 	if (!product || !product.uniqueKey || loadedProductIds.value.includes(product.uniqueKey)) return
 	const productionCode = product.productionCode
@@ -2857,6 +2894,8 @@ const loadProductProcesses = async (product) => {
 			const associatedInfo = associatedMap.get(item.rowid) || { employeeNames: [], preDispatchRowid: '', craftPosition: '', positionProcess: '' }
 			// 工序名称字段可能是关联到数据字典，提取字典 rowid 用于归类联动匹配
 			const processDictRowids = extractRelationSids(item[PROCESS_DETAIL_FIELD_MAP.processName])
+			// 新工序字段：值为 1 是新工序，0 是老工序
+			const isNewProcess = formatFieldValue(item['6a758fd34239d5290f312518']) == '1'
 			return {
 				rowid: item.rowid || '',
 				productRowid: product.uniqueKey,
@@ -2874,7 +2913,9 @@ const loadProductProcesses = async (product) => {
 				employeeNames: associatedInfo.employeeNames,
 				preDispatchRowid: associatedInfo.preDispatchRowid,
 				craftPosition: associatedInfo.craftPosition,
-				positionProcess: associatedInfo.positionProcess
+				positionProcess: associatedInfo.positionProcess,
+				isNewProcess,
+				dispatchCount: associatedInfo.dispatchCount
 			}
 		}).sort((a, b) => (parseFloat(a.sequence) || 0) - (parseFloat(b.sequence) || 0))
 		processList.value.push(...newProcesses)
