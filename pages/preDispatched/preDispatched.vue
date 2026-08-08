@@ -1080,6 +1080,8 @@ const voidRowid = ref('')
 const showConfirmDispatchModal = ref(false)
 const confirmDispatchCount = ref(0)
 const confirmDispatchRowids = ref([])
+// 确认派工前的初始产品条数（用于轮询判断）
+const initialProductCountForConfirm = ref(0)
 
 // 订单选择相关
 const showSelectOrderModal = ref(false)
@@ -2252,6 +2254,8 @@ const handleConfirmDispatch = async () => {
 		uni.showToast({ title: '没有可确认的预派工（均无员工）', icon: 'none' })
 		return
 	}
+	// 记录初始产品条数，用于确认派工成功后轮询判断
+	initialProductCountForConfirm.value = productList.value.length
 	confirmDispatchCount.value = validRowids.length
 	confirmDispatchRowids.value = validRowids
 	showConfirmDispatchModal.value = true
@@ -2440,6 +2444,15 @@ const handleProcessListConfirm = async (productRowid) => {
 
 const doConfirmDispatch = async () => {
 	showConfirmDispatchModal.value = false
+	// 期望的最终产品条数 = 初始条数 - 确认派工数量
+	const expectedProductCount = initialProductCountForConfirm.value - confirmDispatchCount.value
+	// 根据确认数量动态调整轮询次数：基础 6 次(3秒)，每多 1 条增加 1 次，最多 10 次(5秒)
+	const BASE_RETRY = 6
+	const EXTRA_PER_ITEM = 1
+	const MAX_RETRY = 10
+	const INTERVAL = 500
+	const maxRetry = Math.min(BASE_RETRY + confirmDispatchCount.value * EXTRA_PER_ITEM, MAX_RETRY)
+
 	try {
 		uni.showLoading({ title: '确认中...' })
 		await http.post(PRE_DISPATCH_CONFIRM_URL, {
@@ -2447,7 +2460,28 @@ const doConfirmDispatch = async () => {
 		})
 		uni.hideLoading()
 		uni.showToast({ title: '确认派工成功', icon: 'success' })
+
+		// 轮询等待产品条数匹配后刷新
+		uni.showLoading({ title: '刷新中...', mask: true })
+		let found = false
+
+		for (let i = 0; i < maxRetry; i++) {
+			await loadProducts(true, true)
+			if (productList.value.length === expectedProductCount) {
+				found = true
+				break
+			}
+			if (i < maxRetry - 1) {
+				await new Promise(resolve => setTimeout(resolve, INTERVAL))
+			}
+		}
+
+		uni.hideLoading()
+		// 无论是否轮询到，都执行刷新确保数据最新
 		handleSearch()
+		if (!found) {
+			console.warn('确认派工后轮询未匹配到预期数量，当前:', productList.value.length, '预期:', expectedProductCount)
+		}
 	} catch (e) {
 		uni.hideLoading()
 		console.error('确认派工失败:', e)
