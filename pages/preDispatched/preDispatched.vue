@@ -136,7 +136,7 @@
 		<view class="main-content">
 			<view class="left-panel">
 				<view class="panel-title">
-					<text>产品列表({{ selectedProductIds.length }}/{{ productList.length }})</text>
+					<text>产品列表({{ productListStats.selected }}/{{ productListStats.total }})</text>
 					<view class="sync-select-switch" @click.stop="syncSelectEnabled = !syncSelectEnabled">
 						<view class="switch" :class="{ 'switch-on': syncSelectEnabled }"></view>
 					</view>
@@ -195,6 +195,8 @@
 		</scroll-view>
 		<view class="left-bottom-btns">
 					<view class="left-btn left-btn-add" @click="handleAddProduct">添加产品</view>
+					<view class="left-btn left-btn-delay" @click="handleDelayDispatch">延后</view>
+					<view class="left-btn left-btn-remove" @click="handleRemoveDispatch">移除</view>
 					<view class="left-btn left-btn-confirm" @click="handleConfirmDispatch">确认派工</view>
 				</view>
 			</view>
@@ -206,37 +208,43 @@
 							v-for="group in groupedProcessList"
 							:key="group.productRowid"
 							class="process-table-grid"
-							:style="{ gridTemplateColumns: 'min-content min-content repeat(' + group.processes.length + ', min-content)' }"
+							:style="{ gridTemplateColumns: 'px2vw(50px) px2vw(50px) min-content repeat(' + group.processes.length + ', min-content)' }"
 						>
-							<view class="grid-product-name" style="grid-row: 1 / span 9; grid-column: 1">
-				<view
-					class="grid-product-action"
-					:style="{ backgroundColor: isProcessActionEnabled(group.productRowid) ? '#5884f1' : '#999' }"
-					@click.stop="openProcessActionModalByRowid(group.productRowid)"
-				>工艺调整</view>
-						<view class="grid-product-name-text">{{ group.productName }}</view>
-						<view class="grid-product-confirm" @click.stop="handleProcessListConfirm(group.productRowid)">确定</view>
-					</view>
-							<view class="grid-label-cell" style="grid-row: 1; grid-column: 2">选中</view>
-							<view class="grid-label-cell" style="grid-row: 2; grid-column: 2">顺序</view>
-							<view class="grid-label-cell" style="grid-row: 3; grid-column: 2">工序</view>
-							<view class="grid-label-cell" style="grid-row: 4; grid-column: 2">日产量</view>
-							<view class="grid-label-cell" style="grid-row: 5; grid-column: 2">订单数</view>
-							<view class="grid-label-cell" style="grid-row: 6; grid-column: 2">待派工</view>
-							<view class="grid-label-cell" style="grid-row: 7; grid-column: 2">已完成</view>
-							<view class="grid-label-cell" style="grid-row: 8; grid-column: 2">派工数量</view>
-						<view class="grid-label-cell" style="grid-row: 9; grid-column: 2">员工</view>
+							<!-- 第一栏：订单编号 + 产品名称 -->
+							<view class="grid-order-info" style="grid-row: 1 / span 9; grid-column: 1">
+								<view class="grid-orderno">{{ group.orderNo.replace(/-/g, '|') }}</view>
+								<view class="grid-product-name-v">{{ group.productName }}</view>
+							</view>
+							<!-- 第二栏：按钮 -->
+							<view class="grid-product-name" style="grid-row: 1 / span 9; grid-column: 2">
+								<view
+									class="grid-product-action"
+									:style="{ backgroundColor: isProcessActionEnabled(group.productRowid) ? '#5884f1' : '#999' }"
+									@click.stop="openProcessActionModalByRowid(group.productRowid)"
+								>工艺调整</view>
+								<view class="grid-product-refresh" @click.stop="refreshProcessList(group.productRowid)">刷新</view>
+								<view class="grid-product-confirm" @click.stop="handleProcessListConfirm(group.productRowid)">确定</view>
+							</view>
+							<view class="grid-label-cell" style="grid-row: 1; grid-column: 3">选中</view>
+							<view class="grid-label-cell" style="grid-row: 2; grid-column: 3">顺序</view>
+							<view class="grid-label-cell" style="grid-row: 3; grid-column: 3">工序</view>
+							<view class="grid-label-cell" style="grid-row: 4; grid-column: 3">日产量</view>
+							<view class="grid-label-cell" style="grid-row: 5; grid-column: 3">订单数</view>
+							<view class="grid-label-cell" style="grid-row: 6; grid-column: 3">待派工</view>
+							<view class="grid-label-cell" style="grid-row: 7; grid-column: 3">已完成</view>
+							<view class="grid-label-cell" style="grid-row: 8; grid-column: 3">派工数量</view>
+							<view class="grid-label-cell" style="grid-row: 9; grid-column: 3">员工</view>
 							<template v-for="(p, idx) in group.processes" :key="p.rowid">
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 1, gridColumn: 3 + idx }">
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 1, gridColumn: 4 + idx }">
 								<checkbox :checked="selectedProcessIds.includes(p.rowid)" @click="toggleProcessSelection(p)" />
 							</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 2, gridColumn: 3 + idx }">{{ p.sequence || '-' }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 3, gridColumn: 3 + idx }">{{ p.processName || '-' }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 4, gridColumn: 3 + idx }">{{ p.dailyOutput || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.orderCount || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ p.needCount || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 7, gridColumn: 3 + idx }">{{ p.finishCount || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 8, gridColumn: 3 + idx }">{{ p.dispatchCount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 2, gridColumn: 4 + idx }">{{ p.sequence || '-' }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 3, gridColumn: 4 + idx }">{{ p.processName || '-' }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 4, gridColumn: 4 + idx }">{{ p.dailyOutput || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 5, gridColumn: 4 + idx }">{{ p.orderCount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 6, gridColumn: 4 + idx }">{{ p.needCount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 7, gridColumn: 4 + idx }">{{ p.finishCount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 8, gridColumn: 4 + idx }">{{ p.dispatchCount || 0 }}</view>
 							<view
 							v-if="isEmployeeGroupStart(group.processes, idx)"
 							class="grid-cell employee-cell"
@@ -272,85 +280,86 @@
 				<scroll-view class="employee-chart-scroll" scroll-x scroll-y>
 					<view
 						class="employee-dispatch-table"
-						:style="{ gridTemplateColumns: 'min-content min-content min-content' + (maxEmployeeRecordCount > 0 ? ' repeat(' + maxEmployeeRecordCount + ', min-content min-content min-content min-content min-content)' : '') + ' min-content' }"
+						:style="{ gridTemplateColumns: 'px2vw(50px) px2vw(50px) min-content min-content min-content' + (maxEmployeeRecordCount > 0 ? ' repeat(' + maxEmployeeRecordCount + ', min-content min-content min-content min-content min-content)' : '') + ' min-content' }"
 						v-if="isEmployeeExpanded && employeeDispatchSummary.length > 0"
 					>
-						<view class="table-header" style="grid-row: 1; grid-column: 1">员工姓名</view>
-						<view class="table-header" style="grid-row: 1; grid-column: 2">总工资</view>
-						<view class="table-header" style="grid-row: 1; grid-column: 3">总工时</view>
+						<!-- 对齐前两列的占位单元格 - 使用 sticky 覆盖 -->
+						<view class="table-header table-placeholder" style="grid-row: 1; grid-column: 1; left: 0; z-index: 11"> </view>
+						<view class="table-header table-placeholder" style="grid-row: 1; grid-column: 2; left: px2vw(50px); z-index: 10"> </view>
+						<view class="table-header" style="grid-row: 1; grid-column: 3">员工姓名</view>
+						<view class="table-header" style="grid-row: 1; grid-column: 4">总工资</view>
+						<view class="table-header" style="grid-row: 1; grid-column: 5">总工时</view>
 						<view
 							class="table-header"
 							v-for="i in maxEmployeeRecordCount + 1"
 							:key="'order-' + i"
-							:style="{ gridRow: 1, gridColumn: 4 + (i - 1) * 5 }"
+							:style="{ gridRow: 1, gridColumn: 6 + (i - 1) * 5 }"
 						>订单编号</view>
 						<view
 							class="table-header"
 							v-for="i in maxEmployeeRecordCount + 1"
 							:key="'product-' + i"
-							:style="{ gridRow: 1, gridColumn: 5 + (i - 1) * 5 }"
+							:style="{ gridRow: 1, gridColumn: 7 + (i - 1) * 5 }"
 						>产品名称</view>
 						<view
 							class="table-header"
 							v-for="i in maxEmployeeRecordCount + 1"
 							:key="'count-' + i"
-							:style="{ gridRow: 1, gridColumn: 6 + (i - 1) * 5 }"
+							:style="{ gridRow: 1, gridColumn: 8 + (i - 1) * 5 }"
 						>数量</view>
 						<view
 							class="table-header"
 							v-for="i in maxEmployeeRecordCount + 1"
 							:key="'time-' + i"
-							:style="{ gridRow: 1, gridColumn: 7 + (i - 1) * 5 }"
+							:style="{ gridRow: 1, gridColumn: 9 + (i - 1) * 5 }"
 						>工时</view>
 						<view
 							class="table-header"
 							v-for="i in maxEmployeeRecordCount + 1"
 							:key="'wage-' + i"
-							:style="{ gridRow: 1, gridColumn: 8 + (i - 1) * 5 }"
+							:style="{ gridRow: 1, gridColumn: 10 + (i - 1) * 5 }"
 						>工资</view>
 						<template v-for="(emp, empIdx) in employeeDispatchSummary" :key="emp.employeeName">
-							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 1 }">{{ emp.employeeName }}</view>
-							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 2 }">{{ emp.totalWage.toFixed(2) }}</view>
-							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 3 }">{{ emp.totalWorktime.toFixed(2) }}</view>
+							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 3 }">{{ emp.employeeName }}</view>
+							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 4 }">{{ emp.totalWage.toFixed(2) }}</view>
+							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 5 }">{{ emp.totalWorktime.toFixed(2) }}</view>
 							<template v-for="(rec, recIdx) in emp.records" :key="recIdx">
 								<view
 									class="table-cell"
 									:class="'record-group-' + (recIdx % RECORD_BG_COLORS.length)"
-									:style="{ gridRow: 2 + empIdx, gridColumn: 4 + recIdx * 5 }"
+									:style="{ gridRow: 2 + empIdx, gridColumn: 6 + recIdx * 5 }"
 								>{{ rec.orderNo }}</view>
 								<view
 									class="table-cell"
 									:class="'record-group-' + (recIdx % RECORD_BG_COLORS.length)"
-									:style="{ gridRow: 2 + empIdx, gridColumn: 5 + recIdx * 5 }"
+									:style="{ gridRow: 2 + empIdx, gridColumn: 7 + recIdx * 5 }"
 								>{{ rec.productName }}</view>
 								<view
 									class="table-cell"
 									:class="'record-group-' + (recIdx % RECORD_BG_COLORS.length)"
-									:style="{ gridRow: 2 + empIdx, gridColumn: 6 + recIdx * 5 }"
+									:style="{ gridRow: 2 + empIdx, gridColumn: 8 + recIdx * 5 }"
 								>{{ rec.dispatchCount }}</view>
 								<view
 									class="table-cell"
 									:class="'record-group-' + (recIdx % RECORD_BG_COLORS.length)"
-									:style="{ gridRow: 2 + empIdx, gridColumn: 7 + recIdx * 5 }"
+									:style="{ gridRow: 2 + empIdx, gridColumn: 9 + recIdx * 5 }"
 								>{{ rec.worktime }}</view>
 								<view
 									class="table-cell"
 									:class="'record-group-' + (recIdx % RECORD_BG_COLORS.length)"
-									:style="{ gridRow: 2 + empIdx, gridColumn: 8 + recIdx * 5 }"
+									:style="{ gridRow: 2 + empIdx, gridColumn: 10 + recIdx * 5 }"
 								>{{ rec.wage }}</view>
 							</template>
 							<template v-for="padIdx in maxEmployeeRecordCount - emp.records.length" :key="'pad-' + padIdx">
-								<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 4 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
-								<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 5 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
 								<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 6 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
 								<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 7 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
 								<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 8 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
+								<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 9 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
+								<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 10 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
 							</template>
 							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 4 + maxEmployeeRecordCount * 5 }"></view>
 							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 5 + maxEmployeeRecordCount * 5 }"></view>
 							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 6 + maxEmployeeRecordCount * 5 }"></view>
-							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 7 + maxEmployeeRecordCount * 5 }"></view>
-							<view class="table-cell" :style="{ gridRow: 2 + empIdx, gridColumn: 8 + maxEmployeeRecordCount * 5 }"></view>
 						</template>
 					</view>
 					<view class="empty-wrap" v-if="isEmployeeExpanded && employeeDispatchSummary.length === 0">
@@ -410,119 +419,122 @@
 		</view>
 	</view>
 
-	<!-- 选择订单模态框 -->
-	<view class="select-order-modal" v-if="showSelectOrderModal" @click.self="closeSelectOrderModal">
-		<view class="select-order-content">
-			<view class="select-order-header">
-				<text class="select-order-title">选择订单</text>
-				<view class="select-order-close" @click="closeSelectOrderModal">×</view>
-			</view>
-			<view class="select-order-search">
-				<input
-					v-model="orderSearchKeyword"
-					type="text"
-					placeholder="搜索订单编号"
-					class="select-order-input"
-					@input="filterOrderList"
-				/>
-			</view>
-			<scroll-view
-				class="select-order-list"
-				scroll-y
-				:refresher-enabled="true"
-				:refresher-triggered="orderRefresherTriggered"
-				@refresherrefresh="onOrderRefresh"
-				@scrolltolower="onOrderLoadMore"
-				lower-threshold="100"
-			>
-				<view
-					class="select-order-item"
-					v-for="order in filteredOrderList"
-					:key="order.orderCode"
-					:class="{ 'selected': selectedOrder?.orderCode === order.orderCode }"
-					@click="selectOrder(order)"
-				>
-					<view class="order-item-row">
-						<text class="order-item-code">{{ order.orderCode }}</text>
-						<text class="order-item-customer">{{ order.customerName || '-' }}</text>
-						<text class="order-item-count">产品: {{ order.productCount }}</text>
-					</view>
+	<!-- 添加产品模态框 - 订单层级选择 -->
+	<view class="add-product-modal" v-if="showAddProductModal" @click.self="closeAddProductModal">
+		<view class="add-product-container">
+			<!-- 左侧：产品选择列表 -->
+			<view class="add-product-content">
+				<view class="add-product-header">
+					<text class="add-product-title">添加产品</text>
+					<view class="add-product-close" @click="closeAddProductModal">×</view>
 				</view>
-				<view v-if="orderLoadingMore" class="select-order-loading">加载中...</view>
-				<view v-else-if="!filteredOrderList.length" class="select-order-empty">暂无订单</view>
-				<view v-else-if="!orderHasMore && filteredOrderList.length" class="select-order-empty">没有更多了</view>
-			</scroll-view>
-			<view class="select-order-footer">
-				<view class="select-order-btn-cancel" @click="closeSelectOrderModal">取消</view>
-				<view 
-					class="select-order-btn-next" 
-					:class="{ 'btn-active': selectedOrder }"
-					@click="goToSelectProduct"
-				>下一步</view>
-			</view>
-		</view>
-	</view>
-
-	<!-- 选择产品模态框 -->
-	<view class="select-product-modal" v-if="showSelectProductModal" @click.self="closeSelectProductModal">
-		<view class="select-product-content">
-			<view class="select-product-header">
-				<text class="select-product-title">选择产品 - {{ selectedOrder?.orderCode || '' }}</text>
-				<view class="select-product-close" @click="closeSelectProductModal">×</view>
-			</view>
-			<view class="select-product-search">
-				<input
-					v-model="productSearchKeyword"
-					type="text"
-					placeholder="搜索产品名称"
-					class="select-product-input"
-					@input="filterProductList"
-				/>
-			</view>
-			<scroll-view
-				class="select-product-list"
-				scroll-y
-				:refresher-enabled="true"
-				:refresher-triggered="productRefresherTriggered"
-				@refresherrefresh="onProductRefresh"
-				@scrolltolower="onProductLoadMore"
-				lower-threshold="100"
-			>
-				<view
-					class="select-product-item"
-					v-for="product in filteredSelectProductList"
-					:key="product.productionCode || product.productCode"
-					:class="{ 'selected': selectedProductKeys.includes(getProductKey(product)) }"
-					@click="toggleProductSelection(product)"
-				>
-					<view class="product-item-info">
-						<view class="product-item-row">
-							<text class="product-item-name">{{ product.name || '-' }}</text>
-						</view>
-						<view class="product-item-row">
-							<text class="product-item-code">生产单号: {{ product.productionCode || '-' }}</text>
-						</view>
-					</view>
-					<view class="product-item-actions">
-						<view class="expand-btn" @click.stop="toggleProductExpand(product)">
-							<text>{{ expandedProductKeys.includes(getProductKey(product)) ? '收起' : '规格' }}</text>
-						</view>
-					</view>
-					<view class="product-spec-row" v-if="expandedProductKeys.includes(getProductKey(product))">
-						<text class="product-spec-text">{{ product.models || '-' }}</text>
-					</view>
+				<view class="add-product-search">
+					<input
+						v-model="addProductOrderSearch"
+						type="text"
+						placeholder="订单编号"
+						class="add-product-input"
+						@input="filterAddProductList"
+					/>
+					<input
+						v-model="addProductNameSearch"
+						type="text"
+						placeholder="产品名称"
+						class="add-product-input"
+						@input="filterAddProductList"
+					/>
 				</view>
-				<view v-if="productLoadingMore" class="select-product-loading">加载中...</view>
-				<view v-else-if="!filteredSelectProductList.length" class="select-product-empty">暂无产品</view>
-				<view v-else-if="!productHasMore && filteredSelectProductList.length" class="select-product-empty">没有更多了</view>
-			</scroll-view>
-			<view class="select-product-footer">
-				<view class="select-product-btn-cancel" @click="backToSelectOrder">上一步</view>
-				<view 
-					class="select-product-btn-confirm" 
-					:class="{ 'btn-active': selectedProductKeys.length > 0 }"
-					@click="confirmSelectedProducts"
-				>确定</view>
+				<scroll-view
+					class="add-product-list"
+					scroll-y
+					:refresher-enabled="true"
+					:refresher-triggered="addProductRefresherTriggered"
+					@refresherrefresh="onAddProductRefresh"
+					@scrolltolower="onAddProductLoadMore"
+					lower-threshold="100"
+				>
+					<!-- 订单分组列表 -->
+					<view
+						v-for="orderGroup in filteredAddProductList"
+						:key="orderGroup.orderCode"
+						class="order-group"
+					>
+						<!-- 订单行（可点击展开） -->
+						<view
+							class="order-group-header"
+							:class="{ 'expanded': expandedOrderKeys.includes(orderGroup.orderCode) }"
+							@click="toggleOrderExpand(orderGroup.orderCode)"
+						>
+							<view class="order-header-left">
+								<text class="order-expand-icon">{{ expandedOrderKeys.includes(orderGroup.orderCode) ? '▼' : '▶' }}</text>
+								<text class="order-code">{{ orderGroup.orderCode }}</text>
+							</view>
+							<view class="order-header-right">
+								<text class="order-product-count">{{ orderGroup.products.length }}个产品</text>
+							</view>
+						</view>
+						<!-- 产品列表（展开时显示） -->
+						<view class="order-products" v-if="expandedOrderKeys.includes(orderGroup.orderCode)">
+							<view
+								v-for="product in orderGroup.products"
+								:key="product.productionCode"
+								class="product-select-item"
+								:class="{ 'selected': multiSelectProductKeys.includes(product.productionCode) }"
+							>
+								<view class="product-main" @click="toggleMultiProductSelection(product)">
+									<view class="product-checkbox">
+										<text class="checkbox-icon">{{ multiSelectProductKeys.includes(product.productionCode) ? '✓' : '' }}</text>
+									</view>
+									<view class="product-info">
+										<text class="product-name">{{ product.name || '-' }}</text>
+										<text class="product-delivery">交货: {{ product.deliveryDate || '-' }}</text>
+										<view class="product-spec-btn" @click.stop="toggleProductSpecExpand(product)">
+											<text>{{ expandedProductSpecs.includes(product.productionCode) ? '收起' : '规格' }}</text>
+										</view>
+									</view>
+								</view>
+								<view class="product-spec-container" v-if="expandedProductSpecs.includes(product.productionCode)">
+									<view
+										class="spec-row"
+										v-for="(specItem, sIdx) in (product.models || '-').split(/[;；]/).filter(Boolean)"
+										:key="sIdx"
+									>
+										<text class="spec-value">{{ specItem.trim() }}</text>
+									</view>
+								</view>
+							</view>
+						</view>
+					</view>
+					<view v-if="addProductLoading" class="add-product-loading">加载中...</view>
+					<view v-else-if="!filteredAddProductList.length" class="add-product-empty">暂无数据</view>
+				</scroll-view>
+				<view class="add-product-footer">
+					<text class="selected-count">已选 {{ multiSelectProductKeys.length }} 个产品</text>
+					<view class="add-product-btn-cancel" @click="closeAddProductModal">取消</view>
+					<view
+						class="add-product-btn-confirm"
+						:class="{ 'btn-active': multiSelectProductKeys.length > 0 }"
+						@click="confirmMultiSelectedProducts"
+					>确定</view>
+				</view>
+			</view>
+			<!-- 右侧：选中产品清单 -->
+			<view class="selected-product-list">
+				<view class="selected-list-header">
+					<text class="selected-list-title">已选清单</text>
+					<text class="selected-list-count">{{ selectedProductList.length }}个</text>
+				</view>
+				<scroll-view class="selected-list-content" scroll-y>
+					<view
+						v-for="item in selectedProductList"
+						:key="item.productionCode"
+						class="selected-list-item"
+					>
+						<text class="selected-order-code">{{ item.orderCode }}</text>
+						<text class="selected-product-name">{{ item.productName }}</text>
+					</view>
+					<view v-if="!selectedProductList.length" class="selected-list-empty">暂无选中产品</view>
+				</scroll-view>
 			</view>
 		</view>
 	</view>
@@ -1122,6 +1134,18 @@ const editData = ref({
 	worktime: '',
 	wage: ''
 })
+
+// 添加产品弹窗（合并订单+产品选择）
+const showAddProductModal = ref(false)
+const addProductOrderSearch = ref('') // 订单编号搜索
+const addProductNameSearch = ref('') // 产品名称搜索
+const addProductList = ref([]) // 订单分组列表
+const filteredAddProductList = ref([])
+const expandedOrderKeys = ref([]) // 展开的订单
+const multiSelectProductKeys = ref([]) // 多选的产品
+const expandedProductSpecs = ref([]) // 展开规格的产品
+const addProductLoading = ref(false)
+const addProductRefresherTriggered = ref(false)
 
 // 员工编辑弹窗
 const showEmployeeEditModal = ref(false)
@@ -1831,11 +1855,238 @@ const handleAddPreDispatch = () => {
 	})
 }
 
-// 添加产品：打开选择订单弹窗
+// 添加产品：打开选择产品弹窗（合并订单+产品选择）
 const handleAddProduct = () => {
-	orderSearchKeyword.value = ''
-	selectedOrder.value = null
-	loadOrderList()
+	addProductOrderSearch.value = ''
+	addProductNameSearch.value = ''
+	addProductList.value = []
+	filteredAddProductList.value = []
+	expandedOrderKeys.value = []
+	multiSelectProductKeys.value = []
+	loadAddProductList()
+}
+
+// 加载订单产品列表（使用原产品接口，按订单分组）
+const loadAddProductList = async () => {
+	addProductLoading.value = true
+	try {
+		uni.showLoading({ title: '加载中...' })
+		// 使用原来的产品接口
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: 'paichanjihua',
+			filters: [
+				{
+					controlId: '67de26c9c5377d50a523c735',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 2,
+					values: [loginWorkshop.value || '拉伸车间']
+				},
+				{
+					controlId: '694a3954687045435008a7c3',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 2,
+					values: ['正常排产']
+				},
+				{
+					controlId: '655b875ffc44a9469a3aa225',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 2,
+					values: ['已排产', '部分排产']
+				},
+				{
+					controlId: '69db0017665ab27f3913c455',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 6,
+					values: ['准时交货']
+				},
+				{
+					controlId: '66974cda2503723eec1af600',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 8
+				}
+			],
+			pageSize: 100,
+			pageNum: 1
+		})
+		uni.hideLoading()
+
+		const rows = res?.data || []
+		// 前端过滤：正常排产时，未完成工序数量 > 0
+		const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
+		const filteredRows = rows.filter(item => {
+			const num = Number(item[FIELD_INCOMPLETE_PROCESS_QTY])
+			return !Number.isNaN(num) && num > 0
+		})
+
+		// 映射产品数据
+		const products = filteredRows.map(item => ({
+			rowid: item.rowid || '',
+			orderCode: item['655e1cbbbd2094b316347f92'] || '',
+			customerName: item['69a8ed3c3b5e707f84d33f8b'] || '',
+			name: item['6937d255ff2b019b3cb34be3'] || '',
+			models: item['6937d255ff2b019b3cb34be4'] || '',
+			orderCount: item['69e33354665ab27f3916f758'] || '',
+			productionCode: item['698438933b5e707f84cf51fd'] || '',
+			productCode: item['691d6336535b29cbd5c6c0ca'] || '',
+			deliveryDate: formatFieldValue(item['69ad33ee3b5e707f84d43b09']) || ''
+		}))
+
+		// 按订单分组
+		const orderGroupMap = {}
+		products.forEach(product => {
+			const orderCode = product.orderCode
+			if (!orderGroupMap[orderCode]) {
+				orderGroupMap[orderCode] = {
+					orderCode,
+					customerName: product.customerName,
+					products: []
+				}
+			}
+			orderGroupMap[orderCode].products.push(product)
+		})
+
+		const orderGroups = Object.values(orderGroupMap)
+		addProductList.value = orderGroups
+		filteredAddProductList.value = [...orderGroups]
+
+		// 不自动展开订单，让用户手动点击展开
+		expandedOrderKeys.value = []
+
+		showAddProductModal.value = true
+	} catch (e) {
+		console.error('加载订单产品失败:', e)
+		uni.showToast({ title: '加载失败', icon: 'none' })
+	} finally {
+		addProductLoading.value = false
+		uni.hideLoading()
+	}
+}
+
+// 切换订单展开/折叠
+const toggleOrderExpand = (orderCode) => {
+	const idx = expandedOrderKeys.value.indexOf(orderCode)
+	if (idx >= 0) {
+		expandedOrderKeys.value.splice(idx, 1)
+	} else {
+		expandedOrderKeys.value.push(orderCode)
+	}
+}
+
+// 切换产品多选
+const toggleMultiProductSelection = (product) => {
+	const idx = multiSelectProductKeys.value.indexOf(product.productionCode)
+	if (idx >= 0) {
+		multiSelectProductKeys.value.splice(idx, 1)
+	} else {
+		multiSelectProductKeys.value.push(product.productionCode)
+	}
+}
+
+// 选中产品清单（计算属性）
+const selectedProductList = computed(() => {
+	const list = []
+	addProductList.value.forEach(group => {
+		group.products.forEach(product => {
+			if (multiSelectProductKeys.value.includes(product.productionCode)) {
+				list.push({
+					productionCode: product.productionCode,
+					orderCode: group.orderCode,
+					productName: product.name || '-'
+				})
+			}
+		})
+	})
+	return list
+})
+
+// 切换规格展开
+const toggleProductSpecExpand = (product) => {
+	const idx = expandedProductSpecs.value.indexOf(product.productionCode)
+	if (idx >= 0) {
+		expandedProductSpecs.value.splice(idx, 1)
+	} else {
+		expandedProductSpecs.value.push(product.productionCode)
+	}
+}
+
+// 搜索过滤添加产品列表
+const filterAddProductList = () => {
+	const orderKeyword = addProductOrderSearch.value.trim().toLowerCase()
+	const nameKeyword = addProductNameSearch.value.trim().toLowerCase()
+	
+	// 无筛选条件时显示全部
+	if (!orderKeyword && !nameKeyword) {
+		filteredAddProductList.value = addProductList.value.map(group => ({
+			...group,
+			products: [...group.products]
+		}))
+		return
+	}
+	
+	filteredAddProductList.value = addProductList.value
+		.map(group => {
+			// 订单编号匹配
+			const orderMatch = !orderKeyword || group.orderCode.toLowerCase().includes(orderKeyword)
+			// 产品名称筛选（只显示匹配的产品）
+			let filteredProducts = group.products
+			if (nameKeyword) {
+				filteredProducts = group.products.filter(p =>
+					(p.name || '').toLowerCase().includes(nameKeyword)
+				)
+			}
+			return {
+				...group,
+				products: filteredProducts
+			}
+		})
+		.filter(group => {
+			// 订单编号匹配 或 有匹配的产品
+			const orderMatch = !orderKeyword || group.orderCode.toLowerCase().includes(orderKeyword)
+			const hasProducts = group.products.length > 0
+			return orderMatch && hasProducts
+		})
+}
+
+// 下拉刷新
+const onAddProductRefresh = async () => {
+	addProductRefresherTriggered.value = true
+	await loadAddProductList()
+	addProductRefresherTriggered.value = false
+}
+
+// 加载更多
+const onAddProductLoadMore = () => {
+	// 暂时不支持分页加载
+}
+
+// 确认多选产品
+const confirmMultiSelectedProducts = async () => {
+	if (multiSelectProductKeys.value.length === 0) {
+		uni.showToast({ title: '请先选择产品', icon: 'none' })
+		return
+	}
+	// 收集选中的产品 rowid
+	const selectedRowids = []
+	addProductList.value.forEach(group => {
+		group.products.forEach(product => {
+			if (multiSelectProductKeys.value.includes(product.productionCode)) {
+				selectedRowids.push(product.rowid)
+			}
+		})
+	})
+	showAddProductModal.value = false
+	// 调用添加产品逻辑
+	await addProductsByRowids(selectedRowids)
+}
+
+// 关闭添加产品弹窗
+const closeAddProductModal = () => {
+	showAddProductModal.value = false
 }
 
 // 获取订单列表
@@ -2218,6 +2469,274 @@ const confirmSelectedProducts = async () => {
 	}
 }
 
+// 根据 rowid 数组添加产品到预派工
+const addProductsByRowids = async (rowids) => {
+	if (rowids.length === 0) return
+
+	uni.showLoading({ title: '添加中...', mask: true })
+
+	try {
+		// 记录初始产品数量
+		const initialProductCount = productList.value.length
+		// 期望的产品数量 = 初始数量 + 选中数量
+		const expectedProductCount = initialProductCount + rowids.length
+
+		// 调用添加接口，传递 rowid 数组
+		await http.post(PRE_DISPATCH_PRODUCT_ADD_URL, {
+			dispatchDate: filterDate.value,
+			rowid: rowids  // rowid 数组
+		})
+
+		// 添加成功后轮询等待新产品数据写入完成再刷新渲染
+		// 基础等待 3 秒（6 次 × 500ms），每多添加 1 个产品增加 1 次（+500ms），最多 5 秒（10 次）
+		const baseRetry = 6
+		const maxRetry = Math.min(baseRetry + rowids.length, 10)
+		const INTERVAL = 500
+		let found = false
+
+		for (let i = 0; i < maxRetry; i++) {
+			await loadProducts(true, true)
+			if (productList.value.length >= expectedProductCount) {
+				found = true
+				break
+			}
+			if (i < maxRetry - 1) {
+				await new Promise(resolve => setTimeout(resolve, INTERVAL))
+			}
+		}
+
+		uni.hideLoading()
+
+		if (found) {
+			uni.showToast({ title: '添加成功', icon: 'success' })
+		} else {
+			// 轮询未达到期望数量，但接口已成功调用，直接刷新一次
+			await loadProducts(true, true)
+			uni.showToast({ title: '添加成功', icon: 'success' })
+		}
+
+		// 同步刷新员工相关数据
+		loadEmployeeDispatchSummary()
+		loadWorkshopEmployees()
+	} catch (e) {
+		uni.hideLoading()
+		console.error('添加预派工失败:', e)
+		uni.showToast({ title: '添加失败', icon: 'none' })
+	}
+}
+
+// 根据生产单号添加产品到预派工
+const addProductsByCodes = async (products) => {
+	if (products.length === 0) return
+
+	uni.showLoading({ title: '添加中...', mask: true })
+
+	try {
+		// 遍历选中的产品，根据生产单号查询预派工记录
+		const productionCodes = products.map(p => p.productionCode).filter(Boolean)
+
+		// 查询预派工记录
+		const res = await callWorkflowListAll({
+			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
+			filters: [{
+				controlId: PRE_DISPATCH_FIELD_MAP.productionCode,
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: productionCodes
+			}],
+			silent: true
+		}, 100)
+
+		const rows = Array.isArray(res?.data) ? res.data : []
+		if (rows.length === 0) {
+			uni.hideLoading()
+			uni.showToast({ title: '未找到相关预派工记录', icon: 'none' })
+			return
+		}
+
+		// 记录初始产品数量
+		const initialProductCount = productList.value.length
+
+		// 批量添加产品到预派工（只添加不在列表中的）
+		const existingCodes = new Set(productList.value.map(p => p.productionCode))
+		const newCodes = productionCodes.filter(code => !existingCodes.has(code))
+
+		if (newCodes.length === 0) {
+			uni.hideLoading()
+			uni.showToast({ title: '产品已在列表中', icon: 'none' })
+			return
+		}
+
+		// 调用添加接口
+		await http.post(PRE_DISPATCH_PRODUCT_ADD_BY_CODES_URL || PRE_DISPATCH_PRODUCT_ADD_URL, {
+			dispatchDate: filterDate.value,
+			productionCodes: newCodes
+		})
+
+		// 添加成功后轮询等待新产品数据写入完成再刷新渲染
+		uni.showLoading({ title: '添加产品中...', mask: true })
+		const MAX_RETRY = 20
+		const INTERVAL = 500
+		let found = false
+
+		for (let i = 0; i < MAX_RETRY; i++) {
+			await loadProducts(true, true)
+			if (productList.value.length > initialProductCount) {
+				found = true
+				break
+			}
+			if (i < MAX_RETRY - 1) {
+				await new Promise(resolve => setTimeout(resolve, INTERVAL))
+			}
+		}
+
+		uni.hideLoading()
+
+		if (found) {
+			uni.showToast({ title: '添加成功', icon: 'success' })
+		} else {
+			uni.showToast({ title: '添加成功，数据刷新略有延迟', icon: 'none' })
+		}
+
+		// 同步刷新员工相关数据
+		loadEmployeeDispatchSummary()
+		loadWorkshopEmployees()
+	} catch (e) {
+		uni.hideLoading()
+		console.error('添加预派工失败:', e)
+		uni.showToast({ title: '添加失败', icon: 'none' })
+	}
+}
+
+// 延后预派工
+const handleDelayDispatch = async () => {
+	// 只获取选中产品的预派工 rowid
+	const allRowids = productList.value
+		.filter(item => selectedProductIds.value.includes(item.uniqueKey))
+		.flatMap(item => item.preDispatchRowids || [])
+		.filter(Boolean)
+	if (allRowids.length === 0) {
+		uni.showToast({ title: '没有可延后的预派工', icon: 'none' })
+		return
+	}
+	// 获取选中产品的信息用于确认框
+	const selectedProductsInfo = productList.value
+		.filter(item => selectedProductIds.value.includes(item.uniqueKey))
+		.map(item => ({
+			orderCode: item.orderNo,
+			productName: item.productNameNew || item.productName
+		}))
+	showOperateConfirmModal('delay', allRowids.length, selectedProductsInfo)
+}
+
+// 移除预派工
+const handleRemoveDispatch = async () => {
+	// 只获取选中产品的预派工 rowid
+	const allRowids = productList.value
+		.filter(item => selectedProductIds.value.includes(item.uniqueKey))
+		.flatMap(item => item.preDispatchRowids || [])
+		.filter(Boolean)
+	if (allRowids.length === 0) {
+		uni.showToast({ title: '没有可移除的预派工', icon: 'none' })
+		return
+	}
+	// 获取选中产品的信息用于确认框
+	const selectedProductsInfo = productList.value
+		.filter(item => selectedProductIds.value.includes(item.uniqueKey))
+		.map(item => ({
+			orderCode: item.orderNo,
+			productName: item.productNameNew || item.productName
+		}))
+	showOperateConfirmModal('remove', allRowids.length, selectedProductsInfo)
+}
+
+// 操作确认弹窗
+const showOperateConfirmModal = (mode, count, productsInfo) => {
+	const actionText = mode === 'delay' ? '延后' : '移除'
+	// 拼接产品信息
+	let infoText = productsInfo.map(p => `${p.orderCode} - ${p.productName}`).join('\n')
+	uni.showModal({
+		title: `确认${actionText}`,
+		content: `共 ${count} 条预派工\n\n${infoText}`,
+		confirmText: '确定',
+		cancelText: '取消',
+		success: async (res) => {
+			if (res.confirm) {
+				await operatePreDispatch(mode, count)
+			}
+		}
+	})
+}
+
+// 操作预派工（延后/移除）
+const operatePreDispatch = async (mode, count) => {
+	// 获取选中的预派工 rowid
+	const allRowids = productList.value
+		.filter(item => selectedProductIds.value.includes(item.uniqueKey))
+		.flatMap(item => item.preDispatchRowids || [])
+		.filter(Boolean)
+	
+	if (allRowids.length === 0) return
+
+	uni.showLoading({ title: '处理中...', mask: true })
+
+	try {
+		// 记录初始预派工数量
+		const initialPreDispatchCount = getTotalPreDispatchCount()
+		// 期望的预派工数量
+		const expectedPreDispatchCount = initialPreDispatchCount - count
+
+		// 调用接口
+		await http.post(PRE_DISPATCH_VOID_URL, {
+			rowid: allRowids,
+			mode: mode
+		})
+
+		// 轮询刷新检查
+		// 基础等待 3 秒（6 次 × 500ms），最多 5 秒（10 次）
+		const baseRetry = 6
+		const maxRetry = 10
+		const INTERVAL = 500
+		let found = false
+
+		for (let i = 0; i < maxRetry; i++) {
+			await loadProducts(true)
+			const currentCount = getTotalPreDispatchCount()
+			// 移除：预派工数量减少；延后：状态改变但数量可能不变
+			if (mode === 'remove' && currentCount <= expectedPreDispatchCount) {
+				found = true
+				break
+			} else if (mode === 'delay') {
+				// 延后只需确认数据已刷新
+				found = true
+				break
+			}
+			if (i < maxRetry - 1) {
+				await new Promise(resolve => setTimeout(resolve, INTERVAL))
+			}
+		}
+
+		uni.hideLoading()
+		uni.showToast({ title: '操作成功', icon: 'success' })
+
+		// 刷新数据
+		loadEmployeeDispatchSummary()
+		loadWorkshopEmployees()
+	} catch (e) {
+		uni.hideLoading()
+		console.error('操作预派工失败:', e)
+		uni.showToast({ title: '操作失败', icon: 'none' })
+	}
+}
+
+// 获取总预派工数量
+const getTotalPreDispatchCount = () => {
+	return productList.value
+		.filter(item => selectedProductIds.value.includes(item.uniqueKey))
+		.reduce((sum, item) => sum + (item.preDispatchRowids?.length || 0), 0)
+}
+
 const handleConfirmDispatch = async () => {
 	// 只获取选中产品的预派工 rowid
 	const allRowids = productList.value
@@ -2259,6 +2778,23 @@ const handleConfirmDispatch = async () => {
 	confirmDispatchCount.value = validRowids.length
 	confirmDispatchRowids.value = validRowids
 	showConfirmDispatchModal.value = true
+}
+
+// 刷新单个产品的工序列表
+const refreshProcessList = async (productRowid) => {
+	// 找到对应的产品
+	const product = productList.value.find(p => p.uniqueKey === productRowid)
+	if (!product) {
+		uni.showToast({ title: '未找到产品', icon: 'none' })
+		return
+	}
+	// 移除该产品的旧工序数据
+	processList.value = processList.value.filter(p => p.productRowid !== productRowid)
+	// 移除已加载标记，让 loadProductProcesses 重新加载
+	loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
+	// 重新加载工序数据
+	await loadProductProcesses(product)
+	uni.showToast({ title: '刷新成功', icon: 'success' })
 }
 
 const handleProcessListConfirm = async (productRowid) => {
@@ -3231,8 +3767,8 @@ const getEmployeeGroupSpan = (processes, idx) => {
 
 const getEmployeeCellStyle = (processes, idx) => {
 	const span = getEmployeeGroupSpan(processes, idx)
-	if (span <= 1) return { gridRow: 9, gridColumn: 3 + idx }
-	return { gridRow: 9, gridColumn: (3 + idx) + ' / span ' + span }
+	if (span <= 1) return { gridRow: 9, gridColumn: 4 + idx }
+	return { gridRow: 9, gridColumn: (4 + idx) + ' / span ' + span }
 }
 
 const getEmployeeCellText = (processes, idx) => {
@@ -3282,6 +3818,12 @@ const groupedProductList = computed(() => {
 	})
 })
 
+// 产品列表统计
+const productListStats = computed(() => ({
+	selected: selectedProductIds.value.length,
+	total: productList.value.length
+}))
+
 const groupedProcessList = computed(() => {
 	const groups = []
 	// 按 productOrderMap 记录的顺序遍历，保证工序列表顺序与产品列表一致（不受点击顺序影响）
@@ -3299,6 +3841,7 @@ const groupedProcessList = computed(() => {
 		groups.push({
 			productRowid: product.uniqueKey,
 			productName: product.productNameNew || product.productName || '-',
+			orderNo: product.orderNo || '-',
 			processes
 		})
 	})
@@ -5343,6 +5886,14 @@ onShow(refreshPage)
 						background-color: #3498db;
 					}
 
+					&.left-btn-delay {
+						background-color: #f39c12;
+					}
+
+					&.left-btn-remove {
+						background-color: #e74c3c;
+					}
+
 					&.left-btn-confirm {
 						background-color: #27ae60;
 					}
@@ -5699,25 +6250,55 @@ onShow(refreshPage)
 					margin: px2vw(10px);
 					border: 1px solid #999;
 
-					.grid-product-name {
+					// 第一栏：订单编号 + 产品名称
+					.grid-order-info {
 						grid-row: 1 / span 9;
 						display: flex;
 						flex-direction: column;
 						align-items: center;
 						justify-content: flex-start;
-						background-color: #f0f0f0;
-						padding: px2vw(10px);
+						background-color: #f5f5f5;
+						padding: px2vw(10px) px2vw(4px);
 						border-right: 1px solid #999;
-						font-size: px2vw(22px);
-						color: #333;
-						white-space: nowrap;
 						position: sticky;
 						left: 0;
+						z-index: 11;
+
+						.grid-orderno {
+							writing-mode: vertical-rl;
+							text-orientation: upright;
+							font-size: px2vw(20px);
+							color: #333;
+							margin-bottom: px2vw(10px);
+							letter-spacing: px2vw(-2px);
+						}
+
+						.grid-product-name-v {
+							writing-mode: vertical-rl;
+							text-orientation: upright;
+							flex: 1;
+							font-size: px2vw(20px);
+							color: #333;
+							letter-spacing: px2vw(-2px);
+						}
+					}
+
+					// 第二栏：按钮
+					.grid-product-name {
+						grid-row: 1 / span 9;
+						display: flex;
+						flex-direction: column;
+						justify-content: space-between;
+						align-items: center;
+						background-color: #f0f0f0;
+						padding: px2vw(8px) px2vw(4px);
+						border-right: 1px solid #999;
+						position: sticky;
+						left: px2vw(50px);
 						z-index: 10;
 
 						.grid-product-action {
-							margin-bottom: px2vw(10px);
-							padding: px2vw(10px) px2vw(4px);
+							padding: px2vw(8px) px2vw(4px);
 							background-color: #999;
 							color: #fff;
 							border-radius: px2vw(6px);
@@ -5730,19 +6311,22 @@ onShow(refreshPage)
 							justify-content: center;
 						}
 
-						.grid-product-name-text {
+						.grid-product-refresh {
+							padding: px2vw(8px) px2vw(4px);
+							background-color: #f39c12;
+							color: #fff;
+							border-radius: px2vw(6px);
+							font-size: px2vw(24px);
 							writing-mode: vertical-rl;
 							text-orientation: upright;
-							flex: 1;
+							letter-spacing: px2vw(2px);
 							display: flex;
 							align-items: center;
 							justify-content: center;
-							font-size: px2vw(24px);
 						}
 
 						.grid-product-confirm {
-							margin-top: px2vw(10px);
-							padding: px2vw(10px) px2vw(4px);
+							padding: px2vw(8px) px2vw(4px);
 							background-color: #27ae60;
 							color: #fff;
 							border-radius: px2vw(6px);
@@ -5756,8 +6340,8 @@ onShow(refreshPage)
 						}
 					}
 
-					.grid-label-cell {
-						background-color: #f0f0f0;
+				.grid-label-cell {
+					background-color: #f0f0f0;
 						padding: px2vw(9px) px2vw(5px);
 						text-align: center;
 						font-size: px2vw(17px);
@@ -5829,6 +6413,18 @@ onShow(refreshPage)
 					align-items: center;
 					justify-content: center;
 					white-space: nowrap;
+				}
+
+				.table-placeholder {
+					background-color: #f5f5f5;
+					position: sticky;
+					left: 0;
+					z-index: 11;
+
+					&:nth-child(2) {
+						left: px2vw(40px);
+						z-index: 10;
+					}
 				}
 
 				.table-cell {
@@ -6224,7 +6820,8 @@ onShow(refreshPage)
 }
 
 // 选择订单模态框
-.select-order-modal {
+// 添加产品模态框
+.add-product-modal {
 	position: fixed;
 	top: 0;
 	left: 0;
@@ -6236,9 +6833,14 @@ onShow(refreshPage)
 	justify-content: center;
 	z-index: 1000;
 
-	.select-order-content {
-		width: px2vw(750px);
-		height: px2vw(680px);
+	.add-product-container {
+		display: flex;
+		gap: px2vw(20px);
+	}
+
+	.add-product-content {
+		width: px2vw(600px);
+		height: px2vw(800px);
 		background-color: #fff;
 		border-radius: px2vw(16px);
 		display: flex;
@@ -6246,288 +6848,310 @@ onShow(refreshPage)
 		overflow: hidden;
 	}
 
-	.select-order-header {
-		height: px2vw(88px);
+	// 右侧选中清单
+	.selected-product-list {
+		width: px2vw(400px);
+		height: px2vw(800px);
+		background-color: #fff;
+		border-radius: px2vw(16px);
 		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 0 px2vw(24px);
-		background-color: #5884f1;
-		flex-shrink: 0;
+		flex-direction: column;
+		overflow: hidden;
 
-		.select-order-title {
-			font-size: px2vw(30px);
-			color: #fff;
-			font-weight: bold;
-		}
-
-		.select-order-close {
-			font-size: px2vw(44px);
-			color: #fff;
-			line-height: 1;
-		}
-	}
-
-	.select-order-search {
-		padding: px2vw(12px) px2vw(16px);
-		flex-shrink: 0;
-
-		.select-order-input {
-			height: px2vw(60px);
-			background-color: #f5f7fa;
-			border-radius: px2vw(8px);
-			padding: 0 px2vw(16px);
-			font-size: px2vw(24px);
-		}
-	}
-
-	.select-order-list {
-		flex: 1;
-		min-height: 0;
-		padding: 0 px2vw(16px);
-
-		.select-order-loading,
-		.select-order-empty {
-			text-align: center;
-			color: #999;
-			font-size: px2vw(24px);
-			padding: px2vw(40px) 0;
-		}
-	}
-
-	.select-order-item {
-		padding: px2vw(14px) px2vw(16px);
-		background-color: #f9f9f9;
-		border-radius: px2vw(10px);
-		margin-bottom: px2vw(10px);
-
-		&.selected {
-			background-color: #e8f4fc;
-			box-shadow: inset 0 0 0 px2vw(2px) rgba(88, 132, 241, 0.5);
-		}
-
-		.order-item-row {
+		.selected-list-header {
+			height: px2vw(88px);
 			display: flex;
 			align-items: center;
-			gap: px2vw(16px);
-			margin-bottom: px2vw(4px);
+			justify-content: space-between;
+			padding: 0 px2vw(24px);
+			background-color: #5884f1;
+			flex-shrink: 0;
 
-			&:last-child {
-				margin-bottom: 0;
+			.selected-list-title {
+				font-size: px2vw(28px);
+				color: #fff;
+				font-weight: bold;
+			}
+
+			.selected-list-count {
+				font-size: px2vw(22px);
+				color: rgba(255, 255, 255, 0.8);
 			}
 		}
 
-		.order-item-code {
-			font-size: px2vw(26px);
-			color: #333;
-			font-weight: bold;
-		}
-
-		.order-item-count {
-			font-size: px2vw(22px);
-			color: #2755f1;
-		}
-
-		.order-item-customer {
-			font-size: px2vw(22px);
-			color: #666;
-		}
-	}
-
-	.select-order-footer {
-		height: px2vw(80px);
-		display: flex;
-		align-items: center;
-		justify-content: space-around;
-		padding: 0 px2vw(24px);
-		border-top: 1px solid #eee;
-		flex-shrink: 0;
-
-		.select-order-btn-cancel,
-		.select-order-btn-next {
+		.selected-list-content {
 			flex: 1;
-			height: px2vw(56px);
-			line-height: px2vw(56px);
-			text-align: center;
-			border-radius: px2vw(8px);
-			font-size: px2vw(26px);
-		}
+			min-height: 0;
+			padding: px2vw(12px);
 
-		.select-order-btn-cancel {
-			margin-right: px2vw(16px);
-			background-color: #f5f7fa;
-			color: #666;
-		}
-
-		.select-order-btn-next {
-			margin-left: px2vw(16px);
-			background-color: #ccc;
-			color: #fff;
-			transition: all 0.2s;
-
-			&.btn-active {
-				background-color: #28a745;
-			}
-
-			&.btn-active:active {
-				opacity: 0.8;
-				transform: scale(0.98);
-			}
-		}
-	}
-}
-
-// 选择产品模态框
-.select-product-modal {
-	position: fixed;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	background-color: rgba(0, 0, 0, 0.5);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	z-index: 1001;
-
-	.select-product-content {
-		width: px2vw(750px);
-		height: px2vw(680px);
-		background-color: #fff;
-		border-radius: px2vw(16px);
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-	}
-
-	.select-product-header {
-		height: px2vw(88px);
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 0 px2vw(24px);
-		background-color: #5884f1;
-		flex-shrink: 0;
-
-		.select-product-title {
-			font-size: px2vw(30px);
-			color: #fff;
-			font-weight: bold;
-		}
-
-		.select-product-close {
-			font-size: px2vw(44px);
-			color: #fff;
-			line-height: 1;
-		}
-	}
-
-	.select-product-search {
-		padding: px2vw(12px) px2vw(16px);
-		flex-shrink: 0;
-
-		.select-product-input {
-			height: px2vw(60px);
-			background-color: #f5f7fa;
-			border-radius: px2vw(8px);
-			padding: 0 px2vw(16px);
-			font-size: px2vw(24px);
-		}
-	}
-
-	.select-product-list {
-		flex: 1;
-		min-height: 0;
-		padding: 0 px2vw(16px);
-
-		.select-product-loading,
-		.select-product-empty {
-			text-align: center;
-			color: #999;
-			font-size: px2vw(24px);
-			padding: px2vw(40px) 0;
-		}
-	}
-
-	.select-product-item {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-start;
-		padding: px2vw(14px) px2vw(16px);
-		background-color: #f9f9f9;
-		border-radius: px2vw(10px);
-		margin-bottom: px2vw(10px);
-
-		&.selected {
-			background-color: #e8f4fc;
-			box-shadow: inset 0 0 0 px2vw(2px) rgba(88, 132, 241, 0.5);
-		}
-
-		.product-item-info {
-			flex: 1;
-			min-width: 0;
-
-			.product-item-row {
-				margin-bottom: px2vw(6px);
+			.selected-list-item {
+				display: flex;
+				flex-direction: row;
+				align-items: center;
+				padding: px2vw(12px);
+				background-color: #f5f7fa;
+				border-radius: px2vw(8px);
+				margin-bottom: px2vw(8px);
 
 				&:last-child {
 					margin-bottom: 0;
 				}
+
+				.selected-order-code {
+					font-size: px2vw(24px);
+					color: #666;
+					margin-right: px2vw(8px);
+					flex-shrink: 0;
+				}
+
+				.selected-product-name {
+					font-size: px2vw(24px);
+					color: #333;
+					font-weight: bold;
+					flex: 1;
+					min-width: 0;
+					overflow: hidden;
+					text-overflow: ellipsis;
+					white-space: nowrap;
+				}
 			}
 
-			.product-item-name {
-				font-size: px2vw(26px);
-				color: #333;
-				font-weight: bold;
-			}
-
-			.product-item-code {
+			.selected-list-empty {
+				text-align: center;
+				color: #999;
 				font-size: px2vw(22px);
-				color: #666;
-			}
-		}
-
-		.product-item-actions {
-			flex-shrink: 0;
-			margin-left: px2vw(10px);
-
-			.expand-btn {
-				padding: px2vw(6px) px2vw(16px);
-				background-color: #e8eefc;
-				border: px2vw(2px) solid #b8c8f5;
-				border-radius: px2vw(6px);
-				font-size: px2vw(22px);
-				color: #2755f1;
-			}
-		}
-
-		.product-spec-row {
-			width: 100%;
-			margin-top: px2vw(10px);
-			padding: px2vw(10px);
-			background-color: #fff;
-			border-radius: px2vw(8px);
-
-			.product-spec-text {
-				font-size: px2vw(22px);
-				color: #666;
-				line-height: px2vw(36px);
+				padding: px2vw(40px) 0;
 			}
 		}
 	}
 
-	.select-product-footer {
+	.add-product-header {
+		height: px2vw(88px);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0 px2vw(24px);
+		background-color: #5884f1;
+		flex-shrink: 0;
+
+		.add-product-title {
+			font-size: px2vw(30px);
+			color: #fff;
+			font-weight: bold;
+		}
+
+		.add-product-close {
+			font-size: px2vw(44px);
+			color: #fff;
+			line-height: 1;
+		}
+	}
+
+	.add-product-search {
+		padding: px2vw(12px) px2vw(16px);
+		flex-shrink: 0;
+		display: flex;
+		gap: px2vw(12px);
+
+		.add-product-input {
+			flex: 1;
+			height: px2vw(60px);
+			background-color: #f5f7fa;
+			border-radius: px2vw(8px);
+			padding: 0 px2vw(16px);
+			font-size: px2vw(24px);
+		}
+	}
+
+	.add-product-list {
+		flex: 1;
+		min-height: 0;
+		padding: 0 px2vw(16px);
+
+		.add-product-loading,
+		.add-product-empty {
+			text-align: center;
+			color: #999;
+			font-size: px2vw(24px);
+			padding: px2vw(40px) 0;
+		}
+	}
+
+	// 订单分组
+	.order-group {
+		margin-bottom: px2vw(8px);
+	}
+
+	// 订单头部（可点击展开）
+	.order-group-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: px2vw(14px) px2vw(16px);
+		background-color: #e8f4fc;
+		border-radius: px2vw(10px);
+		border-left: px2vw(4px) solid #5884f1;
+
+		&.expanded {
+			background-color: #d4e9fc;
+			border-bottom-left-radius: 0;
+			border-bottom-right-radius: 0;
+		}
+
+		.order-header-left {
+			display: flex;
+			align-items: center;
+			gap: px2vw(8px);
+
+			.order-expand-icon {
+				font-size: px2vw(20px);
+				color: #5884f1;
+			}
+
+			.order-code {
+				font-size: px2vw(26px);
+				color: #333;
+				font-weight: bold;
+			}
+		}
+
+		.order-header-right {
+			.order-product-count {
+				font-size: px2vw(22px);
+				color: #2755f1;
+			}
+		}
+	}
+
+	// 产品列表
+	.order-products {
+		background-color: #f9f9f9;
+		border-bottom-left-radius: px2vw(10px);
+		border-bottom-right-radius: px2vw(10px);
+		padding: px2vw(8px);
+	}
+
+	// 产品选择项
+	.product-select-item {
+		background-color: #fff;
+		border-radius: px2vw(8px);
+		margin-bottom: px2vw(6px);
+
+		&:last-child {
+			margin-bottom: 0;
+		}
+
+		&.selected {
+			background-color: #e8f4fc;
+			box-shadow: inset 0 0 0 px2vw(2px) rgba(88, 132, 241, 0.5);
+		}
+
+		.product-main {
+			display: flex;
+			align-items: center;
+			padding: px2vw(12px) px2vw(16px);
+		}
+
+		.product-checkbox {
+			width: px2vw(40px);
+			height: px2vw(40px);
+			border: px2vw(2px) solid #ccc;
+			border-radius: px2vw(6px);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			margin-right: px2vw(12px);
+			flex-shrink: 0;
+
+			.checkbox-icon {
+				font-size: px2vw(24px);
+				color: #5884f1;
+			}
+		}
+
+		&.selected .product-checkbox {
+			background-color: #e8f4fc;
+			border-color: #5884f1;
+		}
+
+		.product-info {
+			flex: 1;
+			min-width: 0;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+
+			.product-name {
+				font-size: px2vw(26px);
+				color: #333;
+				font-weight: bold;
+				flex-shrink: 0;
+			}
+
+			.product-delivery {
+				font-size: px2vw(26px);
+				color: #e67e22;
+				flex: 1;
+				text-align: center;
+			}
+
+			.product-spec-btn {
+				padding: px2vw(4px) px2vw(12px);
+				background-color: #e8eefc;
+				border: px2vw(1px) solid #b8c8f5;
+				border-radius: px2vw(4px);
+				font-size: px2vw(20px);
+				color: #2755f1;
+				flex-shrink: 0;
+			}
+		}
+
+		.product-spec-container {
+			padding: px2vw(8px) px2vw(12px);
+			margin: 0 px2vw(16px) px2vw(12px) px2vw(68px);
+			background-color: #f5f5f5;
+			border-radius: px2vw(8px);
+
+			.spec-row {
+				display: flex;
+				flex-direction: row;
+				padding: px2vw(3px) 0;
+				border-bottom: 1px solid #e0e0e0;
+
+				&:last-child {
+					border-bottom: none;
+				}
+
+				.spec-value {
+					flex: 1;
+					min-width: 0;
+					word-break: break-all;
+					color: #333;
+					font-size: px2vw(22px);
+				}
+			}
+		}
+	}
+
+	.add-product-footer {
 		height: px2vw(80px);
 		display: flex;
 		align-items: center;
-		justify-content: space-around;
+		justify-content: flex-end;
 		padding: 0 px2vw(24px);
 		border-top: 1px solid #eee;
 		flex-shrink: 0;
+		gap: px2vw(16px);
 
-		.select-product-btn-cancel,
-		.select-product-btn-confirm {
+		.selected-count {
 			flex: 1;
+			font-size: px2vw(24px);
+			color: #666;
+		}
+
+		.add-product-btn-cancel,
+		.add-product-btn-confirm {
+			min-width: px2vw(160px);
 			height: px2vw(56px);
 			line-height: px2vw(56px);
 			text-align: center;
@@ -6535,7 +7159,6 @@ onShow(refreshPage)
 			font-size: px2vw(26px);
 			background-color: #ccc;
 			color: #fff;
-			margin-left: px2vw(16px);
 			transition: all 0.2s;
 
 			&.btn-active {
@@ -6548,8 +7171,7 @@ onShow(refreshPage)
 			}
 		}
 
-		.select-product-btn-cancel {
-			margin-right: px2vw(16px);
+		.add-product-btn-cancel {
 			background-color: #f5f7fa;
 			color: #666;
 		}
