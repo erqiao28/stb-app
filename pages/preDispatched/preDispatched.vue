@@ -3,6 +3,16 @@
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="goBack"></image>
 			<view class="header-btn-bar">
+			<!-- 组装车间岗位筛选按钮：数据来自岗位工序表，仅组装车间权限时显示，样式与功能按钮区分 -->
+			<template v-if="loginWorkshop === '组装车间'">
+				<view
+					v-for="position in assemblyPositionButtons"
+					:key="position.rowid"
+					class="header-btn header-btn-position"
+					:class="{ active: activeAssemblyPositions.includes(position.name) }"
+					@click="handleAssemblyPositionClick(position)"
+				>{{ position.name }}</view>
+			</template>
 			<view class="header-btn" :class="{ active: showProcessPanel }" @click="toggleProcessPanel">岗位工序</view>
 			<view class="header-btn" :class="{ active: showAttendancePanel }" @click="toggleAttendancePanel">员工出勤</view>
 			<view class="header-btn" v-if="loginWorkshop === '喷涂车间'" :class="{ active: showSprayPanel }" @click="toggleSprayPanel">喷涂工序</view>
@@ -1066,6 +1076,11 @@ const SPRAY_PROCESS_FIELD_MAP = {
 
 const RECORD_BG_COLORS = ['#e8f4f8', '#f2f0e6', '#f9f0f4', '#eaf6ea', '#fff6e6']
 
+// 组装车间岗位筛选按钮（仅权限车间为组装车间时显示），数据来自岗位工序表
+const assemblyPositionButtons = ref([])
+// 当前选中的组装岗位名称集合（支持多选），用于筛选产品列表
+const activeAssemblyPositions = ref([])
+
 const showVoidModal = ref(false)
 const voidReason = ref('')
 const voidRowid = ref('')
@@ -1610,6 +1625,7 @@ const mapPreDispatchRow = (item) => ({
 	employeeName: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.employeeName]),
 	processDetail: extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail]),
 	craftPosition: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.craftPosition]),
+	positionProcessRowids: extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.positionProcess]),
 	dailyWage: extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.dailyWage]),
 	productionCode: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.productionCode]),
 	orderCount: formatFieldValue(item['6a5f19556d70ffabc67f0ce9']),
@@ -3098,6 +3114,15 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 			mapped = mapped.filter(item => item.guokou.toLowerCase().includes(keyword))
 		}
 
+		// 组装车间岗位筛选：只保留岗位工序关联到任一选中岗位的预派工
+		if (activeAssemblyPositions.value.length > 0) {
+			const selectedPositions = new Set(activeAssemblyPositions.value)
+			mapped = mapped.filter(item => {
+				const rowids = item.positionProcessRowids || []
+				return rowids.some(sid => selectedPositions.has(positionProcessDictMap.value.get(sid)))
+			})
+		}
+
 		const groupedMap = {}
 		mapped.forEach((item) => {
 			const key = `${item.orderNo || ''}|${item.productNameNew || ''}|${item.productionCode || ''}`
@@ -4432,6 +4457,51 @@ const loadSprayProcessList = async () => {
 	}
 }
 
+// 加载岗位工序表中车间为组装车间的岗位名称，作为导航栏筛选按钮（仅组装车间权限时使用）
+const loadAssemblyPositionButtons = async () => {
+	if (loginWorkshop.value !== '组装车间') {
+		assemblyPositionButtons.value = []
+		return
+	}
+	try {
+		const res = await callWorkflowListAll({
+			worksheetId: ASSEMBLY_POSITION_WORKSHEET_ID,
+			filters: [{
+				controlId: '6a3124a86d70ffabc66c8515',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: ['组装车间']
+			}],
+			silent: true
+		}, 100)
+		const rows = Array.isArray(res?.data) ? res.data : []
+		// 岗位名称解析顺序与 loadPositionProcessDict 保持一致，确保筛选时能匹配上
+		assemblyPositionButtons.value = rows.map((item) => ({
+			rowid: item.rowid || '',
+			name: item[ASSEMBLY_POSITION_FIELD_ID] || item['Name'] || '-'
+		}))
+	} catch (e) {
+		console.error('加载组装车间岗位筛选按钮失败:', e)
+		assemblyPositionButtons.value = []
+	}
+}
+
+// 点击组装岗位筛选按钮：切换选中/取消该岗位（支持多选），并重新加载产品列表
+const handleAssemblyPositionClick = async (position) => {
+	const idx = activeAssemblyPositions.value.indexOf(position.name)
+	if (idx >= 0) {
+		activeAssemblyPositions.value.splice(idx, 1)
+	} else {
+		activeAssemblyPositions.value.push(position.name)
+	}
+	// 确保岗位工序字典已加载，用于将预派工的岗位工序 ID 解析为名称后匹配筛选
+	if (activeAssemblyPositions.value.length > 0 && positionProcessDictMap.value.size === 0) {
+		await loadPositionProcessDict()
+	}
+	await loadProducts(true)
+}
+
 const loadSprayEmployees = async () => {
 	try {
 		const wsFilter = employeeWorkshopFilter.value
@@ -5001,7 +5071,8 @@ const refreshPage = async () => {
 	await Promise.all([
 		loadCraftPositionList(),
 		loadPositionProcessDict(),
-		loadCraftPositionMap()    // 获取工序归类表（用于同类别同步勾选）
+		loadCraftPositionMap(),    // 获取工序归类表（用于同类别同步勾选）
+		loadAssemblyPositionButtons()  // 组装车间岗位筛选按钮
 	])
 	await loadProducts(true)
 	loadWorkshopEmployees()
@@ -5076,6 +5147,20 @@ onShow(refreshPage)
 				color: #5884f1;
 				border-color: #fff;
 				font-weight: bold;
+			}
+		}
+
+		.header-btn-position {
+			background-color: rgba(255, 255, 255, 0.12);
+			border: 1px dashed rgba(255, 255, 255, 0.65);
+			color: #fff;
+
+			&.active {
+				background-color: #2ecc71;
+				color: #fff;
+				border: 1px solid #2ecc71;
+				font-weight: bold;
+				box-shadow: 0 0 8px rgba(46, 204, 113, 0.5);
 			}
 		}
 
@@ -5773,7 +5858,7 @@ onShow(refreshPage)
 				height: px2vw(60px);
 				line-height: px2vw(60px);
 				text-align: center;
-				font-size: px2vw(32px);
+				font-size: px2vw(30px);
 				font-weight: bold;
 				color: #333;
 				background-color: #f5f7fa;
@@ -5787,9 +5872,9 @@ onShow(refreshPage)
 
 			.sync-select-switch {
 				.switch {
-					width: px2vw(36px);
-					height: px2vw(20px);
-					border-radius: px2vw(10px);
+					width: px2vw(52px);
+					height: px2vw(28px);
+					border-radius: px2vw(14px);
 					background-color: #ccc;
 					position: relative;
 					transition: background-color 0.2s;
@@ -5797,8 +5882,8 @@ onShow(refreshPage)
 					&::after {
 						content: '';
 						position: absolute;
-						width: px2vw(16px);
-						height: px2vw(16px);
+						width: px2vw(24px);
+						height: px2vw(24px);
 						border-radius: 50%;
 						background-color: #fff;
 						top: px2vw(2px);
@@ -5811,7 +5896,7 @@ onShow(refreshPage)
 					background-color: #1890ff;
 
 					&::after {
-						left: px2vw(18px);
+						left: px2vw(26px);
 					}
 				}
 			}
