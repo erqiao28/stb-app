@@ -603,14 +603,13 @@
 	<view class="employee-modal" :class="{ show: showEmployeeSelector }" @click.self="closeEmployeeSelector">
 		<view class="employee-modal-content" @click.stop :style="{ paddingTop: statusBarHeight + 'px' }">
 			<view class="employee-modal-header" @click="showWorkshopDropdown = false">
-				<text class="employee-modal-title">选择员工</text>
 				<view class="header-controls">
 					<view class="employee-type-switch">
 						<view
 							class="switch-btn"
 							:class="{ active: employeeTypeFilter === 'normal' }"
 							@click.stop="switchEmployeeType('normal')"
-						>普</view>
+						>正</view>
 						<view
 							class="switch-btn"
 							:class="{ active: employeeTypeFilter === 'temp' }"
@@ -652,25 +651,10 @@
 						<view class="employee-modal-info-main">
 							<text class="employee-modal-name">{{ emp.name }}</text>
 							<text class="employee-type-tag" :class="emp.isNewEmployee ? 'is-new' : 'is-old'">{{ emp.isNewEmployee ? '新' : '老' }}</text>
-							<view class="employee-modal-position-wrap" @click.stop="toggleEmployeePositionExpand(emp.id)">
-								<text class="employee-modal-position-label">岗位</text>
-								<text class="employee-modal-expand-icon">
-									{{ expandedEmployeeIds.includes(emp.id) ? '▼' : '▶' }}
-								</text>
-							</view>
 						</view>
 						<view class="employee-modal-info-extra">
 							<text class="employee-modal-hours">{{ emp.totalHours || 0 }}</text>
 							<text class="employee-modal-wage">{{ emp.wage || 0 }}</text>
-						</view>
-						<view class="employee-modal-position-detail" v-if="expandedEmployeeIds.includes(emp.id) && emp.position" @click.stop>
-							<text
-								class="employee-modal-position-tag"
-								v-for="(pos, pIdx) in emp.position.split(/[,，]/).filter(Boolean)"
-								:key="pIdx"
-							>
-								{{ pos.trim() }}
-							</text>
 						</view>
 					</view>
 				</view>
@@ -989,7 +973,6 @@ const loadSyncSelectEnabled = () => {
 }
 
 const expandedIds = ref([])
-const expandedEmployeeIds = ref([])
 const collapsedOrderIds = ref([])
 const chineseNumberMap = {
 	1: '一',
@@ -1178,8 +1161,13 @@ const lastEmployeeOptionsParams = ref({
 // 员工类型切换：normal-正常员工，temp-临时工
 const employeeTypeFilter = ref('normal')
 
-// 筛选后的员工列表（获取数据时已筛选）
+// 筛选后的员工列表（前端根据 employeeTypeFilter 过滤显示）
 const filteredEmployees = computed(() => {
+	if (employeeTypeFilter.value === 'normal') {
+		return allEmployeeOptions.value.filter(emp => !emp.isTempEmployee)
+	} else if (employeeTypeFilter.value === 'temp') {
+		return allEmployeeOptions.value.filter(emp => emp.isTempEmployee)
+	}
 	return allEmployeeOptions.value
 })
 
@@ -4341,13 +4329,6 @@ const loadWorkshopEmployeesForSelector = async () => {
 
 				const filtered = rows.filter((item) => {
 				if (formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) !== currentDate) return false
-				// 根据员工类型筛选
-				const isTemp = String(formatFieldValue(item[EMPLOYEE_FIELD_MAP.isTempEmployee]) || '').trim() === '1'
-				if (employeeTypeFilter.value === 'normal') {
-					return !isTemp  // 普：排除临时工
-				} else if (employeeTypeFilter.value === 'temp') {
-					return isTemp  // 临：只选临时工
-				}
 				return true
 			})
 				allRows.push(...filtered)
@@ -4371,6 +4352,8 @@ const loadWorkshopEmployeesForSelector = async () => {
 			const position = formatFieldValue(item[EMPLOYEE_FIELD_MAP.position]) || ''
 			const isNewEmployeeRaw = formatFieldValue(item[EMPLOYEE_FIELD_MAP.isNewEmployee])
 			const isNewEmployee = String(isNewEmployeeRaw).trim() === '1'
+			const isTempEmployeeRaw = formatFieldValue(item[EMPLOYEE_FIELD_MAP.isTempEmployee])
+			const isTempEmployee = String(isTempEmployeeRaw).trim() === '1'
 			return {
 				id: item.rowid || '',
 				name: formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName]) || '-',
@@ -4378,7 +4361,8 @@ const loadWorkshopEmployeesForSelector = async () => {
 				wage,
 				attendance,
 				position,
-				isNewEmployee
+				isNewEmployee,
+				isTempEmployee
 			}
 		})
 		return mapped.map((e) => {
@@ -4833,7 +4817,6 @@ const openEmployeeSelectorForEdit = async () => {
 	if (allEmployeeOptions.value.length === 0 || paramsChanged) {
 		await loadEmployeeOptions()
 	}
-	expandedEmployeeIds.value = []
 	sortEmployeeOptionsByPosition()
 	showEmployeeSelector.value = true
 }
@@ -4850,15 +4833,13 @@ const selectWorkshop = async (ws) => {
 	uni.showLoading({ title: '加载中...' })
 	await loadEmployeeOptions()
 	uni.hideLoading()
+	sortEmployeeOptionsByPosition()
 }
 
-// 切换员工类型（普/临）
+// 切换员工类型（普/临）：数据已合并，只需要切换筛选条件
 const switchEmployeeType = async (type) => {
 	if (employeeTypeFilter.value === type) return
 	employeeTypeFilter.value = type
-	uni.showLoading({ title: '加载中...' })
-	await loadEmployeeOptions()
-	uni.hideLoading()
 }
 
 // 从员工编辑中移除员工
@@ -4964,6 +4945,7 @@ const loadEmployeeOptions = async () => {
 			totalHours: item.totalHours || 0,
 			wage: item.wage || 0,
 			isNewEmployee: item.isNewEmployee || false,
+			isTempEmployee: item.isTempEmployee || false,
 			dispatchWorkDate: currentDate
 		}))
 		// 记录当前筛选条件
@@ -4981,7 +4963,6 @@ const loadEmployeeOptions = async () => {
 const openEmployeeSelector = async () => {
 	await loadWorkshopEmployees()
 	await loadEmployeeOptions()
-	expandedEmployeeIds.value = []
 	sortEmployeeOptionsByPosition()
 	showEmployeeSelector.value = true
 }
@@ -5010,15 +4991,6 @@ const sortEmployeeOptionsByPosition = () => {
 
 const closeEmployeeSelector = () => {
 	showEmployeeSelector.value = false
-}
-
-const toggleEmployeePositionExpand = (empId) => {
-	const index = expandedEmployeeIds.value.indexOf(empId)
-	if (index >= 0) {
-		expandedEmployeeIds.value.splice(index, 1)
-	} else {
-		expandedEmployeeIds.value.push(empId)
-	}
 }
 
 const toggleEmployee = (emp) => {
@@ -5836,7 +5808,7 @@ onShow(refreshPage)
 				height: px2vw(60px);
 				line-height: px2vw(60px);
 				text-align: center;
-				font-size: px2vw(26px);
+				font-size: px2vw(32px);
 				font-weight: bold;
 				color: #333;
 				background-color: #f5f7fa;
@@ -5973,7 +5945,7 @@ onShow(refreshPage)
 						}
 
 						.order-delivery-date {
-							font-size: px2vw(18px);
+							font-size: px2vw(20px);
 							color: #888;
 							margin-left: px2vw(12px);
 							white-space: nowrap;
@@ -6038,7 +6010,7 @@ onShow(refreshPage)
 					}
 
 					.product-name {
-						font-size: px2vw(22px);
+						font-size: px2vw(24px);
 						color: #333;
 						white-space: nowrap;
 						overflow: hidden;
@@ -6047,7 +6019,7 @@ onShow(refreshPage)
 					}
 
 					.product-delivery-date {
-						font-size: px2vw(18px);
+						font-size: px2vw(24px);
 						color: #888;
 						margin-left: px2vw(12px);
 						white-space: nowrap;
@@ -6065,12 +6037,12 @@ onShow(refreshPage)
 					}
 
 					.expand-btn {
-						width: px2vw(32px);
-						height: px2vw(32px);
-						line-height: px2vw(32px);
+						width: px2vw(40px);
+						height: px2vw(40px);
+						line-height: px2vw(40px);
 						text-align: center;
 						border-radius: 50%;
-						font-size: px2vw(18px);
+						font-size: px2vw(22px);
 						color: #666;
 						background-color: #f1f3f5;
 						flex-shrink: 0;
@@ -6285,7 +6257,7 @@ onShow(refreshPage)
 						.grid-orderno {
 							writing-mode: vertical-rl;
 							text-orientation: upright;
-							font-size: px2vw(20px);
+							font-size: px2vw(24px);
 							color: #333;
 							margin-bottom: px2vw(10px);
 							letter-spacing: px2vw(-2px);
@@ -6295,7 +6267,7 @@ onShow(refreshPage)
 							writing-mode: vertical-rl;
 							text-orientation: upright;
 							flex: 1;
-							font-size: px2vw(20px);
+							font-size: px2vw(24px);
 							color: #333;
 							letter-spacing: px2vw(-2px);
 						}
@@ -6376,7 +6348,7 @@ onShow(refreshPage)
 					background-color: #f0f0f0;
 						padding: px2vw(9px) px2vw(5px);
 						text-align: center;
-						font-size: px2vw(17px);
+						font-size: px2vw(22px);
 						color: #333;
 						border-bottom: 1px solid #999;
 						border-right: 1px solid #999;
@@ -6390,7 +6362,7 @@ onShow(refreshPage)
 					.grid-cell {
 						padding: px2vw(9px) px2vw(5px);
 						text-align: center;
-						font-size: px2vw(17px);
+						font-size: px2vw(22px);
 						color: #333;
 						border-bottom: 1px solid #999;
 						border-right: 1px solid #999;
@@ -6952,7 +6924,7 @@ onShow(refreshPage)
 				}
 
 				.selected-order-code {
-					font-size: px2vw(24px);
+					font-size: px2vw(26px);
 					color: #666;
 					margin-right: px2vw(8px);
 					flex-shrink: 0;
@@ -7103,12 +7075,12 @@ onShow(refreshPage)
 		.product-main {
 			display: flex;
 			align-items: center;
-			padding: px2vw(12px) px2vw(16px);
+			padding: px2vw(14px) px2vw(16px);
 		}
 
 		.product-checkbox {
-			width: px2vw(40px);
-			height: px2vw(40px);
+			width: px2vw(32px);
+			height: px2vw(32px);
 			border: px2vw(2px) solid #ccc;
 			border-radius: px2vw(6px);
 			display: flex;
@@ -7118,7 +7090,7 @@ onShow(refreshPage)
 			flex-shrink: 0;
 
 			.checkbox-icon {
-				font-size: px2vw(24px);
+				font-size: px2vw(20px);
 				color: #5884f1;
 			}
 		}
@@ -7536,14 +7508,17 @@ onShow(refreshPage)
 		.employee-type-switch {
 			display: flex;
 			background-color: #f0f0f0;
-			border-radius: px2vw(6px);
+			border-radius: px2vw(8px);
 			overflow: hidden;
+			gap: px2vw(4px);
+			padding: px2vw(4px);
 
 			.switch-btn {
-				padding: px2vw(4px) px2vw(10px);
-				font-size: px2vw(18px);
+				padding: px2vw(5px) px2vw(13px);
+				font-size: px2vw(24px);
 				color: #666;
 				background-color: transparent;
+				border-radius: px2vw(6px);
 
 				&.active {
 					color: #fff;
@@ -7725,28 +7700,6 @@ onShow(refreshPage)
 			background-color: #fffbf0;
 		}
 
-		.employee-modal-position-wrap {
-			display: flex;
-			flex-direction: row;
-			align-items: center;
-			flex-shrink: 0;
-			gap: px2vw(6px);
-			padding: px2vw(4px) px2vw(10px);
-			background-color: #f0f2f5;
-			border-radius: px2vw(6px);
-		}
-
-		.employee-modal-position-label {
-			font-size: px2vw(18px);
-			color: #666;
-		}
-
-		.employee-modal-expand-icon {
-			font-size: px2vw(16px);
-			color: #999;
-			flex-shrink: 0;
-		}
-
 		.employee-modal-hours {
 			font-size: px2vw(22px);
 			color: #f1c40f;
@@ -7756,31 +7709,6 @@ onShow(refreshPage)
 		.employee-modal-wage {
 			font-size: px2vw(22px);
 			color: #27ae60;
-		}
-
-		.employee-modal-position-detail {
-			width: 100%;
-			border-top: 1px dashed #e0e0e0;
-			background-color: #fafbfc;
-			padding: px2vw(8px) px2vw(16px) px2vw(12px);
-			margin-top: px2vw(8px);
-			display: flex;
-			flex-direction: row;
-			flex-wrap: wrap;
-			gap: px2vw(8px);
-
-			.employee-modal-position-tag {
-				font-size: px2vw(18px);
-				color: #666;
-				background-color: #e8eefc;
-				border: 1px solid #d0d7de;
-				border-radius: px2vw(6px);
-				padding: px2vw(4px) px2vw(10px);
-				white-space: nowrap;
-				max-width: 100%;
-				overflow: hidden;
-				text-overflow: ellipsis;
-			}
 		}
 
 		.employee-modal-empty {
