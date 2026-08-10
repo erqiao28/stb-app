@@ -574,13 +574,7 @@
 						<text class="edit-label">员工姓名:</text>
 						<view class="edit-employee-tags">
 							<view v-for="(name, idx) in editData.selectedEmployeeNames" :key="idx" class="employee-tag">{{ name }}</view>
-							<view v-if="!editData.selectedEmployeeNames || editData.selectedEmployeeNames.length === 0" class="edit-employee-input" @click="openEmployeeSelector">
-								<text class="edit-input-text">请选择员工</text>
-								<text class="edit-input-arrow">▼</text>
-							</view>
-						</view>
-						<view class="edit-employee-add-btn" @click="openEmployeeSelector">
-							<text class="add-btn-text">+选择</text>
+							<view v-if="!editData.selectedEmployeeNames || editData.selectedEmployeeNames.length === 0" class="edit-value">-</view>
 						</view>
 					</view>
 					<view class="edit-row">
@@ -685,23 +679,19 @@
 						<text class="section-count">{{ employeeEditData.selectedEmployeeNames.length }}人</text>
 					</view>
 					<view class="employee-tags-container">
-						<view
-							v-for="(name, idx) in employeeEditData.selectedEmployeeNames"
-							:key="idx"
-							class="employee-tag-item"
-							@click="openEmployeeSelectorForEdit"
-						>
-							<text class="tag-name">{{ name }}</text>
-							<view class="tag-delete" @click.stop="removeEmployeeFromEdit(idx)">×</view>
-						</view>
-						<view v-if="employeeEditData.selectedEmployeeNames.length === 0" class="no-employee-tip">
-							<text>暂无选择员工</text>
-						</view>
-						<view class="add-employee-btn" @click="openEmployeeSelectorForEdit">
-							<text class="add-btn-icon">+</text>
-						</view>
+					<view
+						v-for="(name, idx) in employeeEditData.selectedEmployeeNames"
+						:key="idx"
+						class="employee-tag-item"
+					>
+						<text class="tag-name">{{ name }}</text>
+						<view class="tag-delete" @click.stop="removeEmployeeFromEdit(idx)">×</view>
+					</view>
+					<view v-if="employeeEditData.selectedEmployeeNames.length === 0" class="no-employee-tip">
+						<text>暂无选择员工</text>
 					</view>
 				</view>
+			</view>
 			</view>
 			<view class="employee-edit-modal-footer">
 				<view class="edit-btn-cancel" @click="closeEmployeeEditModal">取消</view>
@@ -3522,11 +3512,6 @@ const toggleProcessSelection = (process) => {
 			autoDeselectRelatedProcesses(process)
 		}
 	} else {
-		if (process.isAfterAssociated) {
-			uni.showToast({ title: '产品未流转到该工序', icon: 'none' })
-		} else if (process.isBeforeAssociated) {
-			uni.showToast({ title: '产品已完成该工序', icon: 'none' })
-		}
 		selectedProcessIds.value.push(process.rowid)
 		// 记录用户主动勾选，刷新时保留勾选状态
 		userCheckedProcessIds.value.add(process.rowid)
@@ -4727,18 +4712,26 @@ const confirmEdit = async () => {
 
 // 打开员工编辑弹窗
 const openEmployeeEditModal = async (processes, idx) => {
-	const t0 = Date.now()
 	const process = processes[idx]
 	if (!process) return
+
+	// 限制：工序未勾选时无法打开
+	if (!selectedProcessIds.value.includes(process.rowid)) {
+		uni.showToast({ title: '请先勾选该工序', icon: 'none' })
+		return
+	}
+
+	// 限制：勾选工序未绑定预派工时无法打开
+	if (!process.preDispatchRowid) {
+		uni.showToast({ title: '请先点击确定绑定', icon: 'none' })
+		return
+	}
 
 	// 获取该员工组起始位置的工序信息
 	const groupStartIdx = getEmployeeGroupStart(processes, idx)
 	const groupStartProcess = processes[groupStartIdx]
-	const groupSpan = getEmployeeGroupSpan(processes, groupStartIdx)
-	console.log('openEmployeeEditModal 1:', Date.now() - t0, 'ms')
 
 	// 判断显示工序名称还是岗位工序：岗位工序不为空时优先显示岗位工序
-	// 注意：process.positionProcess / craftPosition 在 loadAssociatedProcessDetails 中已从字典 ID 转换为名称
 	const positionProcessName = process.positionProcess || groupStartProcess.positionProcess || ''
 	const craftPositionName = process.craftPosition || groupStartProcess.craftPosition || ''
 	const processDisplay = (positionProcessName || craftPositionName || groupStartProcess.processName || '')
@@ -4751,40 +4744,39 @@ const openEmployeeEditModal = async (processes, idx) => {
 		selectedEmployeeIds: [],
 		selectedEmployeeNames: []
 	}
-	console.log('openEmployeeEditModal 2:', Date.now() - t0, 'ms')
 
-	// 复用已有员工列表：检查筛选条件是否变化
-	const currentParams = {
-		workshop: selectedSelectorWorkshop.value,
-		date: filterDate.value,
-		type: employeeTypeFilter.value
-	}
-	const paramsChanged = lastEmployeeOptionsParams.value.workshop !== currentParams.workshop ||
-		lastEmployeeOptionsParams.value.date !== currentParams.date ||
-		lastEmployeeOptionsParams.value.type !== currentParams.type
-	console.log('openEmployeeEditModal 3:', Date.now() - t0, 'ms', 'needLoad:', allEmployeeOptions.value.length === 0 || paramsChanged)
-	if (allEmployeeOptions.value.length === 0 || paramsChanged) {
-		await loadEmployeeOptions()
-	}
-	console.log('openEmployeeEditModal 4:', Date.now() - t0, 'ms')
-
-	// 匹配当前员工
-	const currentNames = groupStartProcess.employeeNames || []
-	if (currentNames.length > 0 && allEmployeeOptions.value.length > 0) {
-		const matchedIds = []
-		const matchedNames = []
-		allEmployeeOptions.value.forEach(emp => {
-			if (currentNames.includes(emp.name)) {
-				matchedIds.push(emp.id)
-				matchedNames.push(emp.name)
-			}
-		})
-		employeeEditData.value.selectedEmployeeIds = matchedIds
-		employeeEditData.value.selectedEmployeeNames = matchedNames
-	}
-	console.log('openEmployeeEditModal 5:', Date.now() - t0, 'ms')
-
+	// 立即显示两个弹窗，避免点击到显示的延迟
+	showEmployeeSelector.value = true
 	showEmployeeEditModal.value = true
+
+	// 异步加载员工数据，不阻塞弹窗显示
+	loadEmployeeDataAsync(groupStartProcess)
+}
+
+// 异步加载员工数据：加载完成后匹配当前已选员工
+const loadEmployeeDataAsync = async (groupStartProcess) => {
+	try {
+		await loadWorkshopEmployees()
+		await loadEmployeeOptions()
+		sortEmployeeOptionsByPosition()
+
+		// 匹配当前员工
+		const currentNames = groupStartProcess.employeeNames || []
+		if (currentNames.length > 0 && allEmployeeOptions.value.length > 0) {
+			const matchedIds = []
+			const matchedNames = []
+			allEmployeeOptions.value.forEach(emp => {
+				if (currentNames.includes(emp.name)) {
+					matchedIds.push(emp.id)
+					matchedNames.push(emp.name)
+				}
+			})
+			employeeEditData.value.selectedEmployeeIds = matchedIds
+			employeeEditData.value.selectedEmployeeNames = matchedNames
+		}
+	} catch (e) {
+		console.error('加载员工数据失败:', e)
+	}
 }
 
 // 关闭员工编辑弹窗
@@ -4798,27 +4790,6 @@ const closeEmployeeEditModal = () => {
 		selectedEmployeeIds: [],
 		selectedEmployeeNames: []
 	}
-}
-
-// 为员工编辑弹窗打开员工选择器
-const openEmployeeSelectorForEdit = async () => {
-	// 同步已选员工到 editData
-	editData.value.selectedEmployeeIds = [...employeeEditData.value.selectedEmployeeIds]
-	editData.value.selectedEmployeeNames = [...employeeEditData.value.selectedEmployeeNames]
-	// 复用已有员工列表：检查筛选条件是否变化
-	const currentParams = {
-		workshop: selectedSelectorWorkshop.value,
-		date: filterDate.value,
-		type: employeeTypeFilter.value
-	}
-	const paramsChanged = lastEmployeeOptionsParams.value.workshop !== currentParams.workshop ||
-		lastEmployeeOptionsParams.value.date !== currentParams.date ||
-		lastEmployeeOptionsParams.value.type !== currentParams.type
-	if (allEmployeeOptions.value.length === 0 || paramsChanged) {
-		await loadEmployeeOptions()
-	}
-	sortEmployeeOptionsByPosition()
-	showEmployeeSelector.value = true
 }
 
 // 切换车间下拉框显示
@@ -4960,13 +4931,6 @@ const loadEmployeeOptions = async () => {
 	}
 }
 
-const openEmployeeSelector = async () => {
-	await loadWorkshopEmployees()
-	await loadEmployeeOptions()
-	sortEmployeeOptionsByPosition()
-	showEmployeeSelector.value = true
-}
-
 const getPositionMatchIndex = (positionText, targetName) => {
 	if (!positionText || !targetName) return Infinity
 	const positions = positionText.split(/[,，]/).map(p => p.trim()).filter(Boolean)
@@ -4991,6 +4955,7 @@ const sortEmployeeOptionsByPosition = () => {
 
 const closeEmployeeSelector = () => {
 	showEmployeeSelector.value = false
+	showEmployeeEditModal.value = false  // 关闭选择器时同时关闭编辑框
 }
 
 const toggleEmployee = (emp) => {
