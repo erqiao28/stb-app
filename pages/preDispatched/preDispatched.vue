@@ -9,7 +9,7 @@
 					v-for="position in assemblyPositionButtons"
 					:key="position.rowid"
 					class="header-btn header-btn-position"
-					:class="{ active: activeAssemblyPositions.includes(position.name) }"
+					:class="{ active: activeAssemblyPosition === position.name }"
 					@click="handleAssemblyPositionClick(position)"
 				>{{ position.name }}</view>
 			</template>
@@ -1077,9 +1077,10 @@ const SPRAY_PROCESS_FIELD_MAP = {
 const RECORD_BG_COLORS = ['#e8f4f8', '#f2f0e6', '#f9f0f4', '#eaf6ea', '#fff6e6']
 
 // 组装车间岗位筛选按钮（仅权限车间为组装车间时显示），数据来自岗位工序表
+// 按钮结构：{ name: 显示名, rowid: 主岗位工序rowid, positionRowids: 内部岗位rowid数组, positionNames: 内部岗位名数组 }
 const assemblyPositionButtons = ref([])
-// 当前选中的组装岗位名称集合（支持多选），用于筛选产品列表
-const activeAssemblyPositions = ref([])
+// 当前选中的岗位按钮名称（单选），用于筛选产品列表及添加产品传参
+const activeAssemblyPosition = ref('')
 
 const showVoidModal = ref(false)
 const voidReason = ref('')
@@ -2428,7 +2429,8 @@ const confirmSelectedProducts = async () => {
 	try {
 		await http.post(PRE_DISPATCH_PRODUCT_ADD_URL, {
 			dispatchDate: filterDate.value,  // 筛选日期
-			rowid: rowid  // 选中产品的 rowid
+			rowid: rowid,  // 选中产品的 rowid
+			positionProcessRowid: getSelectedPositionProcessRowid()  // 所选岗位工序 rowid（未选择/其他车间传空）
 		})
 
 		// 添加成功后轮询等待新产品数据写入完成再刷新渲染
@@ -2486,7 +2488,8 @@ const addProductsByRowids = async (rowids) => {
 		// 调用添加接口，传递 rowid 数组
 		await http.post(PRE_DISPATCH_PRODUCT_ADD_URL, {
 			dispatchDate: filterDate.value,
-			rowid: rowids  // rowid 数组
+			rowid: rowids,  // rowid 数组
+			positionProcessRowid: getSelectedPositionProcessRowid()  // 所选岗位工序 rowid（未选择/其他车间传空）
 		})
 
 		// 添加成功后轮询等待新产品数据写入完成再刷新渲染
@@ -2573,7 +2576,8 @@ const addProductsByCodes = async (products) => {
 		// 调用添加接口
 		await http.post(PRE_DISPATCH_PRODUCT_ADD_BY_CODES_URL || PRE_DISPATCH_PRODUCT_ADD_URL, {
 			dispatchDate: filterDate.value,
-			productionCodes: newCodes
+			productionCodes: newCodes,
+			positionProcessRowid: getSelectedPositionProcessRowid()  // 所选岗位工序 rowid（未选择/其他车间传空）
 		})
 
 		// 添加成功后轮询等待新产品数据写入完成再刷新渲染
@@ -3114,12 +3118,13 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 			mapped = mapped.filter(item => item.guokou.toLowerCase().includes(keyword))
 		}
 
-		// 组装车间岗位筛选：只保留岗位工序关联到任一选中岗位的预派工
-		if (activeAssemblyPositions.value.length > 0) {
-			const selectedPositions = new Set(activeAssemblyPositions.value)
+		// 组装车间岗位筛选：只保留岗位工序关联到选中按钮任一内部岗位的预派工
+		if (activeAssemblyPosition.value) {
+			const activeBtn = assemblyPositionButtons.value.find(b => b.name === activeAssemblyPosition.value)
+			const matchNames = activeBtn?.positionNames?.length ? activeBtn.positionNames : [activeAssemblyPosition.value]
 			mapped = mapped.filter(item => {
 				const rowids = item.positionProcessRowids || []
-				return rowids.some(sid => selectedPositions.has(positionProcessDictMap.value.get(sid)))
+				return rowids.some(sid => matchNames.includes(positionProcessDictMap.value.get(sid)))
 			})
 		}
 
@@ -4458,6 +4463,7 @@ const loadSprayProcessList = async () => {
 }
 
 // 加载岗位工序表中车间为组装车间的岗位名称，作为导航栏筛选按钮（仅组装车间权限时使用）
+// 合并规则：将"点焊"与"组装包装"合并显示为一个按钮，按钮名只显示"组装包装"
 const loadAssemblyPositionButtons = async () => {
 	if (loginWorkshop.value !== '组装车间') {
 		assemblyPositionButtons.value = []
@@ -4477,26 +4483,60 @@ const loadAssemblyPositionButtons = async () => {
 		}, 100)
 		const rows = Array.isArray(res?.data) ? res.data : []
 		// 岗位名称解析顺序与 loadPositionProcessDict 保持一致，确保筛选时能匹配上
-		assemblyPositionButtons.value = rows.map((item) => ({
-			rowid: item.rowid || '',
-			name: item[ASSEMBLY_POSITION_FIELD_ID] || item['Name'] || '-'
-		}))
+		const parseName = (item) => item[ASSEMBLY_POSITION_FIELD_ID] || item['Name'] || '-'
+
+		const buttons = []
+		const mergedRowids = []  // 点焊 + 组装包装 的 rowid 集合
+		const mergedNames = []   // 点焊 + 组装包装 的岗位名集合
+		let mergedBtn = null     // "组装包装"记录（作为合并按钮的主记录，业务上固定存在）
+
+		rows.forEach((item) => {
+			const name = parseName(item)
+			if (name === '组装包装' || name === '点焊') {
+				if (name === '组装包装') {
+					mergedBtn = { name: '组装包装', rowid: item.rowid || '' }
+				}
+				mergedRowids.push(item.rowid || '')
+				mergedNames.push(name)
+			} else {
+				// 其他岗位独立成按钮
+				buttons.push({
+					name,
+					rowid: item.rowid || '',
+					positionRowids: [item.rowid || ''],
+					positionNames: [name]
+				})
+			}
+		})
+
+		// 存在"组装包装"记录时，将点焊并入其中作为一个按钮放在最前面
+		if (mergedBtn) {
+			buttons.unshift({
+				name: '组装包装',
+				rowid: mergedBtn.rowid,
+				positionRowids: mergedRowids,
+				positionNames: mergedNames
+			})
+		}
+		assemblyPositionButtons.value = buttons
 	} catch (e) {
 		console.error('加载组装车间岗位筛选按钮失败:', e)
 		assemblyPositionButtons.value = []
 	}
 }
 
-// 点击组装岗位筛选按钮：切换选中/取消该岗位（支持多选），并重新加载产品列表
+// 获取当前选中岗位按钮对应的岗位工序 rowid（未选中返回空；其他车间无按钮同样返回空）
+const getSelectedPositionProcessRowid = () => {
+	if (!activeAssemblyPosition.value) return ''
+	const btn = assemblyPositionButtons.value.find(b => b.name === activeAssemblyPosition.value)
+	return btn?.rowid || ''
+}
+
+// 点击组装岗位筛选按钮：单选切换选中/取消，并重新加载产品列表
 const handleAssemblyPositionClick = async (position) => {
-	const idx = activeAssemblyPositions.value.indexOf(position.name)
-	if (idx >= 0) {
-		activeAssemblyPositions.value.splice(idx, 1)
-	} else {
-		activeAssemblyPositions.value.push(position.name)
-	}
+	activeAssemblyPosition.value = activeAssemblyPosition.value === position.name ? '' : position.name
 	// 确保岗位工序字典已加载，用于将预派工的岗位工序 ID 解析为名称后匹配筛选
-	if (activeAssemblyPositions.value.length > 0 && positionProcessDictMap.value.size === 0) {
+	if (activeAssemblyPosition.value && positionProcessDictMap.value.size === 0) {
 		await loadPositionProcessDict()
 	}
 	await loadProducts(true)
