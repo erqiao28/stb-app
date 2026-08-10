@@ -170,11 +170,6 @@
 								</view>
 								<view class="product-btns">
 									<text class="expand-btn" @click.stop="toggleExpand(product.uniqueKey)">{{ expandedIds.includes(product.uniqueKey) ? '▼' : '▲' }}</text>
-									<view class="dispatch-icon" @click.stop="openDispatchModal(product)">
-										<view class="dispatch-icon-line"></view>
-										<view class="dispatch-icon-line"></view>
-										<view class="dispatch-icon-line"></view>
-									</view>
 								</view>
 								<view class="product-spec" v-if="expandedIds.includes(product.uniqueKey)">
 								<view
@@ -224,6 +219,7 @@
 								>工艺调整</view>
 								<view class="grid-product-refresh" @click.stop="refreshProcessList(group.productRowid)">刷新</view>
 								<view class="grid-product-confirm" @click.stop="handleProcessListConfirm(group.productRowid)">确定</view>
+								<view class="grid-product-dispatch" @click.stop="openDispatchModalFromRowid(group.productRowid)">派工设置</view>
 							</view>
 							<view class="grid-label-cell" style="grid-row: 1; grid-column: 3">选中</view>
 							<view class="grid-label-cell" style="grid-row: 2; grid-column: 3">顺序</view>
@@ -733,6 +729,10 @@
 	<view class="dispatch-modal" v-if="showDispatchModal" @click.self="closeDispatchModal">
 		<view class="dispatch-modal-content" @click.stop>
 			<view class="dispatch-modal-title">派工设置</view>
+			<view class="dispatch-modal-product-info">
+				<text class="product-info-order">{{ dispatchModalProduct?.productionCode || '-' }}</text>
+				<text class="product-info-name">{{ dispatchModalProduct?.productName || '-' }}</text>
+			</view>
 			<view class="dispatch-modal-body">
 				<view class="dispatch-grid">
 					<view class="dispatch-grid-cell">
@@ -825,9 +825,17 @@
 					<view class="process-action-form">
 						<view class="process-action-form-group">
 							<text class="process-action-form-label">操作方式</text>
-							<picker mode="selector" :range="processActionModeOptions" :value="processActionModeIndex" @change="onProcessActionModeChange" class="process-action-picker">
-								<view class="process-action-picker-value">{{ processActionModeOptions[processActionModeIndex] }}</view>
-							</picker>
+							<view class="process-action-mode-buttons">
+								<view
+									v-for="mode in processActionModeOptions"
+									:key="mode"
+									class="process-action-mode-btn"
+									:class="{ active: processActionModeOptions[processActionModeIndex] === mode }"
+									@click="onProcessActionModeChange(mode)"
+								>
+									{{ mode }}
+								</view>
+							</view>
 						</view>
 						<view class="process-action-form-group" v-if="processActionModeOptions[processActionModeIndex] === '添加'">
 							<text class="process-action-form-label">生产顺序</text>
@@ -3157,6 +3165,13 @@ const handleProductClick = (product) => {
 	}
 }
 
+// 根据 productRowid 打开派工设置弹窗
+const openDispatchModalFromRowid = async (productRowid) => {
+	const product = productList.value.find(p => p.uniqueKey === productRowid)
+	if (!product) return
+	await openDispatchModal(product)
+}
+
 const openDispatchModal = async (product) => {
 	if (!product || !product.uniqueKey) return
 
@@ -3180,14 +3195,14 @@ const openDispatchModal = async (product) => {
 	// 有预派工rowids
 	const pdRowids = [...new Set(associatedProcesses.map(p => p.preDispatchRowid).filter(Boolean))]
 
-	// 计算完成数量（与可派数量逻辑独立）
+	// 计算完成数量（与可派数量逻辑独立），跳过为0的数据
 	if (pdRowids.length > 0 && associatedProcesses.length > 0) {
-		const finishVals = associatedProcesses.map(p => parseFloat(p.finishCount) || 0)
+		const finishVals = associatedProcesses.map(p => parseFloat(p.finishCount) || 0).filter(v => v > 0)
 		if (finishVals.length > 0) finishCount = Math.round(finishVals.reduce((a, b) => a + b, 0) / finishVals.length)
 	} else {
 		const checkedProcesses = productProcesses.filter(p => selectedProcessIds.value.includes(p.rowid))
 		if (checkedProcesses.length > 0) {
-			const finishVals = checkedProcesses.map(p => parseFloat(p.finishCount) || 0)
+			const finishVals = checkedProcesses.map(p => parseFloat(p.finishCount) || 0).filter(v => v > 0)
 			if (finishVals.length > 0) finishCount = Math.round(finishVals.reduce((a, b) => a + b, 0) / finishVals.length)
 		}
 	}
@@ -3197,14 +3212,14 @@ const openDispatchModal = async (product) => {
 	if (Number.isFinite(productDispatchCount) && productDispatchCount > 0) {
 		dispatchCount = Math.round(productDispatchCount)
 	} else if (pdRowids.length > 0 && associatedProcesses.length > 0) {
-		// 有预派工：获取预派工数据
-		const needVals = associatedProcesses.map(p => parseFloat(p.needCount) || 0)
+		// 有预派工：获取预派工数据，跳过可派数量为0的数据
+		const needVals = associatedProcesses.map(p => parseFloat(p.needCount) || 0).filter(v => v > 0)
 		if (needVals.length > 0) dispatchCount = Math.round(needVals.reduce((a, b) => a + b, 0) / needVals.length)
 	} else {
-		// 无预派工：用勾选的工序
+		// 无预派工：用勾选的工序，跳过可派数量为0的数据
 		const checkedProcesses = productProcesses.filter(p => selectedProcessIds.value.includes(p.rowid))
 		if (checkedProcesses.length > 0) {
-			const needVals = checkedProcesses.map(p => parseFloat(p.needCount) || 0)
+			const needVals = checkedProcesses.map(p => parseFloat(p.needCount) || 0).filter(v => v > 0)
 			if (needVals.length > 0) dispatchCount = Math.round(needVals.reduce((a, b) => a + b, 0) / needVals.length)
 		}
 	}
@@ -4055,8 +4070,11 @@ const selectProcessActionItem = (item) => {
 	processActionSelected.value = item
 }
 
-const onProcessActionModeChange = (e) => {
-	processActionModeIndex.value = Number(e.detail.value) || 0
+const onProcessActionModeChange = (mode) => {
+	const index = processActionModeOptions.indexOf(mode)
+	if (index > -1) {
+		processActionModeIndex.value = index
+	}
 }
 
 // 获取工序排产明细不为空的预派工 rowids
@@ -6338,6 +6356,20 @@ onShow(refreshPage)
 							align-items: center;
 							justify-content: center;
 						}
+
+						.grid-product-dispatch {
+							padding: px2vw(8px) px2vw(4px);
+							background-color: #5884f1;
+							color: #fff;
+							border-radius: px2vw(6px);
+							font-size: px2vw(24px);
+							writing-mode: vertical-rl;
+							text-orientation: upright;
+							letter-spacing: px2vw(2px);
+							display: flex;
+							align-items: center;
+							justify-content: center;
+						}
 					}
 
 				.grid-label-cell {
@@ -6674,6 +6706,28 @@ onShow(refreshPage)
 		text-align: center;
 		margin-bottom: px2vw(30px);
 		color: #333;
+	}
+
+	.dispatch-modal-product-info {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: px2vw(16px);
+		margin-bottom: px2vw(24px);
+		padding: px2vw(16px);
+		background-color: #f8f9ff;
+		border-radius: px2vw(12px);
+
+		.product-info-order {
+			font-size: px2vw(24px);
+			color: #5884f1;
+			font-weight: bold;
+		}
+
+		.product-info-name {
+			font-size: px2vw(24px);
+			color: #333;
+		}
 	}
 
 	.dispatch-modal-body {
@@ -7968,7 +8022,7 @@ onShow(refreshPage)
 
 	.process-action-content {
 		width: 90%;
-		max-width: px2vw(800px);
+		max-width: px2vw(1000px);
 		max-height: 70vh;
 		background-color: #fff;
 		border-radius: px2vw(16px);
@@ -8104,7 +8158,7 @@ onShow(refreshPage)
 			}
 
 			.process-action-form {
-				flex: 0 0 px2vw(280px);
+				flex: 0 0 px2vw(350px);
 				display: flex;
 				flex-direction: column;
 				gap: px2vw(12px);
@@ -8124,21 +8178,29 @@ onShow(refreshPage)
 						color: #333;
 					}
 
-					.process-action-picker {
-						width: 100%;
+					.process-action-mode-buttons {
+						display: flex;
+						gap: px2vw(12px);
 					}
 
-					.process-action-picker-value {
+					.process-action-mode-btn {
+						flex: 1;
 						height: px2vw(64px);
-						padding: 0 px2vw(16px);
+						display: flex;
+						align-items: center;
+						justify-content: center;
 						border: 1px solid #d0d8f0;
 						border-radius: px2vw(10px);
 						font-size: px2vw(24px);
 						background-color: #fff;
-						display: flex;
-						align-items: center;
 						color: #333;
-						box-shadow: 0 1px 3px rgba(88, 132, 241, 0.08);
+						transition: all 0.2s;
+
+						&.active {
+							background-color: #5884f1;
+							color: #fff;
+							border-color: #5884f1;
+						}
 					}
 
 					.process-action-input {
