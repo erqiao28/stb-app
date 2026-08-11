@@ -242,7 +242,10 @@
 							<view class="grid-label-cell" style="grid-row: 9; grid-column: 3">员工</view>
 							<template v-for="(p, idx) in group.processes" :key="p.rowid">
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 1, gridColumn: 4 + idx }">
-								<checkbox :checked="selectedProcessIds.includes(p.rowid)" @click="toggleProcessSelection(p)" />
+								<!-- 自定义勾选框：完全受 selectedProcessIds 控制，避免 checkbox 组件内部状态不同步问题 -->
+								<view class="grid-checkbox" :class="{ checked: selectedProcessIds.includes(p.rowid) }" @click.stop="toggleProcessSelection(p)">
+									<text v-if="selectedProcessIds.includes(p.rowid)" class="grid-checkbox-icon">✓</text>
+								</view>
 							</view>
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 2, gridColumn: 4 + idx }">{{ p.sequence || '-' }}</view>
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 3, gridColumn: 4 + idx }">{{ p.processName || '-' }}</view>
@@ -662,10 +665,15 @@
 						</view>
 					</view>
 				</view>
-			</scroll-view>
+			<!-- 空态提示：放在滚动列表内部，居中显示 -->
 			<view class="employee-modal-empty" v-if="allEmployeeOptions.length === 0">
-				<text>暂无员工</text>
+				<view v-if="employeeListLoading" class="empty-loading-text">
+					<view class="empty-spinner"></view>
+					<text>获取员工数据中...</text>
+				</view>
+				<text v-else>暂无员工</text>
 			</view>
+		</scroll-view>
 		</view>
 	</view>
 
@@ -689,17 +697,23 @@
 						<text class="section-count">{{ employeeEditData.selectedEmployeeNames.length }}人</text>
 					</view>
 					<view class="employee-tags-container">
-					<view
-						v-for="(name, idx) in employeeEditData.selectedEmployeeNames"
-						:key="idx"
-						class="employee-tag-item"
-					>
-						<text class="tag-name">{{ name }}</text>
-						<view class="tag-delete" @click.stop="removeEmployeeFromEdit(idx)">×</view>
+					<!-- 异步匹配员工中：先显示提示，匹配完成后再渲染标签 -->
+					<view v-if="employeeEditLoading" class="no-employee-tip">
+						<text>匹配员工中...</text>
 					</view>
-					<view v-if="employeeEditData.selectedEmployeeNames.length === 0" class="no-employee-tip">
-						<text>暂无选择员工</text>
-					</view>
+					<template v-else>
+						<view
+							v-for="(name, idx) in employeeEditData.selectedEmployeeNames"
+							:key="idx"
+							class="employee-tag-item"
+						>
+							<text class="tag-name">{{ name }}</text>
+							<view class="tag-delete" @click.stop="removeEmployeeFromEdit(idx)">×</view>
+						</view>
+						<view v-if="employeeEditData.selectedEmployeeNames.length === 0" class="no-employee-tip">
+							<text>暂无选择员工</text>
+						</view>
+					</template>
 				</view>
 			</view>
 			</view>
@@ -1156,6 +1170,10 @@ const employeeEditData = ref({
 
 const showEmployeeSelector = ref(false)
 const allEmployeeOptions = ref([])
+// 员工选择框数据加载中标记：列表为空时用于显示"获取员工数据中"提示
+const employeeListLoading = ref(false)
+// 员工编辑框匹配中标记：打开编辑框后异步匹配员工期间显示"匹配员工中"提示
+const employeeEditLoading = ref(false)
 
 // 记录上次加载员工列表时的筛选条件，用于判断是否需要重新加载
 const lastEmployeeOptionsParams = ref({
@@ -4753,6 +4771,8 @@ const handleCircleClick = async (item) => {
 	showEditModal.value = true
 	// 加载员工列表并匹配当日工资员工进行预选
 	await loadEmployeeOptions()
+	// 临时工按姓名末尾数字排序等，保证选择员工框顺序正确
+	sortEmployeeOptionsByPosition(editData.value.processDisplay)
 	const dailyNames = editData.value.employeeNames
 	if (dailyNames.length > 0 && allEmployeeOptions.value.length > 0) {
 		const matchedIds = []
@@ -4854,6 +4874,9 @@ const openEmployeeEditModal = async (processes, idx) => {
 		selectedEmployeeIds: [],
 		selectedEmployeeNames: []
 	}
+	// 同步选择器勾选数据（清空旧数据），保证选择员工框与编辑弹窗初始状态一致
+	editData.value.selectedEmployeeIds = []
+	editData.value.selectedEmployeeNames = []
 
 	// 立即显示两个弹窗，避免点击到显示的延迟
 	showEmployeeSelector.value = true
@@ -4865,12 +4888,18 @@ const openEmployeeEditModal = async (processes, idx) => {
 
 // 异步加载员工数据：加载完成后匹配当前已选员工
 const loadEmployeeDataAsync = async (groupStartProcess) => {
+	// 列表为空时标记加载中，用于显示"获取员工数据中"提示；已有旧数据则直接显示，无需提示
+	if (allEmployeeOptions.value.length === 0) {
+		employeeListLoading.value = true
+	}
+	// 编辑框匹配中：无论是否有缓存，匹配完成前都显示"匹配员工中"提示
+	employeeEditLoading.value = true
 	try {
 		await loadWorkshopEmployees()
 		await loadEmployeeOptions()
 		sortEmployeeOptionsByPosition()
 
-		// 匹配当前员工
+		// 匹配当前员工：工序关联预派工关联的员工名，在员工列表中按姓名匹配
 		const currentNames = groupStartProcess.employeeNames || []
 		if (currentNames.length > 0 && allEmployeeOptions.value.length > 0) {
 			const matchedIds = []
@@ -4883,9 +4912,15 @@ const loadEmployeeDataAsync = async (groupStartProcess) => {
 			})
 			employeeEditData.value.selectedEmployeeIds = matchedIds
 			employeeEditData.value.selectedEmployeeNames = matchedNames
+			// 同步选择器勾选，保证选择员工框勾选状态与编辑弹窗一致
+			editData.value.selectedEmployeeIds = [...matchedIds]
+			editData.value.selectedEmployeeNames = [...matchedNames]
 		}
 	} catch (e) {
 		console.error('加载员工数据失败:', e)
+	} finally {
+		employeeListLoading.value = false
+		employeeEditLoading.value = false
 	}
 }
 
@@ -5048,15 +5083,30 @@ const getPositionMatchIndex = (positionText, targetName) => {
 	return index >= 0 ? index : Infinity
 }
 
-const sortEmployeeOptionsByPosition = () => {
-	const targetName = employeeEditData.value.processName || editData.value.processDisplay || ''
-	if (!targetName) return
+// 提取临时工姓名末尾的数字：临时工2 → 2；非"临时工N"格式返回 null
+const getTempEmployeeNumber = (name) => {
+	const match = /^临时工(\d+)$/.exec(String(name || '').trim())
+	return match ? parseInt(match[1], 10) : null
+}
+
+const sortEmployeeOptionsByPosition = (target = '') => {
+	// 优先使用调用方传入的目标工序名，未传时回退到当前编辑上下文
+	const targetName = target || employeeEditData.value.processName || editData.value.processDisplay || ''
 
 	const sorted = [...allEmployeeOptions.value].sort((a, b) => {
-		const aIndex = getPositionMatchIndex(a.position, targetName)
-		const bIndex = getPositionMatchIndex(b.position, targetName)
-		if (aIndex !== bIndex) {
-			return aIndex - bIndex
+		// 两个都是临时工时，按姓名末尾数字升序（临时工1、临时工2、...）
+		const aNum = getTempEmployeeNumber(a.name)
+		const bNum = getTempEmployeeNumber(b.name)
+		if (aNum !== null && bNum !== null) {
+			return aNum - bNum
+		}
+		// 有目标工序名时，岗位匹配度优先
+		if (targetName) {
+			const aIndex = getPositionMatchIndex(a.position, targetName)
+			const bIndex = getPositionMatchIndex(b.position, targetName)
+			if (aIndex !== bIndex) {
+				return aIndex - bIndex
+			}
 		}
 		return String(a.name || '').localeCompare(String(b.name || ''))
 	})
@@ -6480,6 +6530,31 @@ onShow(refreshPage)
 							min-width: px2vw(80px);
 						}
 
+						// 工序勾选框：自定义实现，完全受 selectedProcessIds 控制
+						.grid-checkbox {
+							width: px2vw(26px);
+							height: px2vw(26px);
+							border: px2vw(2px) solid #ccc;
+							border-radius: px2vw(4px);
+							background-color: #fff;
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							box-sizing: border-box;
+							cursor: pointer;
+
+							&.checked {
+								background-color: #3498db;
+								border-color: #3498db;
+							}
+
+							.grid-checkbox-icon {
+								font-size: px2vw(16px);
+								color: #fff;
+								line-height: 1;
+							}
+						}
+
 						&:nth-last-child(-n+9) {
 							border-right: none;
 						}
@@ -7802,12 +7877,34 @@ onShow(refreshPage)
 		}
 
 		.employee-modal-empty {
-			padding: px2vw(60px) 0;
+			padding: px2vw(80px) 0;
 			text-align: center;
 
 			text {
 				font-size: px2vw(24px);
 				color: #999;
+			}
+
+			// 加载中：旋转加载圈 + 文案
+			.empty-loading-text {
+				display: inline-flex;
+				align-items: center;
+
+				.empty-spinner {
+					width: px2vw(28px);
+					height: px2vw(28px);
+					border: px2vw(3px) solid #e6e6e6;
+					border-top-color: #3498db;
+					border-radius: 50%;
+					margin-right: px2vw(12px);
+					animation: empty-spin 0.8s linear infinite;
+				}
+			}
+		}
+
+		@keyframes empty-spin {
+			to {
+				transform: rotate(360deg);
 			}
 		}
 	}
