@@ -162,9 +162,23 @@
               </view>
               <view class="input-group">
                 <view class="input-label">修改方式</view>
-                <picker mode="selector" :range="modifyModeOptions" :value="modalModifyModeIndex" @change="onModalModifyModeChange" class="picker-wrapper">
-                  <view class="process-input date-picker">{{ modifyModeOptions[modalModifyModeIndex] }}</view>
-                </picker>
+                <view class="mode-buttons">
+                  <view
+                    class="mode-btn"
+                    :class="{ active: modalModifyModeIndex === 0 }"
+                    @click="modalModifyModeIndex = 0"
+                  >添加</view>
+                  <view
+                    class="mode-btn"
+                    :class="{ active: modalModifyModeIndex === 1 }"
+                    @click="modalModifyModeIndex = 1"
+                  >替换</view>
+                  <view
+                    class="mode-btn mode-btn-delete"
+                    :class="{ active: modalModifyModeIndex === 2 }"
+                    @click="modalModifyModeIndex = 2"
+                  >删除</view>
+                </view>
               </view>
 
             </view>
@@ -172,7 +186,6 @@
         </view>
 
         <view class="modal-footer">
-          <button class="btn-delete" @click="deleteSelectedProcess">删除</button>
           <view class="modal-footer-right">
             <button class="btn-cancel" @click="closeActionModal">取消</button>
             <button class="btn-confirm" @click="confirmAction">确定</button>
@@ -395,7 +408,7 @@ const modalHasMore = ref(true)
 const modalLoading = ref(false)
 const modalSelectedProcess = ref(null)
 const modalProductionSequence = ref('')
-const modifyModeOptions = ref(['添加', '替换'])
+const modifyModeOptions = ref(['添加', '替换', '删除'])
 const modalModifyModeIndex = ref(0)
 
 const openActionModal = () => {
@@ -480,11 +493,15 @@ const selectModalProcess = (item) => {
   modalSelectedProcess.value = item
 }
 
-const onModalModifyModeChange = (e) => {
-  modalModifyModeIndex.value = Number(e.detail.value) || 0
-}
-
 const confirmAction = async () => {
+  const mode = modifyModeOptions.value[modalModifyModeIndex.value] || '添加'
+
+  // 删除模式：交由删除流程处理（含二次确认）
+  if (mode === '删除') {
+    deleteSelectedProcess()
+    return
+  }
+
   // 必须选中模态框中的一个工序
   if (!modalSelectedProcess.value) {
     uni.showToast({ title: '请选择一个工序', icon: 'none' })
@@ -495,7 +512,7 @@ const confirmAction = async () => {
     processName: modalSelectedProcess.value.processName || '',
     processRowid: modalSelectedProcess.value.rowid || '',
     sequence: parseFloat(modalProductionSequence.value) || 0,
-    modifyMode: modifyModeOptions.value[modalModifyModeIndex.value] || '添加',
+    modifyMode: mode,
     selectedProcessId: selectedProcess.value?.rowid || '',
     productionCode: productionCode.value || ''
   }
@@ -509,7 +526,8 @@ const confirmAction = async () => {
     console.log('【操作工序】响应结果:', JSON.stringify(res))
 
     // 检查接口返回的业务状态
-    if (res && (res.status === 0 || res.success === true || res.code === 200 || res.data)) {
+    // 该 hook 接口成功时返回纯字符串提示（如 "更新成功"），或 { status: 1 } 等对象结构
+    if (res && (typeof res === 'string' || res.status === 1 || res.status === 0 || res.success === true || res.code === 200 || res.data)) {
       uni.showToast({ title: '操作成功', icon: 'success' })
       closeActionModal()
       // 清空选中状态并刷新
@@ -1022,24 +1040,11 @@ const deleteSelectedProcess = async () => {
       height: px2vw(120px);
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
       gap: px2vw(20px);
       padding: 0 px2vw(30px);
       border-top: px2vw(2px) solid #e0e0e0;
       flex-shrink: 0;
-
-      .btn-delete {
-        height: px2vw(80px);
-        padding: 0 px2vw(50px);
-        border-radius: px2vw(12px);
-        font-size: px2vw(28px);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border: none;
-        background-color: #f44336;
-        color: white;
-      }
 
       .modal-footer-right {
         display: flex;
@@ -1109,7 +1114,7 @@ const deleteSelectedProcess = async () => {
   }
 
   .table-section {
-    flex: 1;
+    flex: 0 0 58%;
     min-width: 0;
     overflow: hidden;
     display: flex;
@@ -1172,7 +1177,7 @@ const deleteSelectedProcess = async () => {
   }
 
   .input-section {
-    flex: 0 0 px2vw(400px);
+    flex: 1;
     display: flex;
     flex-direction: column;
     gap: px2vw(15px);
@@ -1206,14 +1211,31 @@ const deleteSelectedProcess = async () => {
         }
       }
 
-      .date-picker {
+      // 修改方式按钮组：添加 / 替换 / 删除 同一排
+      .mode-buttons {
         display: flex;
-        align-items: center;
-        color: #333;
-      }
+        gap: px2vw(12px);
 
-      .picker-wrapper {
-        width: 100%;
+        .mode-btn {
+          flex: 1;
+          height: px2vw(70px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: px2vw(10px);
+          font-size: px2vw(26px);
+          background-color: #fff;
+          color: #333;
+          border: px2vw(2px) solid #e0e0e0;
+          box-sizing: border-box;
+          cursor: pointer;
+
+          &.active {
+            background-color: #5884f1;
+            color: #fff;
+            border-color: #5884f1;
+          }
+        }
       }
     }
   }
