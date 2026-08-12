@@ -222,14 +222,14 @@
 							</view>
 							<!-- 第二栏：按钮 -->
 							<view class="grid-product-name" style="grid-row: 1 / span 9; grid-column: 2">
+								<view class="grid-product-refresh" @click.stop="refreshProcessList(group.productRowid)">刷新</view>
 								<view
 									class="grid-product-action"
 									:style="{ backgroundColor: isProcessActionEnabled(group.productRowid) ? '#5884f1' : '#999' }"
 									@click.stop="openProcessActionModalByRowid(group.productRowid)"
 								>工艺调整</view>
-								<view class="grid-product-refresh" @click.stop="refreshProcessList(group.productRowid)">刷新</view>
-								<view class="grid-product-confirm" @click.stop="handleProcessListConfirm(group.productRowid)">确定</view>
 								<view class="grid-product-dispatch" @click.stop="openDispatchModalFromRowid(group.productRowid)">派工设置</view>
+								<view class="grid-product-confirm" @click.stop="handleProcessListConfirm(group.productRowid)">确定</view>
 							</view>
 							<view class="grid-label-cell" style="grid-row: 1; grid-column: 3">选中</view>
 							<view class="grid-label-cell" style="grid-row: 2; grid-column: 3">顺序</view>
@@ -7757,8 +7757,8 @@ onShow(refreshPage)
 			flex-direction: row;
 			align-items: flex-start;
 			flex-wrap: wrap;
-			padding: px2vw(12px) px2vw(16px);
-			border-bottom: 1px solid #f0f0f0;
+			padding: px2vw(16px) px2vw(16px);
+			border-bottom: 1px solid #d9d9d9;
 			cursor: pointer;
 
 			&.active {
@@ -7767,8 +7767,8 @@ onShow(refreshPage)
 		}
 
 		.employee-modal-check {
-			width: px2vw(28px);
-			height: px2vw(28px);
+			width: px2vw(34px);
+			height: px2vw(34px);
 			border: 2px solid #ddd;
 			border-radius: px2vw(6px);
 			display: flex;
@@ -7779,7 +7779,7 @@ onShow(refreshPage)
 			margin-top: px2vw(2px);
 
 			.check-icon {
-				font-size: px2vw(18px);
+				font-size: px2vw(22px);
 				color: #3498db;
 				font-weight: bold;
 			}
@@ -7821,7 +7821,8 @@ onShow(refreshPage)
 		}
 
 		.employee-modal-name {
-			font-size: px2vw(22px);
+			font-size: px2vw(38px);
+			line-height: 1.2;
 			color: #333;
 			margin-right: px2vw(12px);
 			white-space: nowrap;
@@ -7866,13 +7867,13 @@ onShow(refreshPage)
 		}
 
 		.employee-modal-hours {
-			font-size: px2vw(22px);
+			font-size: px2vw(28px);
 			color: #f1c40f;
 			margin-right: px2vw(16px);
 		}
 
 		.employee-modal-wage {
-			font-size: px2vw(22px);
+			font-size: px2vw(28px);
 			color: #27ae60;
 		}
 
@@ -7924,7 +7925,7 @@ onShow(refreshPage)
 	justify-content: center;
 
 	.employee-edit-modal-content {
-		width: px2vw(800px);
+		width: px2vw(900px);
 		max-height: 85vh;
 		background-color: #fff;
 		border-radius: px2vw(20px);
@@ -7942,13 +7943,13 @@ onShow(refreshPage)
 		flex-shrink: 0;
 
 		.employee-edit-modal-title {
-			font-size: px2vw(28px);
+			font-size: px2vw(32px);
 			font-weight: bold;
 			color: #333;
 		}
 
 		.employee-edit-modal-close {
-			font-size: px2vw(36px);
+			font-size: px2vw(40px);
 			color: #999;
 			line-height: 1;
 		}
@@ -7975,12 +7976,12 @@ onShow(refreshPage)
 				gap: px2vw(8px);
 
 				.info-label {
-					font-size: px2vw(22px);
+					font-size: px2vw(24px);
 					color: #999;
 				}
 
 				.info-value {
-					font-size: px2vw(24px);
+					font-size: px2vw(28px);
 					color: #333;
 					font-weight: 600;
 				}
@@ -7999,14 +8000,14 @@ onShow(refreshPage)
 				margin-bottom: px2vw(16px);
 
 				text {
-					font-size: px2vw(26px);
+					font-size: px2vw(30px);
 					color: #333;
 					font-weight: 500;
 				}
 
 				.section-count {
 					color: #3498db;
-					font-size: px2vw(24px);
+					font-size: px2vw(26px);
 				}
 			}
 
@@ -8025,11 +8026,11 @@ onShow(refreshPage)
 					background: linear-gradient(135deg, #e8f6f3, #d5efe9);
 					border: 1px solid #a3d9c9;
 					border-radius: px2vw(8px);
-					padding: px2vw(12px) px2vw(10px);
+					padding: px2vw(14px) px2vw(12px);
 					gap: px2vw(8px);
 
 					.tag-name {
-						font-size: px2vw(22px);
+						font-size: px2vw(26px);
 						color: #2e8b7a;
 						font-weight: 500;
 						flex: 1;
@@ -8039,14 +8040,14 @@ onShow(refreshPage)
 					}
 
 					.tag-delete {
-						width: px2vw(28px);
-						height: px2vw(28px);
+						width: px2vw(32px);
+						height: px2vw(32px);
 						border-radius: px2vw(4px);
 						background-color: rgba(46, 139, 122, 0.15);
 						display: flex;
 						align-items: center;
 						justify-content: center;
-						font-size: px2vw(18px);
+						font-size: px2vw(20px);
 						color: #2e8b7a;
 						font-weight: bold;
 						transition: all 0.2s;
@@ -8100,8 +8101,8 @@ onShow(refreshPage)
 		.edit-btn-confirm {
 			flex: 1;
 			text-align: center;
-			padding: px2vw(20px);
-			font-size: px2vw(28px);
+			padding: px2vw(22px);
+			font-size: px2vw(30px);
 			transition: background-color 0.15s;
 
 			&:active {
