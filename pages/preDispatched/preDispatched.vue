@@ -4480,8 +4480,14 @@ const loadSprayProcessList = async () => {
 	}
 }
 
+// 组装岗位合并配置：主岗位记录作为按钮主记录（按钮名、添加产品 rowid 取自它），
+// 合并组内其余岗位与主岗位合并为一个按钮，点击筛选全部内部岗位的预派工数据
+const ASSEMBLY_POSITION_MERGE_GROUPS = [
+	{ btnName: '组装包装', mainName: '组装包装', memberNames: ['组装包装', '点焊'] },
+	{ btnName: '喷砂', mainName: '喷砂', memberNames: ['喷砂', '喷砂叠锅'] }
+]
+
 // 加载岗位工序表中车间为组装车间的岗位名称，作为导航栏筛选按钮（仅组装车间权限时使用）
-// 合并规则：将"点焊"与"组装包装"合并显示为一个按钮，按钮名只显示"组装包装"
 const loadAssemblyPositionButtons = async () => {
 	if (loginWorkshop.value !== '组装车间') {
 		assemblyPositionButtons.value = []
@@ -4504,18 +4510,23 @@ const loadAssemblyPositionButtons = async () => {
 		const parseName = (item) => item[ASSEMBLY_POSITION_FIELD_ID] || item['Name'] || '-'
 
 		const buttons = []
-		const mergedRowids = []  // 点焊 + 组装包装 的 rowid 集合
-		const mergedNames = []   // 点焊 + 组装包装 的岗位名集合
-		let mergedBtn = null     // "组装包装"记录（作为合并按钮的主记录，业务上固定存在）
+		// 每个合并组：记录主岗位 rowid 与内部岗位集合（主岗位记录业务上固定存在）
+		const mergeStates = ASSEMBLY_POSITION_MERGE_GROUPS.map(g => ({
+			...g,
+			rowid: '',
+			positionRowids: [],
+			positionNames: []
+		}))
 
 		rows.forEach((item) => {
 			const name = parseName(item)
-			if (name === '组装包装' || name === '点焊') {
-				if (name === '组装包装') {
-					mergedBtn = { name: '组装包装', rowid: item.rowid || '' }
+			const group = mergeStates.find(g => g.memberNames.includes(name))
+			if (group) {
+				if (name === group.mainName) {
+					group.rowid = item.rowid || ''
 				}
-				mergedRowids.push(item.rowid || '')
-				mergedNames.push(name)
+				group.positionRowids.push(item.rowid || '')
+				group.positionNames.push(name)
 			} else {
 				// 其他岗位独立成按钮
 				buttons.push({
@@ -4527,16 +4538,16 @@ const loadAssemblyPositionButtons = async () => {
 			}
 		})
 
-		// 存在"组装包装"记录时，将点焊并入其中作为一个按钮放在最前面
-		if (mergedBtn) {
-			buttons.unshift({
-				name: '组装包装',
-				rowid: mergedBtn.rowid,
-				positionRowids: mergedRowids,
-				positionNames: mergedNames
-			})
-		}
-		assemblyPositionButtons.value = buttons
+		// 存在主岗位记录的合并组作为一个按钮放在最前面（保持配置顺序：组装包装、喷砂）
+		const mergedButtons = mergeStates
+			.filter(group => group.rowid)
+			.map(group => ({
+				name: group.btnName,
+				rowid: group.rowid,
+				positionRowids: group.positionRowids,
+				positionNames: group.positionNames
+			}))
+		assemblyPositionButtons.value = [...mergedButtons, ...buttons]
 	} catch (e) {
 		console.error('加载组装车间岗位筛选按钮失败:', e)
 		assemblyPositionButtons.value = []
