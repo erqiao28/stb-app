@@ -4438,9 +4438,8 @@ const loadPositionProcessEmployees = async () => {
 			? POSITION_PROCESS_FIELD_MAP.stretchAndPolish
 			: POSITION_PROCESS_FIELD_MAP.assembly
 		const mapped = rows.filter((item) => {
-			// 过滤掉临时工
-			const isTemp = String(item['6a744cdb4239d5290f2f6e4a'] || '').trim() === '1'
-			return !isTemp
+			// 过滤掉临时工：临时工字段（6a744a494239d5290f2f6be3）为 1 是临时工，为 0 是正式工
+			return item['6a744a494239d5290f2f6be3'] != 1
 		}).map((item) => {
 			const isNewEmployee = item['6a7154c54239d5290f2ca6d4'] == '1'
 			return {
