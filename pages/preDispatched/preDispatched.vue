@@ -146,6 +146,7 @@
 		<view class="main-content">
 			<view class="left-panel">
 				<view class="panel-title">
+					<view class="panel-refresh-btn" @click="handleRefresh">刷新</view>
 					<text>产品列表({{ productListStats.selected }}/{{ productListStats.total }})</text>
 					<view class="sync-select-switch" @click.stop="syncSelectEnabled = !syncSelectEnabled">
 						<view class="switch" :class="{ 'switch-on': syncSelectEnabled }"></view>
@@ -1103,8 +1104,8 @@ const voidRowid = ref('')
 const showConfirmDispatchModal = ref(false)
 const confirmDispatchCount = ref(0)
 const confirmDispatchRowids = ref([])
-// 确认派工前的初始产品条数（用于轮询判断）
-const initialProductCountForConfirm = ref(0)
+// 确认派工前的初始预派工总条数（用于轮询判断，产品行可能对应多条预派工，按预派工条数计算）
+const initialPreDispatchCountForConfirm = ref(0)
 
 // 订单选择相关
 const showSelectOrderModal = ref(false)
@@ -2723,16 +2724,13 @@ const operatePreDispatch = async (mode, count) => {
 		const maxRetry = 10
 		const INTERVAL = 500
 		let found = false
+		let currentCount = 0
 
 		for (let i = 0; i < maxRetry; i++) {
 			await loadProducts(true)
-			const currentCount = getTotalPreDispatchCount()
-			// 移除：预派工数量减少；延后：状态改变但数量可能不变
-			if (mode === 'remove' && currentCount <= expectedPreDispatchCount) {
-				found = true
-				break
-			} else if (mode === 'delay') {
-				// 延后只需确认数据已刷新
+			currentCount = getTotalPreDispatchCount()
+			// 延后/移除都会使对应预派工从当前"未派工"列表消失，按预派工条数验证
+			if (currentCount === expectedPreDispatchCount) {
 				found = true
 				break
 			}
@@ -2743,6 +2741,9 @@ const operatePreDispatch = async (mode, count) => {
 
 		uni.hideLoading()
 		uni.showToast({ title: '操作成功', icon: 'success' })
+		if (!found) {
+			console.warn('操作预派工后轮询未匹配到预期预派工数量，当前:', currentCount, '预期:', expectedPreDispatchCount)
+		}
 
 		// 刷新数据
 		loadEmployeeDispatchSummary()
@@ -2754,11 +2755,9 @@ const operatePreDispatch = async (mode, count) => {
 	}
 }
 
-// 获取总预派工数量
+// 获取当前列表预派工总数量（不限定选中产品，与确认派工轮询口径一致）
 const getTotalPreDispatchCount = () => {
-	return productList.value
-		.filter(item => selectedProductIds.value.includes(item.uniqueKey))
-		.reduce((sum, item) => sum + (item.preDispatchRowids?.length || 0), 0)
+	return productList.value.reduce((sum, item) => sum + (item.preDispatchRowids?.length || 0), 0)
 }
 
 const handleConfirmDispatch = async () => {
@@ -2797,8 +2796,11 @@ const handleConfirmDispatch = async () => {
 		uni.showToast({ title: '没有可确认的预派工（均无员工）', icon: 'none' })
 		return
 	}
-	// 记录初始产品条数，用于确认派工成功后轮询判断
-	initialProductCountForConfirm.value = productList.value.length
+	// 记录初始预派工总条数（当前列表所有产品行的预派工数量之和），用于确认派工成功后轮询判断
+	initialPreDispatchCountForConfirm.value = productList.value.reduce(
+		(sum, item) => sum + (item.preDispatchRowids?.length || 0),
+		0
+	)
 	confirmDispatchCount.value = validRowids.length
 	confirmDispatchRowids.value = validRowids
 	showConfirmDispatchModal.value = true
@@ -3004,8 +3006,8 @@ const handleProcessListConfirm = async (productRowid) => {
 
 const doConfirmDispatch = async () => {
 	showConfirmDispatchModal.value = false
-	// 期望的最终产品条数 = 初始条数 - 确认派工数量
-	const expectedProductCount = initialProductCountForConfirm.value - confirmDispatchCount.value
+	// 期望的最终预派工条数 = 初始预派工总条数 - 确认派工条数
+	const expectedPreDispatchCount = initialPreDispatchCountForConfirm.value - confirmDispatchCount.value
 	// 根据确认数量动态调整轮询次数：基础 6 次(3秒)，每多 1 条增加 1 次，最多 10 次(5秒)
 	const BASE_RETRY = 6
 	const EXTRA_PER_ITEM = 1
@@ -3021,13 +3023,18 @@ const doConfirmDispatch = async () => {
 		uni.hideLoading()
 		uni.showToast({ title: '确认派工成功', icon: 'success' })
 
-		// 轮询等待产品条数匹配后刷新
+		// 轮询等待预派工条数匹配后刷新
 		uni.showLoading({ title: '刷新中...', mask: true })
 		let found = false
+		let currentCount = 0
 
 		for (let i = 0; i < maxRetry; i++) {
 			await loadProducts(true, true)
-			if (productList.value.length === expectedProductCount) {
+			currentCount = productList.value.reduce(
+				(sum, item) => sum + (item.preDispatchRowids?.length || 0),
+				0
+			)
+			if (currentCount === expectedPreDispatchCount) {
 				found = true
 				break
 			}
@@ -3040,7 +3047,7 @@ const doConfirmDispatch = async () => {
 		// 无论是否轮询到，都执行刷新确保数据最新
 		handleSearch()
 		if (!found) {
-			console.warn('确认派工后轮询未匹配到预期数量，当前:', productList.value.length, '预期:', expectedProductCount)
+			console.warn('确认派工后轮询未匹配到预期数量，当前:', currentCount, '预期:', expectedPreDispatchCount)
 		}
 	} catch (e) {
 		uni.hideLoading()
@@ -3170,6 +3177,8 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 		productList.value.forEach((product, index) => {
 			productOrderMap.value.set(product.uniqueKey, index)
 		})
+		// 产品列表刷新后，清理列表中已不存在的选中项，避免标题计数异常（如列表为空仍显示 (2/0)）
+		selectedProductIds.value = selectedProductIds.value.filter(id => productList.value.some(p => p.uniqueKey === id))
 	} catch (e) {
 		console.error('加载产品失败:', e)
 		uni.showToast({ title: '加载失败', icon: 'none' })
@@ -5968,6 +5977,26 @@ onShow(refreshPage)
 				align-items: center;
 				justify-content: center;
 				gap: px2vw(16px);
+
+				.panel-refresh-btn {
+					height: px2vw(40px);
+					line-height: px2vw(40px);
+					padding: 0 px2vw(18px);
+					margin-right: px2vw(16px);
+					font-size: px2vw(24px);
+					font-weight: normal;
+					color: #333;
+					background-color: #fff;
+					border: px2vw(2px) solid #d9d9d9;
+					border-radius: px2vw(10px);
+					cursor: pointer;
+
+					&:active {
+						background-color: #5884f1;
+						color: #fff;
+						border-color: #5884f1;
+					}
+				}
 			}
 
 			.sync-select-switch {
