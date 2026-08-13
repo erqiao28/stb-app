@@ -283,9 +283,13 @@
 						<text class="summary-value">{{ employeeSummary.unassigned }}</text>
 					</view>
 					<view class="summary-item">
-						<text class="summary-label">未满人员</text>
-						<text class="summary-value">{{ employeeSummary.incomplete }}</text>
-					</view>
+					<text class="summary-label">未满人员</text>
+					<text class="summary-value">{{ employeeSummary.incomplete }}</text>
+				</view>
+				<view class="summary-item">
+					<text class="summary-label">请假数量</text>
+					<text class="summary-value">{{ employeeSummary.leave }}</text>
+				</view>
 				</view>
 				<scroll-view class="employee-chart-scroll" scroll-x scroll-y>
 					<view
@@ -330,46 +334,46 @@
 							:style="{ gridRow: 1, gridColumn: 10 + (i - 1) * 5 }"
 						>工资</view>
 						<template v-for="(emp, empIdx) in employeeDispatchSummary" :key="emp.employeeName">
-							<view class="table-cell" :class="{ 'cell-attendance-leave': emp.attendance === '请假' }" :style="{ gridRow: 2 + empIdx, gridColumn: 3 }">{{ emp.employeeName }}</view>
-							<view class="table-cell" :class="{ 'cell-attendance-leave': emp.attendance === '请假' }" :style="{ gridRow: 2 + empIdx, gridColumn: 4 }">{{ emp.totalWage.toFixed(2) }}</view>
-							<view class="table-cell" :class="{ 'cell-attendance-leave': emp.attendance === '请假' }" :style="{ gridRow: 2 + empIdx, gridColumn: 5 }">{{ emp.totalWorktime.toFixed(2) }}</view>
+							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 3 }">{{ emp.employeeName }}</view>
+							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 4 }">{{ emp.totalWage.toFixed(2) }}</view>
+							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 5 }">{{ emp.totalWorktime.toFixed(2) }}</view>
 							<template v-for="(rec, recIdx) in emp.records" :key="recIdx">
 								<view
 									class="table-cell"
-									:class="[('record-group-' + (recIdx % RECORD_BG_COLORS.length)), { 'cell-attendance-leave': emp.attendance === '请假' }]"
+									:class="[('record-group-' + (recIdx % RECORD_BG_COLORS.length)), emp.rowClass]"
 									:style="{ gridRow: 2 + empIdx, gridColumn: 6 + recIdx * 5 }"
 								>{{ rec.orderNo }}</view>
 								<view
 									class="table-cell"
-									:class="[('record-group-' + (recIdx % RECORD_BG_COLORS.length)), { 'cell-attendance-leave': emp.attendance === '请假' }]"
+									:class="[('record-group-' + (recIdx % RECORD_BG_COLORS.length)), emp.rowClass]"
 									:style="{ gridRow: 2 + empIdx, gridColumn: 7 + recIdx * 5 }"
 								>{{ rec.productName }}</view>
 								<view
 									class="table-cell"
-									:class="[('record-group-' + (recIdx % RECORD_BG_COLORS.length)), { 'cell-attendance-leave': emp.attendance === '请假' }]"
+									:class="[('record-group-' + (recIdx % RECORD_BG_COLORS.length)), emp.rowClass]"
 									:style="{ gridRow: 2 + empIdx, gridColumn: 8 + recIdx * 5 }"
 								>{{ rec.dispatchCount }}</view>
 								<view
 									class="table-cell"
-									:class="[('record-group-' + (recIdx % RECORD_BG_COLORS.length)), { 'cell-attendance-leave': emp.attendance === '请假' }]"
+									:class="[('record-group-' + (recIdx % RECORD_BG_COLORS.length)), emp.rowClass]"
 									:style="{ gridRow: 2 + empIdx, gridColumn: 9 + recIdx * 5 }"
 								>{{ rec.worktime }}</view>
 								<view
 									class="table-cell"
-									:class="[('record-group-' + (recIdx % RECORD_BG_COLORS.length)), { 'cell-attendance-leave': emp.attendance === '请假' }]"
+									:class="[('record-group-' + (recIdx % RECORD_BG_COLORS.length)), emp.rowClass]"
 									:style="{ gridRow: 2 + empIdx, gridColumn: 10 + recIdx * 5 }"
 								>{{ rec.wage }}</view>
 							</template>
 							<template v-for="padIdx in maxEmployeeRecordCount - emp.records.length" :key="'pad-' + padIdx">
-								<view class="table-cell" :class="{ 'cell-attendance-leave': emp.attendance === '请假' }" :style="{ gridRow: 2 + empIdx, gridColumn: 6 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
-								<view class="table-cell" :class="{ 'cell-attendance-leave': emp.attendance === '请假' }" :style="{ gridRow: 2 + empIdx, gridColumn: 7 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
-								<view class="table-cell" :class="{ 'cell-attendance-leave': emp.attendance === '请假' }" :style="{ gridRow: 2 + empIdx, gridColumn: 8 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
-								<view class="table-cell" :class="{ 'cell-attendance-leave': emp.attendance === '请假' }" :style="{ gridRow: 2 + empIdx, gridColumn: 9 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
-								<view class="table-cell" :class="{ 'cell-attendance-leave': emp.attendance === '请假' }" :style="{ gridRow: 2 + empIdx, gridColumn: 10 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
+								<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 6 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
+								<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 7 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
+								<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 8 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
+								<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 9 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
+								<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 10 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
 							</template>
-							<view class="table-cell" :class="{ 'cell-attendance-leave': emp.attendance === '请假' }" :style="{ gridRow: 2 + empIdx, gridColumn: 4 + maxEmployeeRecordCount * 5 }"></view>
-							<view class="table-cell" :class="{ 'cell-attendance-leave': emp.attendance === '请假' }" :style="{ gridRow: 2 + empIdx, gridColumn: 5 + maxEmployeeRecordCount * 5 }"></view>
-							<view class="table-cell" :class="{ 'cell-attendance-leave': emp.attendance === '请假' }" :style="{ gridRow: 2 + empIdx, gridColumn: 6 + maxEmployeeRecordCount * 5 }"></view>
+							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 4 + maxEmployeeRecordCount * 5 }"></view>
+							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 5 + maxEmployeeRecordCount * 5 }"></view>
+							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 6 + maxEmployeeRecordCount * 5 }"></view>
 						</template>
 					</view>
 					<view class="empty-wrap" v-if="isEmployeeExpanded && employeeDispatchSummary.length === 0">
@@ -385,7 +389,10 @@
 						>
 							<text class="emp-wage">{{ Number(emp.wage || 0).toFixed(2) }}</text>
 							<view class="emp-bar-container">
+								<text v-if="emp.attendance === '请假'" class="emp-status emp-status-leave">请假</text>
+								<text v-else-if="emp.isNewEmployee && !emp.hasPreDispatch" class="emp-status emp-status-new">新人</text>
 								<view
+									v-else
 									class="emp-bar"
 									:style="{ height: emp.barHeight, backgroundColor: emp.barColor }"
 								>
@@ -1041,9 +1048,13 @@ const instance = getCurrentInstance()
 
 const employeeSummary = computed(() => {
 	const total = employeeList.value.length
-	const unassigned = employeeList.value.filter((e) => e.totalHours === 0).length
-	const incomplete = employeeList.value.filter((e) => e.totalHours > 0 && e.totalHours < MAX_EMPLOYEE_HOURS).length
-	return { total, unassigned, incomplete }
+	// 未派人员：没有预派工数据关联，且非请假（请假人员不纳入未派统计）
+	const unassigned = employeeList.value.filter((e) => !e.hasPreDispatch && String(e.attendance).trim() !== '请假').length
+	// 未满人员：工资字段（6a4f304c6d70ffabc67913b9）小于等于 400 视为未满，大于 400 为满
+	const incomplete = employeeList.value.filter((e) => (Number(e.wage) || 0) <= 400).length
+	// 请假数量：出勤为请假的员工人数
+	const leave = employeeList.value.filter((e) => String(e.attendance).trim() === '请假').length
+	return { total, unassigned, incomplete, leave }
 })
 
 const maxEmployeeRecordCount = computed(() => {
@@ -3685,9 +3696,9 @@ const toggleOrderCollapse = (orderNo) => {
 	}
 }
 
-// 加载员工出勤状态映射（员工姓名 -> 出勤状态），供员工任务汇总标记请假员工
-const loadEmployeeAttendanceMap = async () => {
-	const attendanceMap = new Map()
+// 加载员工信息映射（员工姓名 -> { 出勤状态, 是否新手 }），供员工任务汇总标记请假/新手员工
+const loadEmployeeInfoMap = async () => {
+	const infoMap = new Map()
 	try {
 		const currentDate = filterDate.value
 		const wsFilter = employeeWorkshopFilter.value
@@ -3718,8 +3729,12 @@ const loadEmployeeAttendanceMap = async () => {
 			const filtered = rows.filter((item) => formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) === currentDate)
 			filtered.forEach((item) => {
 				const name = formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName])
-				if (!name || attendanceMap.has(name)) return
-				attendanceMap.set(name, formatFieldValue(item[EMPLOYEE_FIELD_MAP.attendance]) || '')
+				if (!name || infoMap.has(name)) return
+				const isNewEmployeeRaw = formatFieldValue(item[EMPLOYEE_FIELD_MAP.isNewEmployee])
+				infoMap.set(name, {
+					attendance: formatFieldValue(item[EMPLOYEE_FIELD_MAP.attendance]) || '',
+					isNewEmployee: String(isNewEmployeeRaw).trim() === '1'
+				})
 			})
 			if (filtered.length > 0) foundData = true
 			if (foundData && filtered.length === 0) {
@@ -3731,9 +3746,63 @@ const loadEmployeeAttendanceMap = async () => {
 			}
 		}
 	} catch (e) {
-		console.error('加载员工出勤状态失败:', e)
+		console.error('加载员工信息失败:', e)
 	}
-	return attendanceMap
+	return infoMap
+}
+
+// 加载员工是否有预派工数据关联映射（员工姓名 -> 是否有预派工）
+// 依据当日工资表的 preDispatch 关联字段（6a1e47d727514927ff33cc4f）非空判断：
+// 该字段关联了预派工记录，非空即表示该员工当日有预派工数据
+const loadEmployeePreDispatchMap = async () => {
+	const preDispatchMap = new Map()
+	try {
+		const currentDate = filterDate.value
+		const wsFilter = employeeWorkshopFilter.value
+		const filters = []
+		if (wsFilter) {
+			filters.push({
+				controlId: DAILY_WAGE_FIELD_MAP.workshop,
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: [wsFilter]
+			})
+		}
+		// 与 loadEmployeeInfoMap 相同策略：接口无法按日期筛选，逐页获取并在前端按日期过滤
+		const pageSize = 100
+		let pageNum = 1
+		let foundData = false
+		let hasMore = true
+		const MAX_PAGES = 500
+		while (hasMore && pageNum <= MAX_PAGES) {
+			const res = await callWorkflowListAPIPaged({
+				worksheetId: DAILY_WAGE_WORKSHEET_ID,
+				filters,
+				silent: true
+			}, pageSize, pageNum)
+			const rows = Array.isArray(res?.data) ? res.data : []
+			if (rows.length === 0) break
+			const filtered = rows.filter((item) => formatFieldValue(item[DAILY_WAGE_FIELD_MAP.dispatchDate]) === currentDate)
+			filtered.forEach((item) => {
+				const name = formatFieldValue(item[DAILY_WAGE_FIELD_MAP.employeeName])
+				if (!name) return
+				const has = extractRelationSids(item[DAILY_WAGE_FIELD_MAP.preDispatch]).length > 0
+				preDispatchMap.set(name, preDispatchMap.get(name) || has)
+			})
+			if (filtered.length > 0) foundData = true
+			if (foundData && filtered.length === 0) {
+				hasMore = false
+			} else if (rows.length < pageSize) {
+				hasMore = false
+			} else {
+				pageNum++
+			}
+		}
+	} catch (e) {
+		console.error('加载员工预派工关联失败:', e)
+	}
+	return preDispatchMap
 }
 
 const loadEmployeeDispatchSummary = async () => {
@@ -3770,8 +3839,8 @@ const loadEmployeeDispatchSummary = async () => {
 			preDispatchSids: extractRelationSids(item[DAILY_WAGE_FIELD_MAP.preDispatch])
 		}))
 
-		// 员工出勤状态映射（员工姓名 -> 出勤状态），用于标记请假员工
-		const attendanceMap = await loadEmployeeAttendanceMap()
+		// 员工信息映射（员工姓名 -> { 出勤状态, 是否新手 }），用于标记请假/新手员工
+		const employeeInfoMap = await loadEmployeeInfoMap()
 
 		const preDispatchRowids = new Set()
 		dailyWageList.forEach((dw) => dw.preDispatchSids.forEach((sid) => preDispatchRowids.add(sid)))
@@ -3799,11 +3868,13 @@ const loadEmployeeDispatchSummary = async () => {
 		dailyWageList.forEach((dw) => {
 			const employeeName = dw.employeeName
 			if (!map.has(employeeName)) {
+				const info = employeeInfoMap.get(employeeName) || {}
 				map.set(employeeName, {
 					employeeName,
 					totalWage: 0,
 					totalWorktime: 0,
-					attendance: attendanceMap.get(employeeName) || '',
+					attendance: info.attendance || '',
+					isNewEmployee: info.isNewEmployee || false,
 					records: []
 				})
 			}
@@ -3824,13 +3895,22 @@ const loadEmployeeDispatchSummary = async () => {
 				}
 			})
 		})
-		employeeDispatchSummary.value = [...map.values()].sort((a, b) => {
-			// 请假员工置底显示，其余按记录数降序
-			const aLeave = a.attendance === '请假' ? 1 : 0
-			const bLeave = b.attendance === '请假' ? 1 : 0
-			if (aLeave !== bLeave) return aLeave - bLeave
-			return b.records.length - a.records.length
-		})
+		employeeDispatchSummary.value = [...map.values()]
+			.map((emp) => ({
+				// 行背景样式：请假红色优先，其次新手黄色
+				...emp,
+				rowClass: emp.attendance === '请假' ? 'cell-attendance-leave' : (emp.isNewEmployee ? 'cell-is-new' : '')
+			}))
+			.sort((a, b) => {
+				// 排序：普通员工在前，新手员工集中置底（请假员工之上），请假员工最后，同组按记录数降序
+				const aLeave = a.attendance === '请假' ? 1 : 0
+				const bLeave = b.attendance === '请假' ? 1 : 0
+				if (aLeave !== bLeave) return aLeave - bLeave
+				const aNew = a.isNewEmployee ? 1 : 0
+				const bNew = b.isNewEmployee ? 1 : 0
+				if (aNew !== bNew) return aNew - bNew
+				return b.records.length - a.records.length
+			})
 	} catch (e) {
 		console.error('加载员工当日工资汇总失败:', e)
 		employeeDispatchSummary.value = []
@@ -4367,6 +4447,8 @@ const loadWorkshopEmployees = async () => {
 			}
 		}
 
+		// 员工是否有预派工数据关联映射（员工姓名 -> 是否有预派工），用于未派判断及柱子状态显示
+		const preDispatchMap = await loadEmployeePreDispatchMap()
 		const mapped = allRows.map((item) => {
 			const totalHours = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.totalHours]) || '0') || 0
 			const wage = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.wage]) || '0') || 0
@@ -4376,15 +4458,17 @@ const loadWorkshopEmployees = async () => {
 			const isNewEmployee = String(isNewEmployeeRaw).trim() === '1'
 			const isTempEmployeeRaw = formatFieldValue(item[EMPLOYEE_FIELD_MAP.isTempEmployee])
 			const isTempEmployee = String(isTempEmployeeRaw).trim() === '1'
+			const name = formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName]) || '-'
 			return {
 				id: item.rowid || '',
-				name: formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName]) || '-',
+				name,
 				totalHours,
 				wage,
 				attendance,
 				position,
 				isNewEmployee,
-				isTempEmployee
+				isTempEmployee,
+				hasPreDispatch: preDispatchMap.get(name) || false
 			}
 		})
 		employeeList.value = mapped.map((e) => {
@@ -6439,24 +6523,22 @@ onShow(refreshPage)
 
 					.summary-item {
 						display: flex;
-						flex-direction: column;
+						flex-direction: row;
 						align-items: center;
-						margin-bottom: px2vw(10px);
+						justify-content: space-between;
+						margin-bottom: px2vw(8px);
 
 						.summary-label {
 							font-size: px2vw(16px);
 							color: #666;
-							margin-bottom: px2vw(4px);
 							white-space: nowrap;
 						}
 
 						.summary-value {
-							font-size: px2vw(22px);
+							font-size: px2vw(18px);
 							color: #333;
 							font-weight: bold;
-							word-break: break-all;
-							white-space: normal;
-							text-align: center;
+							white-space: nowrap;
 						}
 					}
 				}
@@ -6719,6 +6801,11 @@ onShow(refreshPage)
 							background-color: #f44336 !important;
 							color: #fff;
 						}
+
+						// 新手员工整行黄色背景（请假红色优先级更高，rowClass 计算时已优先输出请假类）
+						&.cell-is-new {
+							background-color: #fff9c4 !important;
+						}
 					}
 			}
 
@@ -6768,6 +6855,22 @@ onShow(refreshPage)
 								font-size: px2vw(16px);
 								color: #333;
 							}
+						}
+
+						.emp-status {
+							writing-mode: vertical-rl;
+							text-orientation: upright;
+							letter-spacing: px2vw(6px);
+							font-size: px2vw(28px);
+							font-weight: bold;
+						}
+
+						.emp-status-leave {
+							color: #e74c3c;
+						}
+
+						.emp-status-new {
+							color: #27ae60;
 						}
 					}
 
