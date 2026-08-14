@@ -283,8 +283,8 @@
 						<text class="summary-value">{{ employeeSummary.unassigned }}</text>
 					</view>
 					<view class="summary-item">
-					<text class="summary-label">未满人员</text>
-					<text class="summary-value">{{ employeeSummary.incomplete }}</text>
+					<text class="summary-label">已派人员</text>
+					<text class="summary-value">{{ employeeSummary.assigned }}</text>
 				</view>
 				<view class="summary-item">
 					<text class="summary-label">请假数量</text>
@@ -294,86 +294,83 @@
 				<scroll-view class="employee-chart-scroll" scroll-x scroll-y>
 					<view
 						class="employee-dispatch-table"
-						:style="{ gridTemplateColumns: 'px2vw(50px) px2vw(50px) min-content min-content min-content' + (maxEmployeeRecordCount > 0 ? ' repeat(' + maxEmployeeRecordCount + ', min-content min-content min-content min-content min-content)' : '') + ' min-content' }"
+						:style="{ gridTemplateColumns: 'min-content min-content min-content' + (maxEmployeeRecordCount > 0 ? ' repeat(' + (maxEmployeeRecordCount + 1) + ', min-content min-content min-content min-content min-content)' : '') + ' min-content' }"
 						v-if="isEmployeeExpanded && employeeDispatchSummary.length > 0"
 					>
-						<!-- 对齐前两列的占位单元格 - 使用 sticky 覆盖 -->
-						<view class="table-header table-placeholder" style="grid-row: 1; grid-column: 1; left: 0; z-index: 11"> </view>
-						<view class="table-header table-placeholder" style="grid-row: 1; grid-column: 2; left: px2vw(50px); z-index: 10"> </view>
-						<view class="table-header" style="grid-row: 1; grid-column: 3">员工姓名</view>
-						<view class="table-header" style="grid-row: 1; grid-column: 4">总工资</view>
-						<view class="table-header" style="grid-row: 1; grid-column: 5">总工时</view>
+						<view class="table-header" style="grid-row: 1; grid-column: 1">员工姓名</view>
+						<view class="table-header" style="grid-row: 1; grid-column: 2">总工资</view>
+						<view class="table-header" style="grid-row: 1; grid-column: 3">总工时</view>
 						<view
 							class="table-header"
 							v-for="i in maxEmployeeRecordCount + 1"
 							:key="'order-' + i"
-							:style="{ gridRow: 1, gridColumn: 6 + (i - 1) * 5 }"
+							:style="{ gridRow: 1, gridColumn: 4 + (i - 1) * 5 }"
 						>订单编号</view>
 						<view
 							class="table-header"
 							v-for="i in maxEmployeeRecordCount + 1"
 							:key="'product-' + i"
-							:style="{ gridRow: 1, gridColumn: 7 + (i - 1) * 5 }"
+							:style="{ gridRow: 1, gridColumn: 5 + (i - 1) * 5 }"
 						>产品名称</view>
 						<view
 							class="table-header"
 							v-for="i in maxEmployeeRecordCount + 1"
 							:key="'count-' + i"
-							:style="{ gridRow: 1, gridColumn: 8 + (i - 1) * 5 }"
+							:style="{ gridRow: 1, gridColumn: 6 + (i - 1) * 5 }"
 						>数量</view>
 						<view
 							class="table-header"
 							v-for="i in maxEmployeeRecordCount + 1"
 							:key="'time-' + i"
-							:style="{ gridRow: 1, gridColumn: 9 + (i - 1) * 5 }"
+							:style="{ gridRow: 1, gridColumn: 7 + (i - 1) * 5 }"
 						>工时</view>
 						<view
 							class="table-header"
 							v-for="i in maxEmployeeRecordCount + 1"
 							:key="'wage-' + i"
-							:style="{ gridRow: 1, gridColumn: 10 + (i - 1) * 5 }"
+							:style="{ gridRow: 1, gridColumn: 8 + (i - 1) * 5 }"
 						>工资</view>
 						<template v-for="(emp, empIdx) in employeeDispatchSummary" :key="emp.employeeName">
-							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 3 }">{{ emp.employeeName }}</view>
-							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 4 }">{{ emp.totalWage.toFixed(2) }}</view>
-							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 5 }">{{ emp.totalWorktime.toFixed(2) }}</view>
+							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 1 }">{{ emp.employeeName }}</view>
+							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 2 }">{{ emp.totalWage.toFixed(2) }}</view>
+							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 3 }">{{ emp.totalWorktime.toFixed(2) }}</view>
 							<template v-for="(rec, recIdx) in emp.records" :key="recIdx">
 								<view
 									class="table-cell"
 									:class="[('record-group-' + (recIdx % RECORD_BG_COLORS.length)), emp.rowClass]"
-									:style="{ gridRow: 2 + empIdx, gridColumn: 6 + recIdx * 5 }"
+									:style="{ gridRow: 2 + empIdx, gridColumn: 4 + recIdx * 5 }"
 								>{{ rec.orderNo }}</view>
 								<view
 									class="table-cell"
 									:class="[('record-group-' + (recIdx % RECORD_BG_COLORS.length)), emp.rowClass]"
-									:style="{ gridRow: 2 + empIdx, gridColumn: 7 + recIdx * 5 }"
+									:style="{ gridRow: 2 + empIdx, gridColumn: 5 + recIdx * 5 }"
 								>{{ rec.productName }}</view>
 								<view
 									class="table-cell"
 									:class="[('record-group-' + (recIdx % RECORD_BG_COLORS.length)), emp.rowClass]"
-									:style="{ gridRow: 2 + empIdx, gridColumn: 8 + recIdx * 5 }"
+									:style="{ gridRow: 2 + empIdx, gridColumn: 6 + recIdx * 5 }"
 								>{{ rec.dispatchCount }}</view>
 								<view
 									class="table-cell"
 									:class="[('record-group-' + (recIdx % RECORD_BG_COLORS.length)), emp.rowClass]"
-									:style="{ gridRow: 2 + empIdx, gridColumn: 9 + recIdx * 5 }"
+									:style="{ gridRow: 2 + empIdx, gridColumn: 7 + recIdx * 5 }"
 								>{{ rec.worktime }}</view>
 								<view
 									class="table-cell"
 									:class="[('record-group-' + (recIdx % RECORD_BG_COLORS.length)), emp.rowClass]"
-									:style="{ gridRow: 2 + empIdx, gridColumn: 10 + recIdx * 5 }"
+									:style="{ gridRow: 2 + empIdx, gridColumn: 8 + recIdx * 5 }"
 								>{{ rec.wage }}</view>
 							</template>
 							<template v-for="padIdx in maxEmployeeRecordCount - emp.records.length" :key="'pad-' + padIdx">
+								<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 4 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
+								<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 5 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
 								<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 6 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
 								<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 7 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
 								<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 8 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
-								<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 9 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
-								<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 10 + emp.records.length * 5 + (padIdx - 1) * 5 }">-</view>
 							</template>
+							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 2 + maxEmployeeRecordCount * 5 }"></view>
+							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 3 + maxEmployeeRecordCount * 5 }"></view>
 							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 4 + maxEmployeeRecordCount * 5 }"></view>
-							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 5 + maxEmployeeRecordCount * 5 }"></view>
-							<view class="table-cell" :class="emp.rowClass" :style="{ gridRow: 2 + empIdx, gridColumn: 6 + maxEmployeeRecordCount * 5 }"></view>
 						</template>
 					</view>
 					<view class="empty-wrap" v-if="isEmployeeExpanded && employeeDispatchSummary.length === 0">
@@ -1050,11 +1047,11 @@ const employeeSummary = computed(() => {
 	const total = employeeList.value.length
 	// 未派人员：没有预派工数据关联，且非请假（请假人员不纳入未派统计）
 	const unassigned = employeeList.value.filter((e) => !e.hasPreDispatch && String(e.attendance).trim() !== '请假').length
-	// 未满人员：工资字段（6a4f304c6d70ffabc67913b9）小于等于 400 视为未满，大于 400 为满
-	const incomplete = employeeList.value.filter((e) => (Number(e.wage) || 0) <= 400).length
+	// 已派人员：有预派工数据关联的员工数
+	const assigned = employeeList.value.filter((e) => e.hasPreDispatch).length
 	// 请假数量：出勤为请假的员工人数
 	const leave = employeeList.value.filter((e) => String(e.attendance).trim() === '请假').length
-	return { total, unassigned, incomplete, leave }
+	return { total, unassigned, assigned, leave }
 })
 
 const maxEmployeeRecordCount = computed(() => {
@@ -3731,9 +3728,13 @@ const loadEmployeeInfoMap = async () => {
 				const name = formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName])
 				if (!name || infoMap.has(name)) return
 				const isNewEmployeeRaw = formatFieldValue(item[EMPLOYEE_FIELD_MAP.isNewEmployee])
+				// 临时工判断：员工表临时工字段（6a744cdb4239d5290f2f6e4a），1=临时工，0=正式工
+				// 宽松比较兼容数字 1 与字符串 '1'（与 dispatchWork.vue 一致）
+				const isTempEmployeeRaw = item[EMPLOYEE_FIELD_MAP.isTempEmployee]
 				infoMap.set(name, {
 					attendance: formatFieldValue(item[EMPLOYEE_FIELD_MAP.attendance]) || '',
-					isNewEmployee: String(isNewEmployeeRaw).trim() === '1'
+					isNewEmployee: String(isNewEmployeeRaw).trim() === '1',
+					isTempEmployee: isTempEmployeeRaw == 1
 				})
 			})
 			if (filtered.length > 0) foundData = true
@@ -3867,8 +3868,10 @@ const loadEmployeeDispatchSummary = async () => {
 		const map = new Map()
 		dailyWageList.forEach((dw) => {
 			const employeeName = dw.employeeName
+			const info = employeeInfoMap.get(employeeName) || {}
+			// 临时工不显示在员工任务汇总表中
+			if (info.isTempEmployee) return
 			if (!map.has(employeeName)) {
-				const info = employeeInfoMap.get(employeeName) || {}
 				map.set(employeeName, {
 					employeeName,
 					totalWage: 0,
@@ -6764,18 +6767,6 @@ onShow(refreshPage)
 					align-items: center;
 					justify-content: center;
 					white-space: nowrap;
-				}
-
-				.table-placeholder {
-					background-color: #f5f5f5;
-					position: sticky;
-					left: 0;
-					z-index: 11;
-
-					&:nth-child(2) {
-						left: px2vw(40px);
-						z-index: 10;
-					}
 				}
 
 				.table-cell {
