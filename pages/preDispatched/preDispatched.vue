@@ -149,7 +149,9 @@
 					<view class="panel-refresh-btn" @click="handleRefresh">刷新</view>
 					<text>产品列表({{ productListStats.selected }}/{{ productListStats.total }})</text>
 					<view class="sync-select-switch" @click.stop="syncSelectEnabled = !syncSelectEnabled">
-						<view class="switch" :class="{ 'switch-on': syncSelectEnabled }"></view>
+						<view class="switch-btn" :class="{ 'switch-on': syncSelectEnabled }">
+							{{ syncSelectEnabled ? '打开' : '关闭' }}
+						</view>
 					</view>
 				</view>
 				<scroll-view class="product-list" scroll-y>
@@ -214,7 +216,7 @@
 							v-for="group in groupedProcessList"
 							:key="group.productRowid"
 							class="process-table-grid"
-							:style="{ gridTemplateColumns: 'px2vw(50px) px2vw(50px) min-content repeat(' + group.processes.length + ', min-content)' }"
+							:style="{ gridTemplateColumns: 'calc(50 / 1920 * 100vw) calc(50 / 1920 * 100vw) min-content repeat(' + group.processes.length + ', min-content)' }"
 						>
 							<!-- 第一栏：订单编号 + 产品名称 -->
 							<view class="grid-order-info" style="grid-row: 1 / span 9; grid-column: 1">
@@ -6123,14 +6125,13 @@ onShow(refreshPage)
 				flex-shrink: 0;
 				display: flex;
 				align-items: center;
-				justify-content: center;
-				gap: px2vw(16px);
+				justify-content: space-between;
+				padding: 0 px2vw(16px);
 
 				.panel-refresh-btn {
 					height: px2vw(40px);
 					line-height: px2vw(40px);
 					padding: 0 px2vw(18px);
-					margin-right: px2vw(16px);
 					font-size: px2vw(24px);
 					font-weight: normal;
 					color: #333;
@@ -6148,33 +6149,24 @@ onShow(refreshPage)
 			}
 
 			.sync-select-switch {
-				.switch {
-					width: px2vw(52px);
-					height: px2vw(28px);
-					border-radius: px2vw(14px);
-					background-color: #ccc;
-					position: relative;
-					transition: background-color 0.2s;
-
-					&::after {
-						content: '';
-						position: absolute;
-						width: px2vw(24px);
-						height: px2vw(24px);
-						border-radius: 50%;
-						background-color: #fff;
-						top: px2vw(2px);
-						left: px2vw(2px);
-						transition: left 0.2s;
-					}
+				.switch-btn {
+					height: px2vw(40px);
+					line-height: px2vw(40px);
+					padding: 0 px2vw(18px);
+					font-size: px2vw(24px);
+					font-weight: normal;
+					color: #333;
+					background-color: #fff;
+					border: px2vw(2px) solid #d9d9d9;
+					border-radius: px2vw(10px);
+					transition: all 0.2s;
+					white-space: nowrap;
 				}
 
 				.switch-on {
-					background-color: #1890ff;
-
-					&::after {
-						left: px2vw(26px);
-					}
+					background-color: #5884f1;
+					color: #fff;
+					border-color: #5884f1;
 				}
 			}
 
@@ -6190,7 +6182,6 @@ onShow(refreshPage)
 				background-color: #f5f7fa;
 
 				.left-btn {
-					flex: 1;
 					margin: 0 px2vw(8px);
 					height: px2vw(44px);
 					line-height: px2vw(44px);
@@ -6198,6 +6189,17 @@ onShow(refreshPage)
 					text-align: center;
 					font-size: px2vw(22px);
 					color: #fff;
+
+					// 两个字按钮收窄，四个字按钮加宽
+					&.left-btn-add,
+					&.left-btn-confirm {
+						width: px2vw(150px);
+					}
+
+					&.left-btn-delay,
+					&.left-btn-remove {
+						width: px2vw(90px);
+					}
 
 					&.left-btn-add {
 						background-color: #3498db;
@@ -6591,10 +6593,11 @@ onShow(refreshPage)
 						.grid-product-name-v {
 							writing-mode: vertical-rl;
 							text-orientation: upright;
-							flex: 1;
 							font-size: px2vw(24px);
 							color: #333;
 							letter-spacing: px2vw(-2px);
+							word-break: break-all;
+							white-space: normal;
 						}
 					}
 
