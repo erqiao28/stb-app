@@ -1565,11 +1565,17 @@ const goToProcessConfig = () => {
 
 const handleHeaderRefresh = async () => {
 	closeAllPanels()
-	// 清空已加载的工序，下次点击产品时重新拉取最新工序
+	// 清空已加载的工序，刷新后要为仍选中的产品重新拉取
 	processList.value = []
-	loadedProductIds.value = new Set()
-	selectedProcessIds.value = []
+	loadedProductIds.value = []
 	await handleSearch()
+	// 为刷新后仍选中的产品重新加载工序，避免点不开工序列表
+	for (const id of selectedProductIds.value) {
+		const product = productList.value.find((p) => p.uniqueKey === id)
+		if (product) {
+			await loadProductProcesses(product)
+		}
+	}
 	uni.showToast({ title: '刷新成功', icon: 'success' })
 }
 
