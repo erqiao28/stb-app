@@ -17,8 +17,9 @@
 			<view class="header-btn" :class="{ active: showAttendancePanel }" @click="toggleAttendancePanel">员工出勤</view>
 			<view class="header-btn" v-if="loginWorkshop === '喷涂车间'" :class="{ active: showSprayPanel }" @click="toggleSprayPanel">喷涂工序</view>
 		</view>
-			<view class="header-config-btn" @click="goToProcessConfig">工艺配置</view>
-		</view>
+			<view class="header-refresh-btn" @click="handleHeaderRefresh">刷新</view>
+		<view class="header-config-btn" @click="goToProcessConfig">工艺配置</view>
+	</view>
 
 	<view class="dropdown-panel-overlay" v-if="showAttendancePanel || showProcessPanel || showSprayPanel" @click="closeAllPanels"></view>
 	<view class="dropdown-panel-wrapper attendance-panel" :class="{ open: showAttendancePanel }">
@@ -285,13 +286,17 @@
 						<text class="summary-value">{{ employeeSummary.unassigned }}</text>
 					</view>
 					<view class="summary-item">
-					<text class="summary-label">已派人员</text>
-					<text class="summary-value">{{ employeeSummary.assigned }}</text>
-				</view>
-				<view class="summary-item">
-					<text class="summary-label">请假数量</text>
-					<text class="summary-value">{{ employeeSummary.leave }}</text>
-				</view>
+						<text class="summary-label">已满人员</text>
+						<text class="summary-value">{{ employeeSummary.full }}</text>
+					</view>
+					<view class="summary-item">
+						<text class="summary-label">未满人员</text>
+						<text class="summary-value">{{ employeeSummary.incomplete }}</text>
+					</view>
+					<view class="summary-item">
+						<text class="summary-label">请假数量</text>
+						<text class="summary-value">{{ employeeSummary.leave }}</text>
+					</view>
 				</view>
 				<scroll-view class="employee-chart-scroll" scroll-x scroll-y>
 					<view
@@ -735,7 +740,7 @@
 		<view class="dispatch-modal-content" @click.stop>
 			<view class="dispatch-modal-title">派工设置</view>
 			<view class="dispatch-modal-product-info">
-				<text class="product-info-order">{{ dispatchModalProduct?.productionCode || '-' }}</text>
+				<text class="product-info-order">{{ dispatchModalProduct?.orderNo || '-' }}</text>
 				<text class="product-info-name">{{ dispatchModalProduct?.productName || '-' }}</text>
 			</view>
 			<view class="dispatch-modal-body">
@@ -779,6 +784,7 @@
 					<text class="task-header-cell">产品名称</text>
 					<text class="task-header-cell">工序</text>
 					<text class="task-header-cell">派工数量</text>
+					<text class="task-header-cell task-header-cell-op">操作</text>
 				</view>
 				<view
 					class="employee-task-item"
@@ -789,6 +795,9 @@
 					<text class="task-cell">{{ task.productName }}</text>
 					<text class="task-cell">{{ task.processName }}</text>
 					<text class="task-cell">{{ task.dispatchCount }}</text>
+					<view class="task-cell task-cell-op">
+						<text class="task-delete-btn" @click.stop="handleDeleteTask(task, idx)">删除</text>
+					</view>
 				</view>
 				<view class="employee-task-empty" v-if="!(selectedEmployeeForPopover?.tasks || []).length">
 					<text>暂无任务</text>
@@ -865,7 +874,7 @@ import { callWorkflowListAPIPaged, callWorkflowListAll } from '../../utils/workf
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
-import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, PRE_DISPATCH_PROCESS_CONFIRM_URL, PRE_DISPATCH_PRODUCT_ADD_URL, ATTENDANCE_SUBMIT_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, OPERATE_PROCESS_SYNC_URL, POSITION_PROCESS_SELECT_URL, POSITION_PROCESS_DELETE_URL, SPRAY_PROCESS_EMPLOYEE_URL } from '../../utils/api'
+import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, PRE_DISPATCH_PROCESS_CONFIRM_URL, PRE_DISPATCH_PRODUCT_ADD_URL, ATTENDANCE_SUBMIT_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, OPERATE_PROCESS_SYNC_URL, POSITION_PROCESS_SELECT_URL, POSITION_PROCESS_DELETE_URL, SPRAY_PROCESS_EMPLOYEE_URL, getApiRequestBase } from '../../utils/api'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -919,7 +928,8 @@ const PRE_DISPATCH_FIELD_MAP = {
 	paintSpec: '6a3deb356d70ffabc6702d01',
 	polishSpec: '6a3deb356d70ffabc6702d02',
 	materialSizeSpec: '6a3debe76d70ffabc6702dbb',
-	productDeliveryDate: '6a1e7d2c27514927ff33e56b'
+	productDeliveryDate: '6a1e7d2c27514927ff33e56b',
+	status: '6a1e49c427514927ff33ccf5'
 }
 
 const DAILY_WAGE_WORKSHEET_ID = '692112b021066a9f124f5c9f'
@@ -932,6 +942,7 @@ const DAILY_WAGE_FIELD_MAP = {
 	totalHours: '6a4f304c6d70ffabc67913b8',
 	totalWage: '6a4f304c6d70ffabc67913b9',
 	preDispatch: '6a1e47d727514927ff33cc4f',
+	wageThreshold: '6a7f1a7f533d90c2eae04627',
 }
 
 const CRAFT_POSITION_WORKSHEET_ID = '6a276f516d70ffabc66285e7'
@@ -1047,13 +1058,16 @@ const instance = getCurrentInstance()
 
 const employeeSummary = computed(() => {
 	const total = employeeList.value.length
-	// 未派人员：没有预派工数据关联，且非请假（请假人员不纳入未派统计）
-	const unassigned = employeeList.value.filter((e) => !e.hasPreDispatch && String(e.attendance).trim() !== '请假').length
-	// 已派人员：有预派工数据关联的员工数
-	const assigned = employeeList.value.filter((e) => e.hasPreDispatch).length
-	// 请假数量：出勤为请假的员工人数
+	// 四类互斥统计：请假 > 未派 > 已满/未满
+	// 请假人员：出勤为请假（不再参与其他分类）
 	const leave = employeeList.value.filter((e) => String(e.attendance).trim() === '请假').length
-	return { total, unassigned, assigned, leave }
+	// 未派人员：非请假，且没有预派工数据关联
+	const unassigned = employeeList.value.filter((e) => String(e.attendance).trim() !== '请假' && !e.hasPreDispatch).length
+	// 已满人员：非请假，有预派工，有工资阀值，且总工资达到阀值
+	const full = employeeList.value.filter((e) => String(e.attendance).trim() !== '请假' && e.hasPreDispatch && e.wageThreshold > 0 && e.isFull).length
+	// 未满人员：非请假，有预派工，无工资阀值或总工资未达到阀值（无阀值时保守算未满）
+	const incomplete = employeeList.value.filter((e) => String(e.attendance).trim() !== '请假' && e.hasPreDispatch && (e.wageThreshold <= 0 || !e.isFull)).length
+	return { total, unassigned, full, incomplete, leave }
 })
 
 const maxEmployeeRecordCount = computed(() => {
@@ -1067,6 +1081,7 @@ const PROCESS_DETAIL_FIELD_MAP = {
 	needCount: '690dc19f8d797ee211e7fc60',
 	finishCount: '697c8b023b5e707f84ce02cc',
 	allcount: '68099ac75d6fc47331574e82',
+	orderCount: '6a015a2ac03685667d63787f',
 	dailyOutput: '69a96d623b5e707f84d380b6',
 }
 
@@ -1548,6 +1563,16 @@ const goToProcessConfig = () => {
 	})
 }
 
+const handleHeaderRefresh = async () => {
+	closeAllPanels()
+	// 清空已加载的工序，下次点击产品时重新拉取最新工序
+	processList.value = []
+	loadedProductIds.value = new Set()
+	selectedProcessIds.value = []
+	await handleSearch()
+	uni.showToast({ title: '刷新成功', icon: 'success' })
+}
+
 const formatFieldValue = (v) => {
 	if (v == null || v === '') return ''
 	if (typeof v === 'string') {
@@ -1667,7 +1692,8 @@ const mapPreDispatchRow = (item) => ({
 	paintSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.paintSpec]),
 	polishSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.polishSpec]),
 	materialSizeSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.materialSizeSpec]),
-	productDeliveryDate: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.productDeliveryDate]) || ''
+	productDeliveryDate: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.productDeliveryDate]) || '',
+	status: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.status]) || ''
 })
 
 const DICTIONARY_WORKSHEET_ID = 'shujuzidian'
@@ -1903,51 +1929,63 @@ const loadAddProductList = async () => {
 	addProductLoading.value = true
 	try {
 		uni.showLoading({ title: '加载中...' })
-		// 使用原来的产品接口
-		const res = await callWorkflowListAPIPaged({
-			worksheetId: 'paichanjihua',
-			filters: [
-				{
-					controlId: '67de26c9c5377d50a523c735',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: [loginWorkshop.value || '拉伸车间']
-				},
-				{
-					controlId: '694a3954687045435008a7c3',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: ['正常排产']
-				},
-				{
-					controlId: '655b875ffc44a9469a3aa225',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: ['已排产', '部分排产']
-				},
-				{
-					controlId: '69db0017665ab27f3913c455',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 6,
-					values: ['准时交货']
-				},
-				{
-					controlId: '66974cda2503723eec1af600',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 8
-				}
-			],
-			pageSize: 100,
-			pageNum: 1
-		})
+		// 使用原来的产品接口，循环拉取直到没有更多数据
+		const filters = [
+			{
+				controlId: '67de26c9c5377d50a523c735',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: [loginWorkshop.value || '拉伸车间']
+			},
+			{
+				controlId: '694a3954687045435008a7c3',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: ['正常排产']
+			},
+			{
+				controlId: '655b875ffc44a9469a3aa225',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: ['已排产', '部分排产']
+			},
+			{
+				controlId: '69db0017665ab27f3913c455',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 6,
+				values: ['准时交货']
+			},
+			{
+				controlId: '66974cda2503723eec1af600',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 8
+			}
+		]
+		const pageSize = 100
+		let pageNum = 1
+		const allRows = []
+		const MAX_PAGES = 500
+		while (pageNum <= MAX_PAGES) {
+			const res = await callWorkflowListAPIPaged({
+				worksheetId: 'paichanjihua',
+				filters,
+				pageSize,
+				pageNum
+			})
+			const rows = Array.isArray(res?.data) ? res.data : []
+			if (rows.length === 0) break
+			allRows.push(...rows)
+			if (rows.length < pageSize) break
+			pageNum++
+		}
 		uni.hideLoading()
 
-		const rows = res?.data || []
+		const rows = allRows
 		// 前端过滤：正常排产时，未完成工序数量 > 0
 		const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
 		const filteredRows = rows.filter(item => {
@@ -3295,7 +3333,7 @@ const saveDispatchModal = () => {
 	closeDispatchModal()
 }
 
-const loadAssociatedProcessDetails = async (product) => {
+const loadAssociatedProcessDetails = async (product, statusFilter = '未派工') => {
 	try {
 		// 按生产单号查询预派工记录，避免 product.preDispatchRowids 过期导致员工信息不刷新
 		// 查到后再按当前派工日期过滤
@@ -3315,6 +3353,13 @@ const loadAssociatedProcessDetails = async (product) => {
 			preDispatchRows = preDispatchRows.filter(item => {
 				const d = formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.dispatchDate])
 				return d === filterDate.value
+			})
+		}
+		// 工序列表只关联状态为未派工的预派工
+		if (statusFilter) {
+			preDispatchRows = preDispatchRows.filter(item => {
+				const status = formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.status])
+				return status === statusFilter
 			})
 		}
 		const dailyWageRowids = new Set()
@@ -3533,7 +3578,7 @@ const loadProductProcesses = async (product) => {
 				sequence: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.sequence]),
 				processName: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.processName]),
 				processDictRowid: processDictRowids[0] || '',
-				orderCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.allcount]) || 0,
+				orderCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.orderCount]) || 0,
 				dailyOutput: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.dailyOutput]) || 0,
 				needCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.needCount]) || 0,
 				finishCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.finishCount]) || 0,
@@ -3754,11 +3799,12 @@ const loadEmployeeInfoMap = async () => {
 	return infoMap
 }
 
-// 加载员工是否有预派工数据关联映射（员工姓名 -> 是否有预派工）
-// 依据当日工资表的 preDispatch 关联字段（6a1e47d727514927ff33cc4f）非空判断：
-// 该字段关联了预派工记录，非空即表示该员工当日有预派工数据
-const loadEmployeePreDispatchMap = async () => {
+// 加载当日工资表扩展信息（员工姓名 -> { 是否有预派工, 工资阀值 }）
+// 依据当日工资表的 preDispatch 关联字段（6a1e47d727514927ff33cc4f）非空判断是否有预派工；
+// 工资阀值字段（6a7f1a7f533d90c2eae04627）用于判断员工是否派满
+const loadEmployeeDailyWageExtraMap = async () => {
 	const preDispatchMap = new Map()
+	const wageThresholdMap = new Map()
 	try {
 		const currentDate = filterDate.value
 		const wsFilter = employeeWorkshopFilter.value
@@ -3792,6 +3838,13 @@ const loadEmployeePreDispatchMap = async () => {
 				if (!name) return
 				const has = extractRelationSids(item[DAILY_WAGE_FIELD_MAP.preDispatch]).length > 0
 				preDispatchMap.set(name, preDispatchMap.get(name) || has)
+				// 工资阀值：取第一个有效值即可（理论上同一员工当日只有一条记录）
+				if (!wageThresholdMap.has(name)) {
+					const threshold = Number(formatFieldValue(item[DAILY_WAGE_FIELD_MAP.wageThreshold]) || 0)
+					if (threshold > 0) {
+						wageThresholdMap.set(name, threshold)
+					}
+				}
 			})
 			if (filtered.length > 0) foundData = true
 			if (foundData && filtered.length === 0) {
@@ -3803,9 +3856,31 @@ const loadEmployeePreDispatchMap = async () => {
 			}
 		}
 	} catch (e) {
-		console.error('加载员工预派工关联失败:', e)
+		console.error('加载员工当日工资扩展信息失败:', e)
 	}
-	return preDispatchMap
+	return { preDispatchMap, wageThresholdMap }
+}
+
+const buildEmployeeTaskProcessName = (pd) => {
+	const workshop = pd.workshop || ''
+	// 拉伸车间和抛光车间只显示工序名称
+	if (workshop === '拉伸车间' || workshop === '抛光车间') {
+		return pd.processName || '-'
+	}
+	// 喷涂车间和组装车间：岗位工序 -> 工序归类 -> 工序名称
+	if (workshop === '喷涂车间' || workshop === '组装车间') {
+		const positionProcessNames = (pd.positionProcessRowids || [])
+			.map((sid) => positionProcessDictMap.value.get(sid))
+			.filter(Boolean)
+			.join('、')
+		if (positionProcessNames) return positionProcessNames
+		const craftPositionName = pd.craftPosition ? (craftPositionDictMap.value.get(pd.craftPosition) || '') : ''
+		if (craftPositionName) return craftPositionName
+		return pd.processName || '-'
+	}
+	// 其他车间：工序归类 -> 工序名称
+	const craftPositionName = pd.craftPosition ? (craftPositionDictMap.value.get(pd.craftPosition) || '') : ''
+	return craftPositionName || pd.processName || '-'
 }
 
 const loadEmployeeDispatchSummary = async () => {
@@ -3862,7 +3937,9 @@ const loadEmployeeDispatchSummary = async () => {
 				silent: true
 			}, 100)
 			const pdRows = Array.isArray(pdRes?.data) ? pdRes.data.map(mapPreDispatchRow) : []
-			pdRows.forEach((pd) => {
+			// 员工任务汇总/任务栏只显示已派工的预派工记录
+			const dispatchedPdRows = pdRows.filter(pd => pd.status === '已派工')
+			dispatchedPdRows.forEach((pd) => {
 				preDispatchMap[pd.rowid] = pd
 			})
 		}
@@ -3892,10 +3969,12 @@ const loadEmployeeDispatchSummary = async () => {
 					group.records.push({
 						orderNo: pd.orderNo || '-',
 						productName: pd.productNameNew || pd.productName || '-',
-						processName: pd.craftPosition || pd.processName || '-',
+						processName: buildEmployeeTaskProcessName(pd),
 						dispatchCount: pd.dispatchCount || 0,
 						worktime: pd.worktime || 0,
-						wage: pd.wage || 0
+						wage: pd.wage || 0,
+						preDispatchRowid: pd.rowid || '',
+						dailyWageRowid: dw.rowid || ''
 					})
 				}
 			})
@@ -4049,7 +4128,9 @@ const openEmployeeTaskPopover = async (emp, index) => {
 				orderNo: r.orderNo,
 				productName: r.productName,
 				processName: r.processName,
-				dispatchCount: r.dispatchCount
+				dispatchCount: r.dispatchCount,
+				preDispatchRowid: r.preDispatchRowid || '',
+				dailyWageRowid: r.dailyWageRowid || ''
 		  }))
 		: []
 	selectedEmployeeForPopover.value = { ...emp, tasks }
@@ -4084,6 +4165,48 @@ const closeEmployeeTaskPopover = () => {
 	selectedEmployeeForPopover.value = null
 	employeeTaskPopoverStyle.value = {}
 	employeeTaskArrowStyle.value = {}
+}
+
+const TASK_DELETE_URL = getApiRequestBase() + '/api/workflow/hooks/NmE4MmE1NGFjYjg1NjNiMzlkMTViZDZh'
+
+const handleDeleteTask = (task, index) => {
+	if (!task.preDispatchRowid) {
+		uni.showToast({ title: '缺少预派工标识', icon: 'none' })
+		return
+	}
+	// 先关闭任务框，确保确认框层级高于任务框
+	closeEmployeeTaskPopover()
+	uni.showModal({
+		title: '确认删除',
+		content: '确定删除该任务吗？',
+		success: async (res) => {
+			if (!res.confirm) return
+			try {
+				uni.showLoading({ title: '删除中...', mask: true })
+				const result = await http.post(TASK_DELETE_URL, {
+					rowid: task.preDispatchRowid
+				})
+				uni.hideLoading()
+				console.log('删除任务接口返回:', result)
+				// 后端 webhook 可能异步处理，先等一会再刷新
+				await new Promise((resolve) => setTimeout(resolve, 1500))
+				console.log('开始刷新产品列表和员工列表')
+				await loadProducts(true)
+				await loadWorkshopEmployees()
+				console.log('刷新完成')
+				if (result && result.status === 1) {
+					uni.showToast({ title: result.msg || '删除成功', icon: 'success' })
+				} else {
+					const msg = result?.message || result?.msg || '删除失败'
+					uni.showToast({ title: msg, icon: 'none' })
+				}
+			} catch (e) {
+				uni.hideLoading()
+				console.error('删除任务失败:', e)
+				uni.showToast({ title: e.message || '删除失败', icon: 'none' })
+			}
+		}
+	})
 }
 
 const openProcessActionModal = (product) => {
@@ -4452,8 +4575,8 @@ const loadWorkshopEmployees = async () => {
 			}
 		}
 
-		// 员工是否有预派工数据关联映射（员工姓名 -> 是否有预派工），用于未派判断及柱子状态显示
-		const preDispatchMap = await loadEmployeePreDispatchMap()
+		// 加载当日工资表扩展信息（预派工关联 + 工资阀值），用于未派判断、派满判断及柱子状态显示
+		const { preDispatchMap, wageThresholdMap } = await loadEmployeeDailyWageExtraMap()
 		const mapped = allRows.map((item) => {
 			const totalHours = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.totalHours]) || '0') || 0
 			const wage = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.wage]) || '0') || 0
@@ -4464,6 +4587,8 @@ const loadWorkshopEmployees = async () => {
 			const isTempEmployeeRaw = formatFieldValue(item[EMPLOYEE_FIELD_MAP.isTempEmployee])
 			const isTempEmployee = String(isTempEmployeeRaw).trim() === '1'
 			const name = formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName]) || '-'
+			const wageThreshold = wageThresholdMap.get(name) || 0
+			const isFull = wageThreshold > 0 && wage >= wageThreshold
 			return {
 				id: item.rowid || '',
 				name,
@@ -4473,7 +4598,9 @@ const loadWorkshopEmployees = async () => {
 				position,
 				isNewEmployee,
 				isTempEmployee,
-				hasPreDispatch: preDispatchMap.get(name) || false
+				hasPreDispatch: preDispatchMap.get(name) || false,
+				wageThreshold,
+				isFull
 			}
 		})
 		employeeList.value = mapped.map((e) => {
@@ -4641,7 +4768,7 @@ const loadSprayProcessList = async () => {
 // 组装岗位合并配置：主岗位记录作为按钮主记录（按钮名、添加产品 rowid 取自它），
 // 合并组内其余岗位与主岗位合并为一个按钮，点击筛选全部内部岗位的预派工数据
 const ASSEMBLY_POSITION_MERGE_GROUPS = [
-	{ btnName: '组装包装', mainName: '组装包装', memberNames: ['组装包装', '点焊'] },
+	{ btnName: '组装包装', mainName: '组装包装', memberNames: ['组装包装', '点焊', '打手柄标'] },
 	{ btnName: '喷砂', mainName: '喷砂', memberNames: ['喷砂', '喷砂叠锅'] }
 ]
 
@@ -5441,6 +5568,28 @@ onShow(refreshPage)
 
 			&:active {
 				background-color: rgba(255, 255, 255, 0.8);
+			}
+		}
+
+		.header-refresh-btn {
+			flex-shrink: 0;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 0 px2vw(24px);
+			height: px2vw(48px);
+			line-height: px2vw(48px);
+			border-radius: px2vw(24px);
+			font-size: px2vw(24px);
+			color: #fff;
+			background-color: rgba(255, 255, 255, 0.2);
+			border: 1px solid rgba(255, 255, 255, 0.3);
+			text-align: center;
+			transition: all 0.2s ease;
+			margin-right: px2vw(16px);
+
+			&:active {
+				background-color: rgba(255, 255, 255, 0.35);
 			}
 		}
 	}
@@ -6931,6 +7080,10 @@ onShow(refreshPage)
 					font-size: px2vw(20px);
 					color: #666;
 					text-align: center;
+
+					&.task-header-cell-op {
+						flex: 0.6;
+					}
 				}
 			}
 
@@ -6945,6 +7098,21 @@ onShow(refreshPage)
 					font-size: px2vw(20px);
 					color: #333;
 					text-align: center;
+
+					&.task-cell-op {
+						flex: 0.6;
+						display: flex;
+						align-items: center;
+						justify-content: center;
+					}
+
+					.task-delete-btn {
+						font-size: px2vw(18px);
+						color: #ff4d4f;
+						padding: px2vw(4px) px2vw(12px);
+						border: 1px solid #ff4d4f;
+						border-radius: px2vw(6px);
+					}
 				}
 			}
 
