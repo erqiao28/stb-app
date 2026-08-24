@@ -172,10 +172,6 @@
 								class="product-item"
 								:class="{ 'product-active': selectedProductIds.includes(product.uniqueKey) }"
 								@click="handleProductClick(product)"
-								@longpress="handleLongPress(product)"
-								@mousedown="onMouseDown(product)"
-								@mouseup="onMouseUp"
-								@mouseleave="onMouseUp"
 							>
 								<text class="product-index">{{ idx + 1 }}</text>
 								<view class="product-info">
@@ -407,22 +403,6 @@
 						</view>
 					</view>
 				</scroll-view>
-			</view>
-		</view>
-	</view>
-
-	<view class="void-modal" v-if="showVoidModal" @click.self="closeVoidModal">
-		<view class="void-modal-content">
-			<view class="void-modal-title">作废确认</view>
-			<input
-				v-model="voidReason"
-				type="text"
-				placeholder="请输入作废原因"
-				class="void-input"
-			/>
-			<view class="void-modal-buttons">
-				<view class="void-btn-cancel" @click="closeVoidModal">取消</view>
-				<view class="void-btn-confirm" @click="confirmVoid">确认</view>
 			</view>
 		</view>
 	</view>
@@ -1122,13 +1102,12 @@ const assemblyPositionButtons = ref([])
 // 当前选中的岗位按钮名称（单选），用于筛选产品列表及添加产品传参
 const activeAssemblyPosition = ref('')
 
-const showVoidModal = ref(false)
-const voidReason = ref('')
-const voidRowid = ref('')
+
 
 const showConfirmDispatchModal = ref(false)
 const confirmDispatchCount = ref(0)
 const confirmDispatchRowids = ref([])
+const isConfirmDispatching = ref(false)
 // 确认派工前的初始预派工总条数（用于轮询判断，产品行可能对应多条预派工，按预派工条数计算）
 const initialPreDispatchCountForConfirm = ref(0)
 
@@ -2815,11 +2794,14 @@ const getTotalPreDispatchCount = () => {
 }
 
 const handleConfirmDispatch = async () => {
-	// 只获取选中产品的预派工 rowid
-	const allRowids = productList.value
-		.filter(item => selectedProductIds.value.includes(item.uniqueKey))
-		.flatMap(item => item.preDispatchRowids || [])
-		.filter(Boolean)
+	if (isConfirmDispatching.value) return
+	// 只获取选中产品的预派工 rowid，先去重避免重复查询和提交
+	const allRowids = [...new Set(
+		productList.value
+			.filter(item => selectedProductIds.value.includes(item.uniqueKey))
+			.flatMap(item => item.preDispatchRowids || [])
+			.filter(Boolean)
+	)]
 	if (allRowids.length === 0) {
 		uni.showToast({ title: '没有可确认的预派工', icon: 'none' })
 		return
@@ -2846,6 +2828,8 @@ const handleConfirmDispatch = async () => {
 			})
 			.map(item => item.rowid)
 	}
+	// 二次去重，确保不会提交重复 rowid
+	validRowids = [...new Set(validRowids)]
 	if (validRowids.length === 0) {
 		uni.showToast({ title: '没有可确认的预派工（均无员工）', icon: 'none' })
 		return
@@ -3059,6 +3043,8 @@ const handleProcessListConfirm = async (productRowid) => {
 }
 
 const doConfirmDispatch = async () => {
+	if (isConfirmDispatching.value) return
+	isConfirmDispatching.value = true
 	showConfirmDispatchModal.value = false
 	// 期望的最终预派工条数 = 初始预派工总条数 - 确认派工条数
 	const expectedPreDispatchCount = initialPreDispatchCountForConfirm.value - confirmDispatchCount.value
@@ -3072,7 +3058,7 @@ const doConfirmDispatch = async () => {
 	try {
 		uni.showLoading({ title: '确认中...' })
 		await http.post(PRE_DISPATCH_CONFIRM_URL, {
-			rowids: confirmDispatchRowids.value
+			rowids: [...new Set(confirmDispatchRowids.value)]
 		})
 		uni.hideLoading()
 		uni.showToast({ title: '确认派工成功', icon: 'success' })
@@ -3107,6 +3093,8 @@ const doConfirmDispatch = async () => {
 		uni.hideLoading()
 		console.error('确认派工失败:', e)
 		uni.showToast({ title: '确认派工失败', icon: 'none' })
+	} finally {
+		isConfirmDispatching.value = false
 	}
 }
 
@@ -3209,11 +3197,31 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 
 		const groupedMap = {}
 		mapped.forEach((item) => {
-			const key = `${item.orderNo || ''}|${item.productNameNew || ''}|${item.productionCode || ''}`
+			const orderNo = String(item.orderNo || '').trim()
+			const productionCode = String(item.productionCode || '').trim()
+			const displayName = String(item.productNameNew || item.productName || '').trim()
+
+			// 以生产编号作为产品唯一键核心；无编号时回退到订单+产品名称
+			const key = productionCode
+				? `${orderNo}|${productionCode}`
+				: `${orderNo}|${displayName || item.rowid || ''}`
+
 			if (!groupedMap[key]) {
-				groupedMap[key] = { ...item, uniqueKey: key, preDispatchRowids: [] }
+				groupedMap[key] = {
+					...item,
+					orderNo,
+					productionCode,
+					productNameNew: item.productNameNew || item.productName || '',
+					uniqueKey: key,
+					preDispatchRowids: []
+				}
 			}
 			groupedMap[key].preDispatchRowids.push(item.rowid)
+
+			// 先遇到的记录产品名为空时，用后续非空的记录补全显示
+			if (!groupedMap[key].productNameNew && item.productNameNew) {
+				groupedMap[key].productNameNew = item.productNameNew
+			}
 		})
 		productList.value = Object.values(groupedMap).sort((a, b) => {
 			// 优先按交货日期排序
@@ -4947,88 +4955,10 @@ const handleVoidClick = async (item) => {
 	})
 }
 
-const handleLongPress = (product) => {
-	showVoidModal.value = true
-	voidReason.value = ''
-	const rowids = product.preDispatchRowids || [product.uniqueKey]
-	voidRowid.value = rowids.filter(Boolean).join(',')
-}
-
-let longPressTimer = null
-
-const onMouseDown = (item) => {
-	longPressTimer = setTimeout(() => {
-		handleLongPress(item)
-	}, 500)
-}
-
-const onMouseUp = () => {
-	if (longPressTimer) {
-		clearTimeout(longPressTimer)
-		longPressTimer = null
-	}
-}
-
-const closeVoidModal = () => {
-	showVoidModal.value = false
-	voidReason.value = ''
-	voidRowid.value = ''
-}
-
 const closeConfirmDispatchModal = () => {
 	showConfirmDispatchModal.value = false
 	confirmDispatchCount.value = 0
 	confirmDispatchRowids.value = []
-}
-
-const confirmVoid = async () => {
-	if (!voidReason.value.trim()) {
-		uni.showToast({ title: '请输入作废原因', icon: 'none' })
-		return
-	}
-	if (!voidRowid.value) {
-		uni.showToast({ title: '缺少记录ID', icon: 'none' })
-		return
-	}
-
-	const rowids = voidRowid.value.split(',').filter(Boolean)
-	if (rowids.length === 0) {
-		uni.showToast({ title: '缺少记录ID', icon: 'none' })
-		return
-	}
-
-	uni.showLoading({ title: '作废中...', mask: true })
-	let successCount = 0
-	let failCount = 0
-	try {
-		for (const rowid of rowids) {
-			try {
-				await http.post(PRE_DISPATCH_VOID_URL, {
-					rowid,
-					reason: voidReason.value.trim()
-				})
-				successCount++
-			} catch (e) {
-				console.error(`作废失败 rowid=${rowid}:`, e)
-				failCount++
-			}
-		}
-		closeVoidModal()
-		if (failCount === 0) {
-			uni.showToast({ title: '作废成功', icon: 'success' })
-		} else if (successCount === 0) {
-			uni.showToast({ title: '作废失败', icon: 'none' })
-		} else {
-			uni.showToast({ title: `作废完成，成功 ${successCount} 条，失败 ${failCount} 条`, icon: 'none' })
-		}
-		loadProducts(true)
-		loadEmployeeDispatchSummary()
-	} catch (e) {
-		console.error('作废失败:', e)
-		uni.showToast({ title: '作废失败', icon: 'none' })
-	} finally {
-		uni.hideLoading()
-	}
 }
 
 const handleCircleClick = async (item) => {
@@ -7128,69 +7058,6 @@ onShow(refreshPage)
 				font-size: px2vw(22px);
 				color: #999;
 			}
-		}
-	}
-}
-
-.void-modal {
-	position: fixed;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	background-color: rgba(0, 0, 0, 0.5);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	z-index: 999;
-
-	.void-modal-content {
-		width: px2vw(600px);
-		background-color: #fff;
-		border-radius: px2vw(16px);
-		padding: px2vw(40px);
-	}
-
-	.void-modal-title {
-		font-size: px2vw(32px);
-		font-weight: bold;
-		text-align: center;
-		margin-bottom: px2vw(30px);
-	}
-
-	.void-input {
-		width: 100%;
-		height: px2vw(80px);
-		border: 1px solid #ddd;
-		border-radius: px2vw(8px);
-		padding: 0 px2vw(20px);
-		font-size: px2vw(28px);
-		box-sizing: border-box;
-		margin-bottom: px2vw(30px);
-	}
-
-	.void-modal-buttons {
-		display: flex;
-		gap: px2vw(20px);
-
-		.void-btn-cancel,
-		.void-btn-confirm {
-			flex: 1;
-			height: px2vw(80px);
-			line-height: px2vw(80px);
-			text-align: center;
-			border-radius: px2vw(8px);
-			font-size: px2vw(28px);
-		}
-
-		.void-btn-cancel {
-			background-color: #f5f7fa;
-			color: #666;
-		}
-
-		.void-btn-confirm {
-			background-color: #ff4d4f;
-			color: #fff;
 		}
 	}
 }
