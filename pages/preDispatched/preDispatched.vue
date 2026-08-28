@@ -216,12 +216,12 @@
 							:style="{ gridTemplateColumns: 'calc(50 / 1920 * 100vw) calc(50 / 1920 * 100vw) min-content repeat(' + group.processes.length + ', min-content)' }"
 						>
 							<!-- 第一栏：订单编号 + 产品名称 -->
-							<view class="grid-order-info" style="grid-row: 1 / span 9; grid-column: 1">
+							<view class="grid-order-info" style="grid-row: 1 / span 10; grid-column: 1">
 								<view class="grid-orderno">{{ group.orderNo.replace(/-/g, '|') }}</view>
 								<view class="grid-product-name-v">{{ group.productName }}</view>
 							</view>
 							<!-- 第二栏：按钮 -->
-							<view class="grid-product-name" style="grid-row: 1 / span 9; grid-column: 2">
+							<view class="grid-product-name" style="grid-row: 1 / span 10; grid-column: 2">
 								<view class="grid-product-refresh" @click.stop="refreshProcessList(group.productRowid)">刷新</view>
 								<view
 									class="grid-product-action"
@@ -236,10 +236,11 @@
 							<view class="grid-label-cell" style="grid-row: 3; grid-column: 3">工序</view>
 							<view class="grid-label-cell" style="grid-row: 4; grid-column: 3">日产量</view>
 							<view class="grid-label-cell" style="grid-row: 5; grid-column: 3">订单数</view>
-							<view class="grid-label-cell" style="grid-row: 6; grid-column: 3">待派工</view>
-							<view class="grid-label-cell" style="grid-row: 7; grid-column: 3">已完成</view>
-							<view class="grid-label-cell" style="grid-row: 8; grid-column: 3">派工数量</view>
-							<view class="grid-label-cell" style="grid-row: 9; grid-column: 3">员工</view>
+							<view class="grid-label-cell" style="grid-row: 6; grid-column: 3">生产数</view>
+							<view class="grid-label-cell" style="grid-row: 7; grid-column: 3">待派工</view>
+							<view class="grid-label-cell" style="grid-row: 8; grid-column: 3">已完成</view>
+							<view class="grid-label-cell" style="grid-row: 9; grid-column: 3">派工数量</view>
+							<view class="grid-label-cell" style="grid-row: 10; grid-column: 3">员工</view>
 							<template v-for="(p, idx) in group.processes" :key="p.rowid">
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 1, gridColumn: 4 + idx }">
 								<!-- 自定义勾选框：完全受 selectedProcessIds 控制，避免 checkbox 组件内部状态不同步问题 -->
@@ -251,9 +252,10 @@
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 3, gridColumn: 4 + idx }">{{ p.processName || '-' }}</view>
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 4, gridColumn: 4 + idx }">{{ p.dailyOutput || 0 }}</view>
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 5, gridColumn: 4 + idx }">{{ p.orderCount || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 6, gridColumn: 4 + idx }">{{ p.needCount || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 7, gridColumn: 4 + idx }">{{ p.finishCount || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 8, gridColumn: 4 + idx }">{{ p.dispatchCount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 6, gridColumn: 4 + idx }">{{ p.allcount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 7, gridColumn: 4 + idx }">{{ p.needCount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 8, gridColumn: 4 + idx }">{{ p.finishCount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 9, gridColumn: 4 + idx }">{{ p.dispatchCount || 0 }}</view>
 							<view
 							v-if="isEmployeeGroupStart(group.processes, idx)"
 							class="grid-cell employee-cell"
@@ -3376,6 +3378,7 @@ const loadAssociatedProcessDetails = async (product, statusFilter = '未派工')
 				return status === statusFilter
 			})
 		}
+		// 收集所有预派工关联的当日工资 rowid，一次性查询建立 工资rowid -> 员工名 映射
 		const dailyWageRowids = new Set()
 		preDispatchRows.forEach((item) => {
 			const sids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.dailyWage])
@@ -3401,9 +3404,31 @@ const loadAssociatedProcessDetails = async (product, statusFilter = '未派工')
 				}
 			})
 		}
-		const nameSetMap = new Map()
-		const preDispatchRowidMap = new Map()
-		preDispatchRows.forEach((item) => {
+		// 业务规则：同一生产单号 + 工序 + 派工日期 只应存在一条预派工。
+		// 后端历史数据可能产生重复（根因待排查），前端按 rowid 升序取最早创建的一条作为"权威"记录，
+		// 展示、修改派工数量、修改员工均针对此条，避免数据"看起来没生效"。
+		const sortedPreDispatchRows = [...preDispatchRows].sort((a, b) =>
+			String(a.rowid || '').localeCompare(String(b.rowid || ''))
+		)
+		// 调试用：检测到同工序关联多条预派工时输出被忽略的 rowid，便于后端定位重复来源
+		const firstPdRowidByProcess = new Map()
+		sortedPreDispatchRows.forEach((item) => {
+			const sids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail])
+			sids.forEach((sid) => {
+				const existing = firstPdRowidByProcess.get(sid)
+				if (existing && existing !== item.rowid) {
+					console.warn(`[preDispatched] 工序 ${sid} 关联了多条预派工，已忽略 rowid=${item.rowid}（保留 rowid=${existing}）`)
+				} else {
+					firstPdRowidByProcess.set(sid, item.rowid)
+				}
+			})
+		})
+
+		// 每道工序只关联第一条（最早创建的）预派工；
+		// 员工名直接取该权威预派工自身的当日工资，不再跨预派工合并
+		const preDispatchRowidMap = new Map()  // 工序 rowid -> 权威预派工 rowid
+		const processNamesMap = new Map()      // 工序 rowid -> 权威预派工的员工名数组
+		sortedPreDispatchRows.forEach((item) => {
 			const pdRowid = item.rowid
 			const processSids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail])
 			const dailyWageSids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.dailyWage])
@@ -3411,24 +3436,18 @@ const loadAssociatedProcessDetails = async (product, statusFilter = '未派工')
 				.map((sid) => dailyWageMap.get(sid))
 				.filter((name) => name && name !== '-')
 			processSids.forEach((sid) => {
-				if (!nameSetMap.has(sid)) {
-					nameSetMap.set(sid, new Set())
-				}
-				names.forEach((name) => nameSetMap.get(sid).add(name))
-				// 每道工序只关联一条预派工
 				if (!preDispatchRowidMap.has(sid)) {
 					preDispatchRowidMap.set(sid, pdRowid)
+					processNamesMap.set(sid, names)
 				}
 			})
 		})
-		const resultMap = new Map()
-		// 获取预派工的 craftPosition（用工艺岗位字典转换 ID 为名称）
+
+		// 工艺岗位 / 岗位工序 / 派工数量 按权威预派工 rowid 索引
 		const craftPositionMap = new Map()
-		// 获取预派工的 positionProcess（用岗位工序表转换 ID 为名称）
 		const positionProcessMap = new Map()
-		// 获取预派工的派工数量
 		const dispatchCountMap = new Map()
-		preDispatchRows.forEach((item) => {
+		sortedPreDispatchRows.forEach((item) => {
 			const pdRowid = item.rowid
 			const craftPositionId = formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.craftPosition]) || ''
 			// 尝试用工艺岗位字典转换 ID 为名称，找不到则留空
@@ -3446,10 +3465,11 @@ const loadAssociatedProcessDetails = async (product, statusFilter = '未派工')
 			const dispatchCount = formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.dispatchCount]) || 0
 			dispatchCountMap.set(pdRowid, dispatchCount)
 		})
-		nameSetMap.forEach((names, sid) => {
-			const pdRowid = preDispatchRowidMap.get(sid) || ''
+
+		const resultMap = new Map()
+		preDispatchRowidMap.forEach((pdRowid, sid) => {
 			resultMap.set(sid, {
-				employeeNames: names.size > 0 ? [...names] : [],
+				employeeNames: processNamesMap.get(sid) || [],
 				preDispatchRowid: pdRowid,
 				craftPosition: craftPositionMap.get(pdRowid) || '',
 				positionProcess: positionProcessMap.get(pdRowid) || '',
@@ -3611,6 +3631,7 @@ const loadProductProcesses = async (product) => {
 				processDictRowid: processDictRowids[0] || '',
 				orderCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.orderCount]) || 0,
 				dailyOutput: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.dailyOutput]) || 0,
+				allcount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.allcount]) || 0,
 				needCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.needCount]) || 0,
 				finishCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.finishCount]) || 0,
 				isAssociated,
@@ -4072,8 +4093,8 @@ const getEmployeeGroupSpan = (processes, idx) => {
 
 const getEmployeeCellStyle = (processes, idx) => {
 	const span = getEmployeeGroupSpan(processes, idx)
-	if (span <= 1) return { gridRow: 9, gridColumn: 4 + idx }
-	return { gridRow: 9, gridColumn: (4 + idx) + ' / span ' + span }
+	if (span <= 1) return { gridRow: 10, gridColumn: 4 + idx }
+	return { gridRow: 10, gridColumn: (4 + idx) + ' / span ' + span }
 }
 
 const getEmployeeCellText = (processes, idx) => {
@@ -6650,13 +6671,13 @@ onShow(refreshPageOnShow)
 						margin-bottom: px2vw(8px);
 
 						.summary-label {
-							font-size: px2vw(16px);
+							font-size: px2vw(20px);
 							color: #666;
 							white-space: nowrap;
 						}
 
 						.summary-value {
-							font-size: px2vw(18px);
+							font-size: px2vw(22px);
 							color: #333;
 							font-weight: bold;
 							white-space: nowrap;
@@ -6679,13 +6700,13 @@ onShow(refreshPageOnShow)
 				.process-table-grid {
 					display: grid;
 					width: fit-content;
-					grid-template-rows: repeat(7, auto);
+					grid-template-rows: repeat(10, auto);
 					margin: px2vw(10px);
 					border: 1px solid #999;
 
 					// 第一栏：订单编号 + 产品名称
 					.grid-order-info {
-						grid-row: 1 / span 9;
+						grid-row: 1 / span 10;
 						display: flex;
 						flex-direction: column;
 						align-items: center;
@@ -6719,7 +6740,7 @@ onShow(refreshPageOnShow)
 
 					// 第二栏：按钮
 					.grid-product-name {
-						grid-row: 1 / span 9;
+						grid-row: 1 / span 10;
 						display: flex;
 						flex-direction: column;
 						justify-content: space-between;
@@ -6798,7 +6819,7 @@ onShow(refreshPageOnShow)
 						border-right: 1px solid #999;
 						white-space: nowrap;
 
-						&:nth-last-child(-n+9) {
+						&:nth-last-child(-n+10) {
 							border-right: none;
 						}
 					}
@@ -6859,7 +6880,7 @@ onShow(refreshPageOnShow)
 							}
 						}
 
-						&:nth-last-child(-n+9) {
+						&:nth-last-child(-n+10) {
 							border-right: none;
 						}
 					}
@@ -6879,7 +6900,7 @@ onShow(refreshPageOnShow)
 					background-color: #f0f0f0;
 					border-bottom: 1px solid #999;
 					border-right: 1px solid #999;
-					font-size: px2vw(18px);
+					font-size: px2vw(22px);
 					color: #333;
 					text-align: center;
 					display: flex;
@@ -6892,7 +6913,7 @@ onShow(refreshPageOnShow)
 						padding: px2vw(10px) px2vw(12px);
 						border-bottom: 1px solid #999;
 						border-right: 1px solid #999;
-						font-size: px2vw(16px);
+						font-size: px2vw(20px);
 						color: #333;
 						text-align: center;
 						display: flex;
@@ -6937,7 +6958,7 @@ onShow(refreshPageOnShow)
 					min-width: px2vw(80px);
 
 					.emp-wage {
-						font-size: px2vw(20px);
+						font-size: px2vw(24px);
 						color: #333;
 						margin-bottom: px2vw(8px);
 					}
@@ -6962,7 +6983,7 @@ onShow(refreshPageOnShow)
 							border-radius: px2vw(4px);
 
 							.emp-hours {
-								font-size: px2vw(16px);
+								font-size: px2vw(20px);
 								color: #333;
 							}
 						}
@@ -6971,7 +6992,7 @@ onShow(refreshPageOnShow)
 							writing-mode: vertical-rl;
 							text-orientation: upright;
 							letter-spacing: px2vw(6px);
-							font-size: px2vw(28px);
+							font-size: px2vw(32px);
 							font-weight: bold;
 						}
 
@@ -6985,7 +7006,7 @@ onShow(refreshPageOnShow)
 					}
 
 					.emp-name {
-						font-size: px2vw(18px);
+						font-size: px2vw(22px);
 						color: #333;
 						margin-top: px2vw(8px);
 						text-align: center;
