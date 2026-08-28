@@ -3008,14 +3008,14 @@ const handleProcessListConfirm = async (productRowid) => {
 			// 拉伸车间 + 老工序：检查工序是否关联了预派工
 			// 其他情况：检查工序的员工是否都匹配了当日工资
 			if (isStretchWorkshop && hasOldProcess) {
-				uni.showLoading({ title: '正在关联预派工中...', mask: true })
-				await waitForPreDispatchAssociation(product, checkedProcessRowids)
-				uni.hideLoading()
-			} else {
-				uni.showLoading({ title: '正在匹配员工中...', mask: true })
-				await waitForPreDispatchDailyWage(product, checkedProcessRowids)
-				uni.hideLoading()
-			}
+			uni.showLoading({ title: '正在关联预派工中...', mask: true })
+			await waitForPreDispatchAssociation(product, checkedProcessRowids, dispatchCount)
+			uni.hideLoading()
+		} else {
+			uni.showLoading({ title: '正在匹配员工中...', mask: true })
+			await waitForPreDispatchDailyWage(product, checkedProcessRowids, dispatchCount)
+			uni.hideLoading()
+		}
 		}
 		
 		// 刷新该产品工序数据，保留勾选状态
@@ -3467,14 +3467,21 @@ const loadAssociatedProcessDetails = async (product, statusFilter = '未派工')
  * 轮询等待已勾选的工序都关联上预派工及当日工资记录。
  * 当所有 checkedProcessRowids 都能查到 employeeNames 时返回 true，否则超时后返回 false。
  */
-const waitForPreDispatchDailyWage = async (product, checkedProcessRowids, maxRetries = 15, interval = 1000) => {
+const waitForPreDispatchDailyWage = async (product, checkedProcessRowids, targetDispatchCount, maxRetries = 15, interval = 1000) => {
 	if (!checkedProcessRowids || checkedProcessRowids.length === 0) return true
 	for (let i = 0; i < maxRetries; i++) {
 		await new Promise(resolve => setTimeout(resolve, interval))
 		const associatedMap = await loadAssociatedProcessDetails(product)
 		const allReady = checkedProcessRowids.every(rowid => {
 			const info = associatedMap.get(rowid)
-			return info && info.employeeNames && info.employeeNames.length > 0
+			if (!info) return false
+			// 员工为空时按原逻辑等待员工匹配完成
+			if (!info.employeeNames || info.employeeNames.length === 0) return false
+			// 员工已存在时，还要等待派工数量更新到提交值
+			if (targetDispatchCount !== undefined) {
+				return parseFloat(info.dispatchCount) === parseFloat(targetDispatchCount)
+			}
+			return true
 		})
 		if (allReady) {
 			return true
@@ -3522,13 +3529,19 @@ const waitForPreDispatchEmployeeUpdate = async (preDispatchRowid, targetEmployee
  * 轮询等待工序关联预派工记录完成。
  * 检查勾选的工序是否都关联了预派工（preDispatchRowid 不为空）。
  */
-const waitForPreDispatchAssociation = async (product, checkedProcessRowids, maxRetries = 15, interval = 1000) => {
+const waitForPreDispatchAssociation = async (product, checkedProcessRowids, targetDispatchCount, maxRetries = 15, interval = 1000) => {
 	for (let i = 0; i < maxRetries; i++) {
 		await new Promise(resolve => setTimeout(resolve, interval))
 		const associatedMap = await loadAssociatedProcessDetails(product)
 		const allAssociated = checkedProcessRowids.every(rowid => {
 			const info = associatedMap.get(rowid)
-			return info && info.preDispatchRowid && info.preDispatchRowid.length > 0
+			// 还没绑定预派工时，先等预派工关联完成
+			if (!info || !info.preDispatchRowid || info.preDispatchRowid.length === 0) return false
+			// 已经绑定预派工后，等待派工数量更新到提交值
+			if (targetDispatchCount !== undefined) {
+				return parseFloat(info.dispatchCount) === parseFloat(targetDispatchCount)
+			}
+			return true
 		})
 		if (allAssociated) {
 			return true
