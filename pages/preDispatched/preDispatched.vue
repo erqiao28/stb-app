@@ -2823,7 +2823,8 @@ const handleConfirmDispatch = async () => {
 			silent: true
 		}, 100)
 		const rows = Array.isArray(res?.data) ? res.data : []
-		validRowids = rows
+		// 同工序可能关联多条预派工（后端历史数据重复），按"取最早一条"过滤后再筛选有员工的
+		validRowids = filterFirstPreDispatchPerProcess(rows)
 			.filter(item => {
 				const dailyWage = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.dailyWage])
 				return dailyWage && dailyWage.length > 0
@@ -2906,10 +2907,13 @@ const handleProcessListConfirm = async (productRowid) => {
 			silent: true
 		}, 100)
 		pdRows = Array.isArray(pdRes?.data) ? pdRes.data : []
+		// 同工序可能关联多条预派工（后端历史数据重复），按"取最早一条"过滤
+		// 无工序关联的预派工（产品级兜底）由 filterFirstPreDispatchPerProcess 内部保留
+		pdRows = filterFirstPreDispatchPerProcess(pdRows)
 
-	// 按工序排产明细是否为空分类预派工；只有关联工序被勾选了才传给接口
-	const checkedProcessRowidSet = new Set(checkedProcesses.map(p => p.rowid))
-	pdRows.forEach(item => {
+		// 按工序排产明细是否为空分类预派工；只有关联工序被勾选了才传给接口
+		const checkedProcessRowidSet = new Set(checkedProcesses.map(p => p.rowid))
+		pdRows.forEach(item => {
 			const sids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail])
 			const hasRelatedProcess = sids && sids.length > 0
 			const anyProcessChecked = hasRelatedProcess && sids.some(sid => checkedProcessRowidSet.has(sid))
@@ -3481,6 +3485,37 @@ const loadAssociatedProcessDetails = async (product, statusFilter = '未派工')
 		console.error('加载关联工序失败:', e)
 		return new Map()
 	}
+}
+
+/**
+ * 业务规则：同一生产单号 + 工序 + 派工日期 只应存在一条预派工。
+ * 后端历史数据可能产生重复（根因待排查），前端按 rowid 升序取每道工序最早创建的那条作为"权威"记录。
+ * 没有工序关联的预派工（如产品级兜底预派工）始终保留，不参与按工序去重。
+ * @param {Array} preDispatchRows 预派工记录数组
+ * @returns {Array} 过滤后的预派工记录数组（每道工序最多保留一条）
+ */
+const filterFirstPreDispatchPerProcess = (preDispatchRows) => {
+	if (!Array.isArray(preDispatchRows) || preDispatchRows.length === 0) return []
+	const sorted = [...preDispatchRows].sort((a, b) =>
+		String(a.rowid || '').localeCompare(String(b.rowid || ''))
+	)
+	const firstByProcess = new Map()  // 工序 rowid -> 第一条预派工 rowid
+	const keptRowids = new Set()       // 保留的预派工 rowid
+	sorted.forEach((item) => {
+		const sids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail])
+		if (sids.length === 0) {
+			// 无工序关联的预派工（产品级兜底）始终保留
+			keptRowids.add(item.rowid)
+			return
+		}
+		sids.forEach((sid) => {
+			if (!firstByProcess.has(sid)) {
+				firstByProcess.set(sid, item.rowid)
+				keptRowids.add(item.rowid)
+			}
+		})
+	})
+	return sorted.filter(item => keptRowids.has(item.rowid))
 }
 
 /**
