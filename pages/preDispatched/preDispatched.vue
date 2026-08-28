@@ -5404,27 +5404,37 @@ const getSelectedNewEmployeeIds = (selectedIds) => {
 		})
 }
 
-// 页面首次挂载与从其他页面返回时均刷新数据
+// 页面首次挂载时加载全部数据（含字典）
 const refreshPage = async () => {
 	uni.showLoading({ title: '加载中...', mask: true })
 	// 读取本地保存的同步勾选开关状态
 	loadSyncSelectEnabled()
-	// 先加载工序字典，工序归类表解析依赖它
-	await loadProcessDictMap()
-	await Promise.all([
+	// 字典与产品列表并行加载：左侧产品列表不依赖字典，优先让用户看到内容
+	const dictLoad = loadProcessDictMap().then(() => Promise.all([
 		loadCraftPositionList(),
 		loadPositionProcessDict(),
 		loadCraftPositionMap(),    // 获取工序归类表（用于同类别同步勾选）
 		loadAssemblyPositionButtons()  // 组装车间岗位筛选按钮
-	])
-	await loadProducts(true)
+	]))
+	const productLoad = loadProducts(true)
+	await Promise.all([dictLoad, productLoad])
+	// 加载圈消失后再后台拉员工数据，减少进入页面等待时间
+	uni.hideLoading()
 	loadWorkshopEmployees()
 	loadEmployeeDispatchSummary()
-	uni.hideLoading()
+}
+
+// 从其他页面返回时，若字典已加载则只刷新产品和员工，避免重复拉字典
+const refreshPageOnShow = async () => {
+	if (processDictMap.value.size > 0 && productList.value.length > 0) {
+		await handleSearch()
+	} else {
+		await refreshPage()
+	}
 }
 
 onMounted(refreshPage)
-onShow(refreshPage)
+onShow(refreshPageOnShow)
 </script>
 
 <style scoped lang="scss">
