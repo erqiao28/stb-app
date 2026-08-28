@@ -3538,16 +3538,20 @@ const waitForPreDispatchAssociation = async (product, checkedProcessRowids, maxR
 }
 
 const loadProductProcesses = async (product) => {
-	if (!product || !product.uniqueKey || loadedProductIds.value.includes(product.uniqueKey)) return
+	if (!product || !product.uniqueKey) return
+	// 已在加载中或已加载完成的产品不再触发，防止连点/网络抖动导致重复请求
+	if (loadedProductIds.value.includes(product.uniqueKey)) return
 	const productionCode = product.productionCode
 	if (!productionCode) return
-	
+
+	// 先标记为已加载，阻止并发请求；加载失败时会移除标记
+	loadedProductIds.value.push(product.uniqueKey)
+
 	// 记录当前产品的旧工序 rowid，刷新后只清理该产品的选中状态，不影响其他产品
 	const oldProductProcessRowids = new Set(
 		processList.value.filter(p => p.productRowid === product.uniqueKey).map(p => p.rowid)
 	)
-	
-	loadedProductIds.value.push(product.uniqueKey)
+
 	try {
 		const associatedMap = await loadAssociatedProcessDetails(product)
 		const associatedRowids = new Set(associatedMap.keys())
@@ -3607,6 +3611,8 @@ const loadProductProcesses = async (product) => {
 				dispatchCount: associatedInfo.dispatchCount
 			}
 		}).sort((a, b) => (parseFloat(a.sequence) || 0) - (parseFloat(b.sequence) || 0))
+		// 先清除该产品已有的工序数据，避免重复点击或网络抖动导致同一工序重复渲染
+		processList.value = processList.value.filter(p => p.productRowid !== product.uniqueKey)
 		processList.value.push(...newProcesses)
 		// 只清理当前产品中已不存在的工序选中状态，不影响其他产品的勾选
 		const currentProcessRowids = new Set(newProcesses.map(p => p.rowid))
@@ -3621,6 +3627,8 @@ const loadProductProcesses = async (product) => {
 		})
 	} catch (e) {
 		console.error('加载工序失败:', e)
+		// 加载失败时移除已加载标记，否则失败后无法再次加载
+		loadedProductIds.value = loadedProductIds.value.filter(id => id !== product.uniqueKey)
 	}
 }
 
