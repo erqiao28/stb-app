@@ -228,7 +228,11 @@
 									:style="{ backgroundColor: isProcessActionEnabled(group.productRowid) ? '#5884f1' : '#999' }"
 									@click.stop="openProcessActionModalByRowid(group.productRowid)"
 								>工艺调整</view>
-								<view class="grid-product-dispatch" @click.stop="openDispatchModalFromRowid(group.productRowid)">派工设置</view>
+								<view
+									class="grid-product-dispatch"
+									:style="{ backgroundColor: isDispatchEnabled(group.productRowid) ? '#5884f1' : '#999' }"
+									@click.stop="openDispatchModalFromRowid(group.productRowid)"
+								>派工设置</view>
 								<view class="grid-product-confirm" @click.stop="handleProcessListConfirm(group.productRowid)">确定</view>
 							</view>
 							<view class="grid-label-cell" style="grid-row: 1; grid-column: 3">选中</view>
@@ -741,6 +745,10 @@
 						<text class="grid-cell-value">{{ dispatchModalFinishCount }}</text>
 					</view>
 					<view class="dispatch-grid-cell">
+						<text class="grid-cell-label">小时产量</text>
+						<text class="grid-cell-value">{{ Math.round(dispatchModalAverageHourlyOutput) }}</text>
+					</view>
+					<view class="dispatch-grid-cell">
 						<text class="grid-cell-label">派工数量</text>
 						<input
 							v-model="dispatchModalInput"
@@ -748,6 +756,10 @@
 							class="dispatch-input"
 							placeholder="请输入"
 						/>
+					</view>
+					<view class="dispatch-grid-cell">
+						<text class="grid-cell-label">工时</text>
+						<text class="grid-cell-value">{{ dispatchModalWorkHours.toFixed(2) }}</text>
 					</view>
 				</view>
 			</view>
@@ -1030,6 +1042,27 @@ const dispatchModalProduct = ref(null)
 const dispatchModalInput = ref('0')
 const dispatchModalDispatchCount = ref(0)
 const dispatchModalFinishCount = ref(0)
+
+// 派工设置弹窗：勾选工序的平均小时产量
+const dispatchModalAverageHourlyOutput = computed(() => {
+	const product = dispatchModalProduct.value
+	if (!product) return 0
+	const checkedProcesses = processList.value.filter(
+		(p) => p.productRowid === product.uniqueKey && selectedProcessIds.value.includes(p.rowid)
+	)
+	if (checkedProcesses.length === 0) return 0
+	const total = checkedProcesses.reduce((sum, p) => sum + (parseFloat(p.hourlyoutput) || 0), 0)
+	return total / checkedProcesses.length
+})
+
+// 派工设置弹窗：工时 = 派工数量 / 平均小时产量，保留两位小数
+const dispatchModalWorkHours = computed(() => {
+	const avg = dispatchModalAverageHourlyOutput.value
+	const input = parseFloat(dispatchModalInput.value)
+	if (!avg || !Number.isFinite(input) || input <= 0) return 0
+	return parseFloat((input / avg).toFixed(2))
+})
+
 const isEmployeeExpanded = ref(false)
 
 const showEmployeeTaskPopover = ref(false)
@@ -1066,6 +1099,7 @@ const PROCESS_DETAIL_FIELD_MAP = {
 	allcount: '68099ac75d6fc47331574e82',
 	orderCount: '6a015a2ac03685667d63787f',
 	dailyOutput: '69a96d623b5e707f84d380b6',
+	hourlyoutput: '693a879a0f64427fac25da92',
 }
 
 const EMPLOYEE_WORKSHEET_ID = 'yggs'
@@ -3273,6 +3307,10 @@ const handleProductClick = (product) => {
 const openDispatchModalFromRowid = async (productRowid) => {
 	const product = productList.value.find(p => p.uniqueKey === productRowid)
 	if (!product) return
+	if (!isDispatchEnabled(productRowid)) {
+		uni.showToast({ title: '请先勾选工序', icon: 'none' })
+		return
+	}
 	await openDispatchModal(product)
 }
 
@@ -3667,6 +3705,7 @@ const loadProductProcesses = async (product) => {
 				processDictRowid: processDictRowids[0] || '',
 				orderCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.orderCount]) || 0,
 				dailyOutput: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.dailyOutput]) || 0,
+				hourlyoutput: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.hourlyoutput]) || 0,
 				allcount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.allcount]) || 0,
 				needCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.needCount]) || 0,
 				finishCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.finishCount]) || 0,
@@ -4319,6 +4358,14 @@ const isProcessActionEnabled = (productRowid) => {
 		.map(p => p.rowid)
 	const selectedCount = selectedProcessIds.value.filter(rowid => currentProcessIds.includes(rowid)).length
 	return selectedCount === 1
+}
+
+// 判断当前产品下是否至少选中了一道工序
+const isDispatchEnabled = (productRowid) => {
+	const currentProcessIds = processList.value
+		.filter(p => p.productRowid === productRowid)
+		.map(p => p.rowid)
+	return selectedProcessIds.value.some(rowid => currentProcessIds.includes(rowid))
 }
 
 const openProcessActionModalByRowid = (productRowid) => {
@@ -7168,6 +7215,7 @@ onShow(refreshPageOnShow)
 		background-color: #fff;
 		border-radius: px2vw(16px);
 		padding: px2vw(40px);
+		transform: scale(1.15);
 	}
 
 	.dispatch-modal-title {
@@ -7205,7 +7253,7 @@ onShow(refreshPageOnShow)
 
 		.dispatch-grid {
 			display: grid;
-			grid-template-columns: 1fr 1fr;
+			grid-template-columns: 1fr 1fr 1fr;
 			grid-template-rows: 1fr 1fr;
 			border: 1px solid #ddd;
 			border-radius: px2vw(8px);
@@ -7220,12 +7268,13 @@ onShow(refreshPageOnShow)
 				border-right: 1px solid #eee;
 				border-bottom: 1px solid #eee;
 
-				&:nth-child(2n) {
+				&:nth-child(3n) {
 					border-right: none;
 				}
 
-				&:nth-child(3),
-				&:nth-child(4) {
+				&:nth-child(4),
+				&:nth-child(5),
+				&:nth-child(6) {
 					border-bottom: none;
 				}
 
