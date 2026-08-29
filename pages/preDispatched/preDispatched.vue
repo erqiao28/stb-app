@@ -265,7 +265,7 @@
 							class="grid-cell employee-cell"
 							:class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }"
 							:style="getEmployeeCellStyle(group.processes, idx)"
-							@click="openEmployeeEditModal(group.processes, idx)"
+							@click="openEmployeeSelectorFromProcess(group.processes, idx)"
 						>{{ getEmployeeCellText(group.processes, idx) }}</view>
 						</template>
 						</view>
@@ -673,52 +673,9 @@
 				<text v-else>暂无员工</text>
 			</view>
 		</scroll-view>
-		</view>
-	</view>
-
-	<!-- 员工编辑弹窗 -->
-	<view class="employee-edit-modal" v-if="showEmployeeEditModal" @click.self="closeEmployeeEditModal">
-		<view class="employee-edit-modal-content" @click.stop>
-			<view class="employee-edit-modal-header">
-				<text class="employee-edit-modal-title">编辑员工</text>
-				<view class="employee-edit-modal-close" @click="closeEmployeeEditModal">×</view>
-			</view>
-			<view class="employee-edit-modal-body">
-				<view class="edit-info-row">
-					<view class="info-item">
-						<text class="info-label">工序：</text>
-						<text class="info-value">{{ employeeEditData.processName || '-' }}</text>
-					</view>
-				</view>
-				<view class="employee-tags-section">
-					<view class="section-title">
-						<text>已选员工</text>
-						<text class="section-count">{{ employeeEditData.selectedEmployeeNames.length }}人</text>
-					</view>
-					<view class="employee-tags-container">
-					<!-- 异步匹配员工中：先显示提示，匹配完成后再渲染标签 -->
-					<view v-if="employeeEditLoading" class="no-employee-tip">
-						<text>匹配员工中...</text>
-					</view>
-					<template v-else>
-						<view
-							v-for="(name, idx) in employeeEditData.selectedEmployeeNames"
-							:key="idx"
-							class="employee-tag-item"
-						>
-							<text class="tag-name">{{ name }}</text>
-							<view class="tag-delete" @click.stop="removeEmployeeFromEdit(idx)">×</view>
-						</view>
-						<view v-if="employeeEditData.selectedEmployeeNames.length === 0" class="no-employee-tip">
-							<text>暂无选择员工</text>
-						</view>
-					</template>
-				</view>
-			</view>
-			</view>
-			<view class="employee-edit-modal-footer">
-				<view class="edit-btn-cancel" @click="closeEmployeeEditModal">取消</view>
-				<view class="edit-btn-confirm" @click="confirmEmployeeEdit">确认</view>
+			<view v-if="employeeSelectorMode === 'process'" class="employee-modal-footer">
+				<view class="employee-modal-btn-cancel" @click="closeEmployeeSelector">取消</view>
+				<view class="employee-modal-btn-confirm" @click="confirmEmployeeEdit">确定</view>
 			</view>
 		</view>
 	</view>
@@ -1200,22 +1157,12 @@ const expandedProductSpecs = ref([]) // 展开规格的产品
 const addProductLoading = ref(false)
 const addProductRefresherTriggered = ref(false)
 
-// 员工编辑弹窗
-const showEmployeeEditModal = ref(false)
-const employeeEditData = ref({
-	processName: '',
-	processRowid: '',
-	preDispatchRowid: '',
-	selectedEmployeeIds: [],
-	selectedEmployeeNames: []
-})
-
 const showEmployeeSelector = ref(false)
+// 员工选择框打开模式：edit-依附预派工调整弹窗；process-从工序员工栏独立打开
+const employeeSelectorMode = ref('edit')
 const allEmployeeOptions = ref([])
 // 员工选择框数据加载中标记：列表为空时用于显示"获取员工数据中"提示
 const employeeListLoading = ref(false)
-// 员工编辑框匹配中标记：打开编辑框后异步匹配员工期间显示"匹配员工中"提示
-const employeeEditLoading = ref(false)
 
 // 记录上次加载员工列表时的筛选条件，用于判断是否需要重新加载
 const lastEmployeeOptionsParams = ref({
@@ -5087,6 +5034,8 @@ const closeConfirmDispatchModal = () => {
 }
 
 const handleCircleClick = async (item) => {
+	// 选择框依附于预派工调整弹窗
+	employeeSelectorMode.value = 'edit'
 	editData.value = {
 		rowid: item.rowid || '',
 		orderNo: item.orderNo || '',
@@ -5197,8 +5146,8 @@ const confirmEdit = async () => {
 	}
 }
 
-// 打开员工编辑弹窗
-const openEmployeeEditModal = async (processes, idx) => {
+// 从工序员工栏直接打开员工选择框
+const openEmployeeSelectorFromProcess = async (processes, idx) => {
 	const process = processes[idx]
 	if (!process) return
 
@@ -5223,40 +5172,43 @@ const openEmployeeEditModal = async (processes, idx) => {
 	const craftPositionName = process.craftPosition || groupStartProcess.craftPosition || ''
 	const processDisplay = (positionProcessName || craftPositionName || groupStartProcess.processName || '')
 
-	// 设置编辑数据
-	employeeEditData.value = {
-		processName: processDisplay,
-		processRowid: process.rowid || '',
-		preDispatchRowid: process.preDispatchRowid || '',
+	// 设置选择框为独立打开模式
+	employeeSelectorMode.value = 'process'
+
+	// 初始化 editData 用于选择框状态
+	editData.value = {
+		rowid: process.preDispatchRowid || '',
+		orderNo: '',
+		productNameNew: '',
+		processDisplay: processDisplay,
+		dispatchDate: '',
+		dispatchCount: '',
+		employeeName: '',
+		employeeId: '',
+		employeeNames: [],
 		selectedEmployeeIds: [],
-		selectedEmployeeNames: []
+		selectedEmployeeNames: [],
+		worktime: '',
+		wage: ''
 	}
-	// 同步选择器勾选数据（清空旧数据），保证选择员工框与编辑弹窗初始状态一致
-	editData.value.selectedEmployeeIds = []
-	editData.value.selectedEmployeeNames = []
 
-	// 立即显示两个弹窗，避免点击到显示的延迟
+	// 立即显示选择框
 	showEmployeeSelector.value = true
-	showEmployeeEditModal.value = true
 
-	// 异步加载员工数据，不阻塞弹窗显示
-	loadEmployeeDataAsync(groupStartProcess)
+	// 异步加载员工数据并匹配当前已选员工
+	loadSelectorEmployeeData(groupStartProcess)
 }
 
-// 异步加载员工数据：加载完成后匹配当前已选员工
-const loadEmployeeDataAsync = async (groupStartProcess) => {
-	// 列表为空时标记加载中，用于显示"获取员工数据中"提示；已有旧数据则直接显示，无需提示
+// 加载员工选择框数据：优先使用缓存，只在缓存无效时请求接口
+const loadSelectorEmployeeData = async (groupStartProcess) => {
 	if (allEmployeeOptions.value.length === 0) {
 		employeeListLoading.value = true
 	}
-	// 编辑框匹配中：无论是否有缓存，匹配完成前都显示"匹配员工中"提示
-	employeeEditLoading.value = true
 	try {
-		await loadWorkshopEmployees()
 		await loadEmployeeOptions()
 		sortEmployeeOptionsByPosition()
 
-		// 匹配当前员工：工序关联预派工关联的员工名，在员工列表中按姓名匹配
+		// 匹配当前员工：工序关联预派工的员工名，在缓存的员工列表中按姓名匹配
 		const currentNames = groupStartProcess.employeeNames || []
 		if (currentNames.length > 0 && allEmployeeOptions.value.length > 0) {
 			const matchedIds = []
@@ -5267,30 +5219,13 @@ const loadEmployeeDataAsync = async (groupStartProcess) => {
 					matchedNames.push(emp.name)
 				}
 			})
-			employeeEditData.value.selectedEmployeeIds = matchedIds
-			employeeEditData.value.selectedEmployeeNames = matchedNames
-			// 同步选择器勾选，保证选择员工框勾选状态与编辑弹窗一致
-			editData.value.selectedEmployeeIds = [...matchedIds]
-			editData.value.selectedEmployeeNames = [...matchedNames]
+			editData.value.selectedEmployeeIds = matchedIds
+			editData.value.selectedEmployeeNames = matchedNames
 		}
 	} catch (e) {
 		console.error('加载员工数据失败:', e)
 	} finally {
 		employeeListLoading.value = false
-		employeeEditLoading.value = false
-	}
-}
-
-// 关闭员工编辑弹窗
-const closeEmployeeEditModal = () => {
-	showEmployeeEditModal.value = false
-	showEmployeeSelector.value = false  // 关闭编辑框时同时关闭选择器
-	employeeEditData.value = {
-		processName: '',
-		processRowid: '',
-		preDispatchRowid: '',
-		selectedEmployeeIds: [],
-		selectedEmployeeNames: []
 	}
 }
 
@@ -5315,19 +5250,10 @@ const switchEmployeeType = async (type) => {
 	employeeTypeFilter.value = type
 }
 
-// 从员工编辑中移除员工
-const removeEmployeeFromEdit = (idx) => {
-	employeeEditData.value.selectedEmployeeIds.splice(idx, 1)
-	employeeEditData.value.selectedEmployeeNames.splice(idx, 1)
-	// 同步到选择器数据，保持联动
-	editData.value.selectedEmployeeIds = [...employeeEditData.value.selectedEmployeeIds]
-	editData.value.selectedEmployeeNames = [...employeeEditData.value.selectedEmployeeNames]
-}
-
-// 确认员工编辑
+// 确认员工编辑：从员工选择框独立打开时保存员工变更
 const confirmEmployeeEdit = async () => {
-	const preDispatchRowid = employeeEditData.value.preDispatchRowid
-	const selectedEmployeeIds = employeeEditData.value.selectedEmployeeIds || []
+	const preDispatchRowid = editData.value.rowid
+	const selectedEmployeeIds = editData.value.selectedEmployeeIds || []
 	if (!preDispatchRowid) {
 		uni.showToast({ title: '缺少预派工记录', icon: 'none' })
 		return
@@ -5345,8 +5271,8 @@ const confirmEmployeeEdit = async () => {
 		uni.hideLoading()
 		uni.showToast({ title: '保存成功', icon: 'success' })
 
-		// 先关闭编辑弹窗
-		closeEmployeeEditModal()
+		// 关闭选择框
+		closeEmployeeSelector()
 
 		// 轮询等待预派工记录的员工信息更新完成后再刷新
 		const updateSuccess = await waitForPreDispatchEmployeeUpdate(preDispatchRowid, selectedEmployeeIds)
@@ -5408,9 +5334,18 @@ function getYesterdayDate() {
 
 const loadEmployeeOptions = async () => {
 	try {
-		// 员工选择框使用专用接口：喷涂车间时同时查喷涂+组装
-		const empList = await loadWorkshopEmployeesForSelector()
 		const currentDate = filterDate.value
+		// 缓存有效时直接复用，避免重复请求
+		if (
+			allEmployeeOptions.value.length > 0 &&
+			lastEmployeeOptionsParams.value.workshop === selectedSelectorWorkshop.value &&
+			lastEmployeeOptionsParams.value.date === currentDate &&
+			lastEmployeeOptionsParams.value.type === employeeTypeFilter.value
+		) {
+			return
+		}
+		// 员工选择框按当前选中车间查询
+		const empList = await loadWorkshopEmployeesForSelector()
 		allEmployeeOptions.value = empList.map(item => ({
 			id: item.id || '',
 			name: item.name || '-',
@@ -5448,7 +5383,7 @@ const getTempEmployeeNumber = (name) => {
 
 const sortEmployeeOptionsByPosition = (target = '') => {
 	// 优先使用调用方传入的目标工序名，未传时回退到当前编辑上下文
-	const targetName = target || employeeEditData.value.processName || editData.value.processDisplay || ''
+	const targetName = target || editData.value.processDisplay || ''
 
 	const sorted = [...allEmployeeOptions.value].sort((a, b) => {
 		// 两个都是临时工时，按姓名末尾数字升序（临时工1、临时工2、...）
@@ -5472,7 +5407,6 @@ const sortEmployeeOptionsByPosition = (target = '') => {
 
 const closeEmployeeSelector = () => {
 	showEmployeeSelector.value = false
-	showEmployeeEditModal.value = false  // 关闭选择器时同时关闭编辑框
 }
 
 const toggleEmployee = (emp) => {
@@ -5486,9 +5420,6 @@ const toggleEmployee = (emp) => {
 		ids.push(emp.id)
 		names.push(emp.name)
 	}
-	// 同步到员工编辑数据
-	employeeEditData.value.selectedEmployeeIds = [...ids]
-	employeeEditData.value.selectedEmployeeNames = [...names]
 	// sync single employee field (first selected)
 	if (ids.length > 0) {
 		editData.value.employeeId = ids[0]
@@ -8299,216 +8230,36 @@ onShow(refreshPageOnShow)
 			}
 		}
 	}
-}
 
-// 员工编辑弹窗样式
-.employee-edit-modal {
-	position: fixed;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	background-color: rgba(0, 0, 0, 0.5);
-	z-index: 1002;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-
-	.employee-edit-modal-content {
-		width: px2vw(900px);
-		max-height: 85vh;
-		background-color: #fff;
-		border-radius: px2vw(20px);
-		overflow: hidden;
+	.employee-modal-footer {
 		display: flex;
-		flex-direction: column;
-	}
-
-	.employee-edit-modal-header {
-		display: flex;
+		flex-direction: row;
 		align-items: center;
 		justify-content: space-between;
-		padding: px2vw(20px) px2vw(30px);
-		border-bottom: 1px solid #eee;
-		flex-shrink: 0;
-
-		.employee-edit-modal-title {
-			font-size: px2vw(32px);
-			font-weight: bold;
-			color: #333;
-		}
-
-		.employee-edit-modal-close {
-			font-size: px2vw(40px);
-			color: #999;
-			line-height: 1;
-		}
-	}
-
-	.employee-edit-modal-body {
-		flex: 1;
-		overflow-y: auto;
-		padding: px2vw(24px);
-
-		.edit-info-row {
-			display: flex;
-			gap: px2vw(24px);
-			margin-bottom: px2vw(24px);
-
-			.info-item {
-				flex: 1;
-				background-color: #f8f9fa;
-				border-radius: px2vw(12px);
-				padding: px2vw(12px) px2vw(16px);
-				display: flex;
-				flex-direction: row;
-				align-items: center;
-				gap: px2vw(8px);
-
-				.info-label {
-					font-size: px2vw(24px);
-					color: #999;
-				}
-
-				.info-value {
-					font-size: px2vw(28px);
-					color: #333;
-					font-weight: 600;
-				}
-			}
-		}
-
-		.employee-tags-section {
-			background-color: #f8f9fa;
-			border-radius: px2vw(16px);
-			padding: px2vw(20px);
-
-			.section-title {
-				display: flex;
-				align-items: center;
-				justify-content: space-between;
-				margin-bottom: px2vw(16px);
-
-				text {
-					font-size: px2vw(30px);
-					color: #333;
-					font-weight: 500;
-				}
-
-				.section-count {
-					color: #3498db;
-					font-size: px2vw(26px);
-				}
-			}
-
-			.employee-tags-container {
-				display: flex;
-				flex-wrap: wrap;
-				gap: px2vw(12px);
-				min-height: px2vw(60px);
-				margin-bottom: px2vw(16px);
-
-				.employee-tag-item {
-					display: flex;
-					align-items: center;
-					justify-content: space-between;
-					width: calc((100% - px2vw(48px)) / 5);
-					background: linear-gradient(135deg, #e8f6f3, #d5efe9);
-					border: 1px solid #a3d9c9;
-					border-radius: px2vw(8px);
-					padding: px2vw(14px) px2vw(12px);
-					gap: px2vw(8px);
-
-					.tag-name {
-						font-size: px2vw(26px);
-						color: #2e8b7a;
-						font-weight: 500;
-						flex: 1;
-						overflow: hidden;
-						text-overflow: ellipsis;
-						white-space: nowrap;
-					}
-
-					.tag-delete {
-						width: px2vw(32px);
-						height: px2vw(32px);
-						border-radius: px2vw(4px);
-						background-color: rgba(46, 139, 122, 0.15);
-						display: flex;
-						align-items: center;
-						justify-content: center;
-						font-size: px2vw(20px);
-						color: #2e8b7a;
-						font-weight: bold;
-						transition: all 0.2s;
-
-						&:active {
-							background-color: rgba(46, 139, 122, 0.3);
-							transform: scale(0.95);
-						}
-					}
-				}
-
-				.no-employee-tip {
-					display: flex;
-					align-items: center;
-					justify-content: center;
-					width: 100%;
-					height: px2vw(60px);
-
-					text {
-						font-size: px2vw(24px);
-						color: #bbb;
-					}
-				}
-			}
-
-			.add-employee-btn {
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				width: calc((100% - px2vw(48px)) / 5);
-				background: #f0f0f0;
-				border: 1px dashed #ccc;
-				border-radius: px2vw(8px);
-				padding: px2vw(12px) px2vw(10px);
-
-				.add-btn-icon {
-					font-size: px2vw(28px);
-					color: #3498db;
-					font-weight: bold;
-				}
-			}
-		}
-	}
-
-	.employee-edit-modal-footer {
-		display: flex;
+		gap: px2vw(20px);
+		padding: px2vw(20px);
 		border-top: 1px solid #eee;
 		flex-shrink: 0;
 
-		.edit-btn-cancel,
-		.edit-btn-confirm {
+		.employee-modal-btn-cancel,
+		.employee-modal-btn-confirm {
 			flex: 1;
-			text-align: center;
-			padding: px2vw(22px);
-			font-size: px2vw(30px);
-			transition: background-color 0.15s;
-
-			&:active {
-				background-color: #f0f0f0;
-				opacity: 0.7;
-			}
+			height: px2vw(70px);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border-radius: px2vw(8px);
+			font-size: px2vw(28px);
 		}
 
-		.edit-btn-cancel {
+		.employee-modal-btn-cancel {
+			background-color: #f5f5f5;
 			color: #666;
-			border-right: 1px solid #eee;
 		}
 
-		.edit-btn-confirm {
-			color: #3498db;
-			font-weight: bold;
+		.employee-modal-btn-confirm {
+			background-color: #5884f1;
+			color: #fff;
 		}
 	}
 }
