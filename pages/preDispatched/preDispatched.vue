@@ -6982,7 +6982,7 @@ onShow(refreshPageOnShow)
 				flex-direction: row;
 				align-items: flex-end;
 				justify-content: flex-start;
-				padding: px2vw(20px);
+				padding: px2vw(10px) px2vw(20px);
 
 				.employee-column {
 					display: flex;
@@ -6991,7 +6991,7 @@ onShow(refreshPageOnShow)
 					justify-content: flex-end;
 					height: 100%;
 					flex: 1;
-					min-width: px2vw(80px);
+					min-width: px2vw(85px);
 
 					.emp-wage {
 						font-size: px2vw(24px);
@@ -7046,6 +7046,7 @@ onShow(refreshPageOnShow)
 						color: #333;
 						margin-top: px2vw(8px);
 						text-align: center;
+						white-space: nowrap;
 					}
 				}
 			}
