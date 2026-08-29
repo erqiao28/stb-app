@@ -490,6 +490,7 @@
 									</view>
 									<view class="product-info">
 										<text class="product-name">{{ product.name || '-' }}</text>
+										<text class="product-order-count" v-if="product.orderCount">订单数: {{ product.orderCount }}</text>
 										<text class="product-delivery">交货: {{ product.deliveryDate || '-' }}</text>
 										<view class="product-spec-btn" @click.stop="toggleProductSpecExpand(product)">
 											<text>{{ expandedProductSpecs.includes(product.productionCode) ? '收起' : '规格' }}</text>
@@ -7361,7 +7362,7 @@ onShow(refreshPageOnShow)
 	}
 
 	.add-product-content {
-		width: px2vw(600px);
+		width: px2vw(800px);
 		height: px2vw(800px);
 		background-color: #fff;
 		border-radius: px2vw(16px);
@@ -7608,6 +7609,14 @@ onShow(refreshPageOnShow)
 				color: #333;
 				font-weight: bold;
 				flex-shrink: 0;
+			}
+
+			.product-order-count {
+				font-size: px2vw(26px);
+				color: #666;
+				flex: 1;
+				text-align: center;
+				white-space: nowrap;
 			}
 
 			.product-delivery {
