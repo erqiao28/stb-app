@@ -2,6 +2,13 @@
 	<view class="pre-dispatched-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="goBack"></image>
+			<!-- 日期选择器：暂时隐藏，后续如需恢复去掉 v-if="false" 即可 -->
+			<picker v-if="false" class="header-date-picker" mode="date" :value="filterDate" :start="todayDate" @change="onDateChange">
+				<view class="header-date-display">
+					<text class="header-date-text">{{ filterDate }}</text>
+					<text class="header-date-icon">▼</text>
+				</view>
+			</picker>
 			<view class="header-btn-bar">
 			<!-- 组装车间岗位筛选按钮：数据来自岗位工序表，仅组装车间权限时显示，样式与功能按钮区分 -->
 			<template v-if="loginWorkshop === '组装车间'">
@@ -928,6 +935,8 @@ const filterInnerPaint = ref('')
 const filterPolish = ref('')
 const filterGuokou = ref('')
 const filterDate = ref(getTomorrowDate())
+// 日期选择器最小可选日期（今天），用于限制只能选择今天及以后
+const todayDate = ref(getTodayDate())
 
 const productList = ref([])
 const loadingProducts = ref(false)
@@ -5314,6 +5323,14 @@ function getCurrentDate() {
 	return `${year}-${month}-${day}`
 }
 
+function getTodayDate() {
+	const today = new Date()
+	const year = today.getFullYear()
+	const month = String(today.getMonth() + 1).padStart(2, '0')
+	const day = String(today.getDate()).padStart(2, '0')
+	return `${year}-${month}-${day}`
+}
+
 function getTomorrowDate() {
 	const tomorrow = new Date()
 	tomorrow.setDate(tomorrow.getDate() + 1)
@@ -5499,10 +5516,36 @@ onShow(refreshPageOnShow)
 		box-sizing: border-box;
 
 		image {
-			margin-right: px2vw(20px);
+			margin-right: px2vw(16px);
 			height: px2vw(40px);
 			width: px2vw(40px);
 			flex-shrink: 0;
+		}
+
+		.header-date-picker {
+			margin-right: px2vw(16px);
+			flex-shrink: 0;
+
+			.header-date-display {
+				display: flex;
+				align-items: center;
+				gap: px2vw(8px);
+				padding: px2vw(8px) px2vw(16px);
+				background-color: rgba(255, 255, 255, 0.2);
+				border: 1px solid rgba(255, 255, 255, 0.3);
+				border-radius: px2vw(8px);
+			}
+
+			.header-date-text {
+				font-size: px2vw(26px);
+				color: #fff;
+				font-weight: 500;
+			}
+
+			.header-date-icon {
+				font-size: px2vw(20px);
+				color: #fff;
+			}
 		}
 
 		.header-btn-bar {
