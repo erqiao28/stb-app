@@ -2,8 +2,7 @@
 	<view class="pre-dispatched-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="goBack"></image>
-			<!-- 日期选择器：暂时隐藏，后续如需恢复去掉 v-if="false" 即可 -->
-			<picker v-if="false" class="header-date-picker" mode="date" :value="filterDate" :start="todayDate" @change="onDateChange">
+			<picker class="header-date-picker" mode="date" :value="filterDate" :start="todayDate" @change="onDateChange">
 				<view class="header-date-display">
 					<text class="header-date-text">{{ filterDate }}</text>
 					<text class="header-date-icon">▼</text>
@@ -695,6 +694,15 @@
 				<text class="product-info-name">{{ dispatchModalProduct?.productName || '-' }}</text>
 			</view>
 			<view class="dispatch-modal-body">
+				<view class="dispatch-date-row">
+					<text class="dispatch-date-label">派工日期</text>
+					<picker class="dispatch-date-picker" mode="date" :value="dispatchModalDate" :start="todayDate" @change="onDispatchModalDateChange">
+						<view class="dispatch-date-display">
+							<text class="dispatch-date-text">{{ dispatchModalDate }}</text>
+							<text class="dispatch-date-icon">▼</text>
+						</view>
+					</picker>
+				</view>
 				<view class="dispatch-grid">
 					<view class="dispatch-grid-cell">
 						<text class="grid-cell-label">订单数量</text>
@@ -718,7 +726,6 @@
 							v-model="dispatchModalInput"
 							type="number"
 							class="dispatch-input"
-							placeholder="请输入"
 						/>
 					</view>
 					<view class="dispatch-grid-cell">
@@ -1003,11 +1010,13 @@ const positionProcessEmployeeList = ref([])
 const employeeDispatchSummary = ref([])
 
 const productDispatchCounts = ref({})
+const productDispatchDates = ref({})
 const showDispatchModal = ref(false)
 const dispatchModalProduct = ref(null)
-const dispatchModalInput = ref('0')
+const dispatchModalInput = ref('')
 const dispatchModalDispatchCount = ref(0)
 const dispatchModalFinishCount = ref(0)
+const dispatchModalDate = ref(getTomorrowDate())
 
 // 派工设置弹窗：勾选工序的平均小时产量
 const dispatchModalAverageHourlyOutput = computed(() => {
@@ -1879,8 +1888,18 @@ const handleReset = () => {
 	handleSearch()
 }
 
-const onDateChange = (e) => {
+const onDateChange = async (e) => {
 	filterDate.value = e.detail.value
+	try {
+		// 切换顶部日期时，先调用 hook 通知后端，再刷新页面数据
+		await http.post('/api/workflow/hooks/NmE1OWU1OGMzN2MwOTg0NTBhOTJiMGE2', {
+			dispatchDate: filterDate.value
+		})
+	} catch (err) {
+		console.error('切换日期 hook 调用失败:', err)
+		uni.showToast({ title: '日期切换失败', icon: 'none' })
+		return
+	}
 	handleSearch()
 }
 
@@ -2872,7 +2891,7 @@ const handleProcessListConfirm = async (productRowid) => {
 	const noPreDispatchRowids = [...noPreDispatchRowidSet]
 
 	// 计算可派数量和完成数量
-	const dispatchDate = filterDate.value
+	const dispatchDate = productDispatchDates.value[productRowid] || filterDate.value
 	let dispatchCount = 0
 	let finishCount = 0
 
@@ -2994,27 +3013,10 @@ const handleProcessListConfirm = async (productRowid) => {
 		})
 		uni.hideLoading()
 		uni.showToast({ title: '提交成功', icon: 'success' })
-		
-		// 轮询等待后端工作流完成
-		const checkedProcessRowids = checkedProcesses.map(p => p.rowid)
+
+		// 提交后直接刷新，不等待后端工作流完成
 		const product = productList.value.find(item => item.uniqueKey === productRowid)
-		const isStretchWorkshop = loginWorkshop.value === '拉伸车间'
-		const hasOldProcess = checkedProcesses.some(p => !p.isNewProcess)
-		
-		if (product) {
-			// 拉伸车间 + 老工序：检查工序是否关联了预派工
-			// 其他情况：检查工序的员工是否都匹配了当日工资
-			if (isStretchWorkshop && hasOldProcess) {
-			uni.showLoading({ title: '正在关联预派工中...', mask: true })
-			await waitForPreDispatchAssociation(product, checkedProcessRowids, dispatchCount)
-			uni.hideLoading()
-		} else {
-			uni.showLoading({ title: '正在匹配员工中...', mask: true })
-			await waitForPreDispatchDailyWage(product, checkedProcessRowids, dispatchCount)
-			uni.hideLoading()
-		}
-		}
-		
+
 		// 刷新该产品工序数据，保留勾选状态
 		if (product) {
 			// 保存当前勾选状态
@@ -3032,6 +3034,17 @@ const handleProcessListConfirm = async (productRowid) => {
 		// 刷新员工数据
 		loadWorkshopEmployees()
 		loadEmployeeDispatchSummary()
+
+		// 派工设置日期与顶部日期不一致时，刷新产品列表和该产品工序列表
+		const selectedDispatchDate = productDispatchDates.value[productRowid]
+		if (selectedDispatchDate && selectedDispatchDate !== filterDate.value) {
+			await loadProducts(true)
+			if (product) {
+				loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
+				processList.value = processList.value.filter(p => p.productRowid !== productRowid)
+				await loadProductProcesses(product)
+			}
+		}
 	} catch (e) {
 		uni.hideLoading()
 		console.error('工序列表确定提交失败:', e)
@@ -3280,7 +3293,8 @@ const openDispatchModal = async (product) => {
 	}
 
 	dispatchModalProduct.value = product
-	dispatchModalInput.value = productDispatchCounts.value[product.uniqueKey] || '0'
+	dispatchModalInput.value = productDispatchCounts.value[product.uniqueKey] || ''
+	dispatchModalDate.value = productDispatchDates.value[product.uniqueKey] || filterDate.value
 
 	// 计算可派数量和完成数量
 	let dispatchCount = 0
@@ -3331,7 +3345,11 @@ const openDispatchModal = async (product) => {
 const closeDispatchModal = () => {
 	showDispatchModal.value = false
 	dispatchModalProduct.value = null
-	dispatchModalInput.value = '0'
+	dispatchModalInput.value = ''
+}
+
+const onDispatchModalDateChange = (e) => {
+	dispatchModalDate.value = e.detail.value
 }
 
 const saveDispatchModal = () => {
@@ -3345,6 +3363,7 @@ const saveDispatchModal = () => {
 	}
 
 	productDispatchCounts.value[dispatchModalProduct.value.uniqueKey] = String(num)
+	productDispatchDates.value[dispatchModalProduct.value.uniqueKey] = dispatchModalDate.value
 	closeDispatchModal()
 }
 
@@ -7224,6 +7243,45 @@ onShow(refreshPageOnShow)
 
 	.dispatch-modal-body {
 		margin-bottom: px2vw(30px);
+
+		.dispatch-date-row {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: px2vw(16px) px2vw(20px);
+			margin-bottom: px2vw(16px);
+			background-color: #f5f7fb;
+			border-radius: px2vw(8px);
+
+			.dispatch-date-label {
+				font-size: px2vw(26px);
+				color: #666;
+				font-weight: 500;
+			}
+
+			.dispatch-date-picker {
+				.dispatch-date-display {
+					display: flex;
+					align-items: center;
+					gap: px2vw(8px);
+					padding: px2vw(6px) px2vw(16px);
+					background-color: #fff;
+					border: 1px solid #ddd;
+					border-radius: px2vw(6px);
+				}
+
+				.dispatch-date-text {
+					font-size: px2vw(26px);
+					color: #333;
+					font-weight: 500;
+				}
+
+				.dispatch-date-icon {
+					font-size: px2vw(20px);
+					color: #999;
+				}
+			}
+		}
 
 		.dispatch-grid {
 			display: grid;
