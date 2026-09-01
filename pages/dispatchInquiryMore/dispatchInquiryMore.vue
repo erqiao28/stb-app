@@ -141,6 +141,80 @@
 			:workshop="modalWorkshop"
 			@update:workshop="onModalWorkshopChange"
 		/>
+
+		<!-- 更改员工弹窗（同款预派工员工选择框，右侧滑出） -->
+		<view class="employee-modal" :class="{ show: showChangeWorkerModal }" @click.self="closeChangeWorkerModal">
+			<view class="employee-modal-content" @click.stop :style="{ paddingTop: statusBarHeight + 'px' }">
+				<view class="employee-modal-header" @click="showChangeWorkshopDropdown = false">
+					<view class="header-controls">
+						<view class="employee-type-switch">
+							<view
+								class="switch-btn"
+								:class="{ active: changeWorkerTypeFilter === 'normal' }"
+								@click.stop="changeWorkerSwitchType('normal')"
+							>正</view>
+							<view
+								class="switch-btn"
+								:class="{ active: changeWorkerTypeFilter === 'temp' }"
+								@click.stop="changeWorkerSwitchType('temp')"
+							>临</view>
+						</view>
+						<view class="workshop-picker-wrap">
+							<view class="workshop-picker" @click.stop="toggleChangeWorkshopDropdown">
+								<text>{{ changeWorkerWorkshop || '请选择车间' }}</text>
+								<text class="picker-arrow">{{ showChangeWorkshopDropdown ? '▲' : '▼' }}</text>
+							</view>
+							<view class="workshop-dropdown" v-if="showChangeWorkshopDropdown" @click.stop>
+								<view
+									v-for="ws in changeWorkerWorkshopOptions"
+									:key="ws"
+									class="workshop-dropdown-item"
+									:class="{ active: ws === changeWorkerWorkshop }"
+									@click="changeWorkerSelectWorkshop(ws)"
+								>{{ ws }}</view>
+							</view>
+						</view>
+					</view>
+					<view class="employee-modal-close" @click="closeChangeWorkerModal">×</view>
+				</view>
+				<scroll-view scroll-y class="employee-modal-list">
+					<view
+						v-for="emp in changeWorkerFiltered"
+						:key="emp.rowid"
+						class="employee-modal-item"
+						:class="{ active: changeWorkerSelectedIds.includes(emp.rowid) }"
+						@click="changeWorkerToggle(emp)"
+					>
+						<view class="employee-modal-check">
+							<text v-if="changeWorkerSelectedIds.includes(emp.rowid)" class="check-icon">✓</text>
+						</view>
+						<view class="employee-modal-info">
+							<view class="employee-modal-info-main">
+								<text class="employee-modal-name">{{ emp.label }}</text>
+								<text v-if="isTempEmployeeName(emp.label)" class="employee-type-tag is-temp">临</text>
+							</view>
+							<view class="employee-modal-info-extra">
+								<text class="employee-modal-hours">{{ emp.totalHours || 0 }}</text>
+								<text class="employee-modal-wage">{{ emp.unrecordedHours || 0 }}</text>
+							</view>
+						</view>
+					</view>
+					<!-- 空态提示：放在滚动列表内部，居中显示 -->
+					<view class="employee-modal-empty" v-if="allEmployeesOptions.length === 0">
+						<view v-if="changeWorkerLoading" class="empty-loading-text">
+							<view class="empty-spinner"></view>
+							<text>获取员工数据中...</text>
+						</view>
+						<text v-else>暂无员工</text>
+					</view>
+				</scroll-view>
+				<view class="employee-modal-footer">
+					<view class="employee-modal-btn-cancel" @click="closeChangeWorkerModal">取消</view>
+					<view class="employee-modal-btn-confirm" @click="confirmChangeWorker">确定</view>
+				</view>
+			</view>
+		</view>
+
 		<!-- 导航栏（与派工页面一致：仅左侧返回 + 中间标题） -->
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="quit"></image>
@@ -206,6 +280,10 @@
 						@click="openEditQtyModal(item)"
 					>修改数量</button>
 					<button
+						class="btn-transfer btn-change-worker"
+						@click="openChangeWorkerModal(item)"
+					>更改员工</button>
+					<button
 						class="btn-transfer btn-delete-dispatch"
 						@click="handleDeleteDispatch(item)"
 					>删除</button>
@@ -270,7 +348,7 @@
 
 <script setup>
 import { useUserStore } from '../../store/user.store'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import Radiobox from '../../component/radiobox/radiobox.vue'
@@ -280,6 +358,7 @@ import {
 	DISPATCH_INQUIRY_MORE_DELETE_URL,
 	DISPATCH_TRANSFER_URL,
 	DISPATCH_QTY_UPDATE_URL,
+	DISPATCH_INQUIRY_MORE_CHANGE_WORKER_URL,
 } from '../../utils/api'
 import { useStatusBar } from '../../composables/useStatusBar'
 const userStore = useUserStore()
@@ -436,6 +515,66 @@ const getDispatchInquiryList = async () => {
     filtered = rows
   }
 
+  // 收集所有单据的员工工时 rowid（员工工时关联控件返回的是 rowid 数组 JSON 字符串）
+  const workHourRowids = []
+  filtered.forEach((raw) => {
+    let v = raw['69774ce33b5e707f84cca335']
+    if (typeof v === 'string' && v.trim()) {
+      try {
+        v = JSON.parse(v)
+      } catch (e) {
+        return
+      }
+    }
+    if (Array.isArray(v)) {
+      v.forEach((id) => {
+        if (typeof id === 'string' && id && !workHourRowids.includes(id)) workHourRowids.push(id)
+      })
+    }
+  })
+
+  // 批量反查员工工时表（692112b021066a9f124f5c9f）的姓名（6938db8bda0981f67b352af3），建立 rowid -> 姓名 映射
+  let workerNameMap = {}
+  if (workHourRowids.length > 0) {
+    try {
+      const wageRes = await callWorkflowListAPIPaged({
+        worksheetId: '692112b021066a9f124f5c9f',
+        filters: [{
+          controlId: 'rowid',
+          dataType: 30,
+          filterType: 2,
+          values: workHourRowids
+        }],
+        pageSize: 100,
+        pageNum: 1,
+        silent: true
+      })
+      const hourRows = Array.isArray(wageRes?.data) ? wageRes.data : []
+      hourRows.forEach((r) => {
+        const rid = String(r['rowid'] || '').trim()
+        if (!rid) return
+        let name = r['6938db8bda0981f67b352af3']
+        // 姓名可能是人员对象 / JSON 字符串 / 纯文本，统一提取
+        if (typeof name === 'string' && name.trim()) {
+          try {
+            const p = JSON.parse(name)
+            if (p && typeof p === 'object') {
+              name = String(p.fullname || p.name || p.text || p.value || '').trim()
+            }
+          } catch (e) {
+            /* 纯文本，保持原样 */
+          }
+        } else if (name && typeof name === 'object') {
+          name = String(name.fullname || name.name || name.text || name.value || '').trim()
+        }
+        const finalName = String(name == null ? '' : name).trim()
+        if (finalName) workerNameMap[rid] = finalName
+      })
+    } catch (e) {
+      console.error('员工工时反查姓名失败:', e)
+    }
+  }
+
   dispatchInquiryList.value = filtered
     .map(item => ({
     goodsName: item['698a94e23b5e707f84d090ba'],
@@ -444,18 +583,19 @@ const getDispatchInquiryList = async () => {
     orderCode: item['69acec3a3b5e707f84d4266b'],
     productionOrder: item['69ad12213b5e707f84d42b28'],
     worker: (() => {
-      let raw = item['69ace00c3b5e707f84d42211']
+      // 员工数据取自关联的员工工时控件：rowid 数组按序映射为姓名，空格拼接
+      let raw = item['69774ce33b5e707f84cca335']
       if (typeof raw === 'string' && raw.trim()) {
         try {
           raw = JSON.parse(raw)
         } catch (e) {
-          return raw
+          raw = []
         }
       }
-      if (Array.isArray(raw) && raw.length > 0) {
-        return raw.map(o => (o && o.fullname) != null ? o.fullname : '').filter(Boolean).join(',') || ''
+      if (Array.isArray(raw)) {
+        return raw.map((id) => workerNameMap[id] || '').filter(Boolean).join(' ') || ''
       }
-      return raw != null ? String(raw) : ''
+      return ''
     })(),
     dispatchCount: item['697b0e503b5e707f84cd912f'],
     finishCount: item['6980728c3b5e707f84ce90e4'],
@@ -513,6 +653,136 @@ const selectedTransferEmployees = ref([])
 const allEmployeesOptions = ref([])
 const allEmployeesMap = ref({})
 const currentTransferItem = ref(null)
+
+// 更改员工：右侧滑出员工选择框（同款预派工）
+const showChangeWorkerModal = ref(false)
+const changeWorkerLoading = ref(false)
+const changeWorkerTypeFilter = ref('normal')
+const changeWorkerWorkshop = ref(workshop.value || '组装车间')
+const showChangeWorkshopDropdown = ref(false)
+const changeWorkerSelectedIds = ref([])
+const changeWorkerSelectedNames = ref([])
+const currentChangeWorkerItem = ref(null)
+// 更改员工弹窗可选的车间（含拉伸、抛光）
+const changeWorkerWorkshopOptions = ['拉伸车间', '喷涂车间', '抛光车间', '组装车间']
+
+// 判断是否为临时工（名称形如"临时工N"）
+const isTempEmployeeName = (name) => {
+	return /^临时工\d+$/.test(String(name || '').trim())
+}
+
+// 筛选后的员工列表（前端根据员工类型过滤显示）
+const changeWorkerFiltered = computed(() => {
+	if (changeWorkerTypeFilter.value === 'temp') {
+		return allEmployeesOptions.value.filter(emp => isTempEmployeeName(emp.label))
+	}
+	return allEmployeesOptions.value.filter(emp => !isTempEmployeeName(emp.label))
+})
+
+// 打开更改员工弹窗
+const openChangeWorkerModal = async (item) => {
+	if (!item?.rowid) {
+		uni.showToast({ title: '缺少单据标识', icon: 'none' })
+		return
+	}
+	currentChangeWorkerItem.value = item
+	changeWorkerSelectedIds.value = []
+	changeWorkerSelectedNames.value = []
+	changeWorkerWorkshop.value = modalWorkshop.value || workshop.value || '组装车间'
+	// 员工数据未加载时先加载
+	if (allEmployeesOptions.value.length === 0) {
+		changeWorkerLoading.value = true
+		try {
+			await loadEmployees()
+		} finally {
+			changeWorkerLoading.value = false
+		}
+	}
+	// 按单据上已有员工姓名自动勾选（员工工时关联数据与选择框同一数据源）
+	const workerNames = String(item.worker || '')
+		.split(/\s+/)
+		.map(n => n.trim())
+		.filter(Boolean)
+	allEmployeesOptions.value.forEach(emp => {
+		if (workerNames.includes(emp.label)) {
+			changeWorkerSelectedIds.value.push(emp.rowid)
+			changeWorkerSelectedNames.value.push(emp.label)
+		}
+	})
+	showChangeWorkerModal.value = true
+}
+
+// 关闭更改员工弹窗
+const closeChangeWorkerModal = () => {
+	showChangeWorkerModal.value = false
+	showChangeWorkshopDropdown.value = false
+	currentChangeWorkerItem.value = null
+	changeWorkerSelectedIds.value = []
+	changeWorkerSelectedNames.value = []
+}
+
+// 切换员工类型（正/临）
+const changeWorkerSwitchType = (type) => {
+	if (changeWorkerTypeFilter.value === type) return
+	changeWorkerTypeFilter.value = type
+}
+
+// 切换车间下拉框显示
+const toggleChangeWorkshopDropdown = () => {
+	showChangeWorkshopDropdown.value = !showChangeWorkshopDropdown.value
+}
+
+// 选择车间后重新加载员工
+const changeWorkerSelectWorkshop = async (ws) => {
+	changeWorkerWorkshop.value = ws
+	modalWorkshop.value = ws
+	showChangeWorkshopDropdown.value = false
+	changeWorkerLoading.value = true
+	try {
+		await loadEmployees()
+	} finally {
+		changeWorkerLoading.value = false
+	}
+}
+
+// 勾选/取消员工（选中项存员工工时数据 rowid）
+const changeWorkerToggle = (emp) => {
+	const idx = changeWorkerSelectedIds.value.indexOf(emp.rowid)
+	if (idx >= 0) {
+		changeWorkerSelectedIds.value.splice(idx, 1)
+		changeWorkerSelectedNames.value.splice(idx, 1)
+	} else {
+		changeWorkerSelectedIds.value.push(emp.rowid)
+		changeWorkerSelectedNames.value.push(emp.label)
+	}
+}
+
+// 更改员工确认：提交单据 rowid + 新选择员工工时数据 rowid 数组
+const confirmChangeWorker = async () => {
+	const rowid = currentChangeWorkerItem.value?.rowid
+	if (!rowid) {
+		uni.showToast({ title: '缺少单据标识', icon: 'none' })
+		return
+	}
+	try {
+		uni.showLoading({ title: '保存中...' })
+		await http.post(DISPATCH_INQUIRY_MORE_CHANGE_WORKER_URL, {
+			rowid,
+			employeeRowids: changeWorkerSelectedIds.value
+		})
+		uni.hideLoading()
+		uni.showToast({ title: '保存成功', icon: 'success' })
+		closeChangeWorkerModal()
+		// 刷新列表
+		setTimeout(() => {
+			getDispatchInquiryList()
+		}, 500)
+	} catch (e) {
+		uni.hideLoading()
+		console.error('更改员工失败:', e)
+		uni.showToast({ title: '保存失败', icon: 'none' })
+	}
+}
 
 // 转派表单数据
 const transferData = ref({
@@ -660,8 +930,8 @@ const loadEmployees = async () => {
 
 	try {
 		const currentDate = getCurrentDate()
-		// 喷涂车间时同时获取喷涂+组装车间的员工
-		const workshopList = selectedWorkshop === '喷涂车间' ? ['喷涂车间', '组装车间'] : [selectedWorkshop]
+		// 只查询所选车间员工
+		const workshopList = [selectedWorkshop]
 		const allRows = []
 
 		for (const ws of workshopList) {
@@ -686,6 +956,7 @@ const loadEmployees = async () => {
 				const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
 
 				return {
+					rowid: item['rowid'] || '',
 					id: item['6943bd902161a0fc58bad5ab'] || '',
 					name: item['6938db8bda0981f67b352af3'] || '',
 					position: item['6943bf332161a0fc58bad7a4'] || '',
@@ -698,6 +969,7 @@ const loadEmployees = async () => {
 			.filter(emp => emp.dispatchWorkDate === currentDate)
 
 			allEmployeesOptions.value = mappedEmployees.map(emp => ({
+				rowid: emp.rowid,
 				label: emp.name,
 				value: emp.id,
 				position: emp.position || '',
@@ -1171,6 +1443,16 @@ const quit = () => {
 				color: #2e7d32;
 			}
 
+			.btn-change-worker {
+				width: auto;
+				min-width: unset;
+				padding: 0 px2vw(12px);
+				white-space: nowrap;
+				flex-shrink: 0;
+				border-color: #ef6c00;
+				color: #ef6c00;
+			}
+
 			.dispatchInquiry-item-info {
 				width: 100%;
 				display: flex;
@@ -1290,6 +1572,310 @@ const quit = () => {
 		}
 	}
 	
+	/* 更改员工弹窗样式（同款预派工员工选择框） */
+	.employee-modal {
+		position: fixed;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		width: px2vw(440px);
+		background-color: #fff;
+		box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+		z-index: 1003;
+		transform: translateX(100%);
+		transition: transform 0.3s ease;
+
+		&.show {
+			transform: translateX(0);
+		}
+
+		.employee-modal-content {
+			height: 100%;
+			display: flex;
+			flex-direction: column;
+		}
+
+		.employee-modal-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: px2vw(20px);
+			border-bottom: 1px solid #eee;
+			flex-shrink: 0;
+
+			.employee-modal-title {
+				font-size: px2vw(22px);
+				font-weight: bold;
+				color: #333;
+			}
+
+			.header-controls {
+				display: flex;
+				align-items: center;
+				gap: px2vw(16px);
+			}
+
+			.employee-type-switch {
+				display: flex;
+				background-color: #f0f0f0;
+				border-radius: px2vw(8px);
+				overflow: hidden;
+				gap: px2vw(4px);
+				padding: px2vw(4px);
+
+				.switch-btn {
+					padding: px2vw(5px) px2vw(13px);
+					font-size: px2vw(24px);
+					color: #666;
+					background-color: transparent;
+					border-radius: px2vw(6px);
+
+					&.active {
+						color: #fff;
+						background-color: #1890ff;
+					}
+				}
+			}
+
+			.employee-modal-close {
+				font-size: px2vw(40px);
+				color: #999;
+				line-height: 1;
+			}
+
+			.workshop-picker-wrap {
+				position: relative;
+			}
+
+			.workshop-picker {
+				display: flex;
+				align-items: center;
+				padding: px2vw(8px) px2vw(16px);
+				background-color: #f5f5f5;
+				border-radius: px2vw(8px);
+				font-size: px2vw(24px);
+				color: #666;
+
+				.picker-arrow {
+					margin-left: px2vw(8px);
+					font-size: px2vw(20px);
+					color: #999;
+				}
+			}
+
+			.workshop-dropdown {
+				position: absolute;
+				top: 100%;
+				left: 0;
+				margin-top: px2vw(8px);
+				background-color: #fff;
+				border: 1px solid #eee;
+				border-radius: px2vw(8px);
+				box-shadow: 0 px2vw(8px) px2vw(16px) rgba(0, 0, 0, 0.1);
+				z-index: 1010;
+
+				.workshop-dropdown-item {
+					padding: px2vw(16px) px2vw(24px);
+					font-size: px2vw(24px);
+					color: #666;
+					white-space: nowrap;
+
+					&.active {
+						color: #007aff;
+						background-color: #f0f8ff;
+					}
+
+					&:active {
+						background-color: #f5f5f5;
+					}
+				}
+			}
+		}
+
+		.employee-modal-list {
+			flex: 1;
+			overflow-y: auto;
+			padding: px2vw(16px);
+
+			.employee-modal-item {
+				display: flex;
+				flex-direction: row;
+				align-items: flex-start;
+				flex-wrap: wrap;
+				padding: px2vw(16px) px2vw(16px);
+				border-bottom: 1px solid #d9d9d9;
+				cursor: pointer;
+
+				&.active {
+					background-color: #e8f4ff;
+				}
+			}
+
+			.employee-modal-check {
+				width: px2vw(34px);
+				height: px2vw(34px);
+				border: 2px solid #ddd;
+				border-radius: px2vw(6px);
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				flex-shrink: 0;
+				margin-right: px2vw(12px);
+				margin-top: px2vw(2px);
+
+				.check-icon {
+					font-size: px2vw(22px);
+					color: #3498db;
+					font-weight: bold;
+				}
+			}
+
+			&.active .employee-modal-check {
+				border-color: #3498db;
+				background-color: #3498db;
+
+				.check-icon {
+					color: #fff;
+				}
+			}
+
+			.employee-modal-info {
+				flex: 1;
+				display: flex;
+				flex-direction: row;
+				align-items: center;
+				justify-content: space-between;
+				overflow: hidden;
+				min-width: 0;
+			}
+
+			.employee-modal-info-main {
+				display: flex;
+				flex-direction: row;
+				align-items: center;
+				flex: 1;
+				min-width: 0;
+				margin-right: px2vw(16px);
+			}
+
+			.employee-modal-info-extra {
+				display: flex;
+				flex-direction: row;
+				align-items: center;
+				flex-shrink: 0;
+			}
+
+			.employee-modal-name {
+				font-size: px2vw(38px);
+				line-height: 1.2;
+				color: #333;
+				margin-right: px2vw(12px);
+				white-space: nowrap;
+				overflow: hidden;
+				text-overflow: ellipsis;
+				flex-shrink: 0;
+			}
+
+			.employee-type-tag {
+				font-size: px2vw(16px);
+				padding: px2vw(2px) px2vw(8px);
+				border-radius: px2vw(4px);
+				flex-shrink: 0;
+				margin-right: px2vw(10px);
+
+				&.is-new {
+					color: #fff;
+					background-color: #52c41a;
+				}
+
+				&.is-old {
+					color: #fff;
+					background-color: #1890ff;
+				}
+
+				&.is-temp {
+					color: #fff;
+					background-color: #fa8c16;
+				}
+			}
+
+			.employee-modal-hours {
+				font-size: px2vw(28px);
+				color: #f1c40f;
+				margin-right: px2vw(16px);
+			}
+
+			.employee-modal-wage {
+				font-size: px2vw(28px);
+				color: #27ae60;
+			}
+
+			.employee-modal-empty {
+				padding: px2vw(80px) 0;
+				text-align: center;
+
+				text {
+					font-size: px2vw(24px);
+					color: #999;
+				}
+
+				// 加载中：旋转加载圈 + 文案
+				.empty-loading-text {
+					display: inline-flex;
+					align-items: center;
+
+					.empty-spinner {
+						width: px2vw(28px);
+						height: px2vw(28px);
+						border: px2vw(3px) solid #e6e6e6;
+						border-top-color: #3498db;
+						border-radius: 50%;
+						margin-right: px2vw(12px);
+						animation: empty-spin 0.8s linear infinite;
+					}
+				}
+			}
+
+			@keyframes empty-spin {
+				to {
+					transform: rotate(360deg);
+				}
+			}
+		}
+
+		.employee-modal-footer {
+			display: flex;
+			flex-direction: row;
+			align-items: center;
+			justify-content: space-between;
+			gap: px2vw(20px);
+			padding: px2vw(20px);
+			border-top: 1px solid #eee;
+			flex-shrink: 0;
+
+			.employee-modal-btn-cancel,
+			.employee-modal-btn-confirm {
+				flex: 1;
+				height: px2vw(70px);
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				border-radius: px2vw(8px);
+				font-size: px2vw(28px);
+			}
+
+			.employee-modal-btn-cancel {
+				background-color: #f5f5f5;
+				color: #666;
+			}
+
+			.employee-modal-btn-confirm {
+				background-color: #5884f1;
+				color: #fff;
+			}
+		}
+	}
+
 	/* 转派模态框样式 */
 	.transfer-modal {
 		position: fixed;

@@ -91,6 +91,9 @@ export const DISPATCH_TRANSFER_URL = apiUrl('/api/workflow/hooks/Njk1Y2E1ZDIwODY
 /** 派工查询 / 多对多派工查询：修改派工数量（需原因） */
 export const DISPATCH_QTY_UPDATE_URL = apiUrl('/api/workflow/hooks/NmEwMmU1Mzg4MWZiNGY2MDZmYzhhODJi')
 
+/** 多对多派工查询：更改员工（多对多派工单据 rowid + 新选择员工工时数据 rowid 数组） */
+export const DISPATCH_INQUIRY_MORE_CHANGE_WORKER_URL = apiUrl('/api/workflow/hooks/NmE5Njc0YjVjYjg1NjNiMzlkYjRlN2Fk')
+
 // ---------- 派工页 dispatchWork ----------
 
 /** 抛光车间一对多派工（多工序、单员工 batch） */
