@@ -198,7 +198,7 @@
     </view>
 
     <!-- 单据列表：在选择订单基础上，展示订单编号 + 客户名称 + 产品名称 + 规格型号 -->
-    <scroll-view class="orderList" scroll-y @scroll="onListScroll" @scrolltolower="loadMore" lower-threshold="80">
+    <scroll-view class="orderList" scroll-y>
       <view
         class="orderItem"
         :class="{ 'orderItem--selected': dispatchMode === 'product' && isProductChecked(item) }"
@@ -254,8 +254,7 @@
           </view>
         </view>
       </view>
-      <view class="list-status" v-if="loadingMore">加载中...</view>
-      <view class="list-status" v-else-if="!hasMore && billsList.length > 0">没有更多数据了</view>
+      <view class="list-status" v-if="listLoading">加载中...</view>
       <view class="list-status" v-else-if="!billsList.length">暂无数据</view>
     </scroll-view>
   </view>
@@ -263,7 +262,7 @@
 
 <script setup>
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
@@ -295,13 +294,10 @@ const orderFilterTags = ref([])
 const orderSuggestInput = ref('')
 
 const billsList = ref([])
-const loadingMore = ref(false)
-const hasMore = ref(true)
-const currentPage = ref(1)
+const listLoading = ref(false)
 const pageSize = 100
-const totalRaw = ref(0)
-const loadedRawCount = ref(0)
-const hasUserScrolled = ref(false)
+/** 全量拉取最大页数（与预派工添加产品一致：100 条/页 × 500 页） */
+const MAX_PAGES = 500
 const selectedProductKeys = ref([])
 
 /** 已选中的产品名称筛选条件（标签）；列表需匹配其中任一词（OR） */
@@ -370,13 +366,6 @@ const rebuildBillsList = () => {
     )
   }
   billsList.value = list
-  nextTick(() => {
-    // 须在单次 loadPage 结束（loadingMore 已置 false）后再拉取，否则会与当前请求冲突被 loadPage 首行拦截
-    if (loadingMore.value) return
-    if (billsList.value.length === 0 && hasMore.value) {
-      prefetchUntilListNonEmptyIfNeeded()
-    }
-  })
 }
 
 const pickOrderSuggestion = (raw) => {
@@ -633,49 +622,22 @@ const mapRowsBaseOnly = (rows) => {
   })
 }
 
-const loadPage = async (pageNum = 1, append = false) => {
-  if (loadingMore.value) return
-  loadingMore.value = true
-  try {
+/** 一次性全量拉取排产计划原始数据（与预派工添加产品一致：100 条/页，最多 500 页），拉完后再统一映射与本地筛选 */
+const fetchAllBillsRaw = async () => {
+  const allRows = []
+  let pageNum = 1
+  while (pageNum <= MAX_PAGES) {
     const billsRes = await getBillsListRaw(pageNum, pageNum > 1)
     const rawRows = billsRes.data || []
-    totalRaw.value = Number(billsRes.total || 0)
-    loadedRawCount.value += rawRows.length
-
-    const pageBase = mapRowsBaseOnly(rawRows)
-    baseListUnfiltered.value = append
-      ? baseListUnfiltered.value.concat(pageBase)
-      : pageBase
-    rebuildBillsList()
-
-    hasMore.value = loadedRawCount.value < totalRaw.value
-    currentPage.value = pageNum
-  } finally {
-    loadingMore.value = false
+    if (!rawRows.length) break
+    allRows.push(...rawRows)
+    if (rawRows.length < pageSize) break
+    pageNum++
   }
-}
-
-/** 订单/产品关键词为本地筛选：若当前已加载行筛完后为空，但服务端仍有分页，则自动继续拉取，避免仅加载前几页就「暂无数据」且无法触发上拉 */
-const MAX_AUTO_PREFETCH_PAGES = 40
-
-const prefetchUntilListNonEmptyIfNeeded = async () => {
-  let steps = 0
-  while (
-    steps < MAX_AUTO_PREFETCH_PAGES &&
-    billsList.value.length === 0 &&
-    hasMore.value
-  ) {
-    steps++
-    await loadPage(currentPage.value + 1, true)
-  }
+  return allRows
 }
 
 const search = async () => {
-  currentPage.value = 1
-  loadedRawCount.value = 0
-  totalRaw.value = 0
-  hasMore.value = true
-  hasUserScrolled.value = false
   selectedProductKeys.value = []
   billsList.value = []
   baseListUnfiltered.value = []
@@ -683,19 +645,23 @@ const search = async () => {
   productNameSuggestInput.value = ''
   clearSpecFilterTags()
   // 保留 orderFilterTags / orderSuggestInput（含路由预填的订单），避免进入页 search 冲掉 onLoad 已设标签
-  await loadPage(1, false)
-}
-
-const onListScroll = (e) => {
-  const top = Number(e?.detail?.scrollTop || 0)
-  if (top > 0) hasUserScrolled.value = true
-}
-
-const loadMore = async () => {
-  if (loadingMore.value || !hasMore.value) return
-  // 有数据时需用户先滚动过再加载更多，避免首屏误触发连刷；筛选结果为空时允许直接触底继续拉取
-  if (billsList.value.length > 0 && !hasUserScrolled.value) return
-  await loadPage(currentPage.value + 1, true)
+  listLoading.value = true
+  try {
+    // 一次性全量拉取后统一映射与本地筛选，不做上拉分页（与预派工添加产品一致）
+    uni.showLoading({ title: '加载中...' })
+    const allRows = await fetchAllBillsRaw()
+    uni.hideLoading()
+    baseListUnfiltered.value = mapRowsBaseOnly(allRows)
+    rebuildBillsList()
+  } catch (e) {
+    uni.hideLoading()
+    console.error('[选择产品] 全量拉取失败:', e)
+    uni.showToast({ title: '加载失败', icon: 'none' })
+    baseListUnfiltered.value = []
+    billsList.value = []
+  } finally {
+    listLoading.value = false
+  }
 }
 
 // 返回选择订单页面

@@ -36,8 +36,6 @@
 		<scroll-view
 			class="orderList"
 			scroll-y
-			:lower-threshold="100"
-			@scrolltolower="onScrollToLower"
 		>
 			<view class="orderItem" v-for="item in billsList" :key="item.orderCode" @click="selectOrder(item)">
 				<view class="goodsInfo row-single">
@@ -59,9 +57,8 @@
 					</view>
 				</view>
 			</view>
-			<view v-if="loadingMore" class="list-footer">加载中...</view>
-			<view v-else-if="!hasMore && billsList.length" class="list-footer">没有更多了</view>
-			<view v-else-if="hasMore && billsList.length" class="list-footer hint">上拉加载更多</view>
+			<view v-if="listLoading" class="list-footer">加载中...</view>
+			<view v-else-if="!billsList.length" class="list-footer">暂无数据</view>
 		</scroll-view>
 	</view>
 </template>
@@ -93,10 +90,9 @@ const searchForm = ref({ salesOrder: '' })
 
 /** 每页条数（与接口分页一致，避免单次请求过大） */
 const LIST_PAGE_SIZE = 100
-const listPageNum = ref(1)
-const hasMore = ref(true)
+/** 全量拉取最大页数（与预派工添加产品一致：100 条/页 × 500 页） */
+const MAX_PAGES = 500
 const accumulatedRawRows = ref([])
-const loadingMore = ref(false)
 const listLoading = ref(false)
 
 onLoad((options) => {
@@ -224,7 +220,7 @@ const buildQueryPayload = (extra = {}) => ({
 	...extra
 })
 
-/** 请求一页；loadMore 时 silent 避免重复全屏 loading */
+/** 请求一页；全量拉取过程中传 silent 避免每次弹全屏 loading */
 const fetchBillsPage = async (pageNum, silent = false) => {
 	return await callWorkflowListAPIPaged(
 		buildQueryPayload(silent ? { silent: true } : {}),
@@ -233,13 +229,19 @@ const fetchBillsPage = async (pageNum, silent = false) => {
 	)
 }
 
-/** 本页是否还可能存在下一页 */
-const updateHasMoreFromResponse = (res, pageNum) => {
-	const rows = res?.data || []
-	if (!rows.length || rows.length < LIST_PAGE_SIZE) return false
-	const total = Number(res?.total) || 0
-	if (total > 0 && pageNum * LIST_PAGE_SIZE >= total) return false
-	return true
+/** 一次性全量拉取排产计划数据（与预派工添加产品一致：100 条/页，最多 500 页），拉完后再统一过滤聚合 */
+const fetchAllBills = async () => {
+	const allRows = []
+	let pageNum = 1
+	while (pageNum <= MAX_PAGES) {
+		const res = await fetchBillsPage(pageNum, pageNum > 1)
+		const rows = res?.data || []
+		if (!rows.length) break
+		allRows.push(...rows)
+		if (rows.length < LIST_PAGE_SIZE) break
+		pageNum++
+	}
+	return allRows
 }
 
 /**
@@ -311,25 +313,19 @@ const buildDisplayListFromRawRows = (rawRows) => {
 
 const search = async () => {
 	listLoading.value = true
-	listPageNum.value = 1
 	accumulatedRawRows.value = []
-	hasMore.value = true
 	try {
-		const billsRes = await fetchBillsPage(1, false)
-		console.log('[选择订单] 接口完整返回 billsRes:', billsRes)
-		console.log(
-			'[选择订单] 接口原始 data（条数:',
-			billsRes?.data?.length ?? 0,
-			'）:',
-			billsRes?.data
-		)
-		const rows = billsRes?.data || []
-		accumulatedRawRows.value = rows
-		hasMore.value = updateHasMoreFromResponse(billsRes, 1)
-
-		const list = buildDisplayListFromRawRows(accumulatedRawRows.value)
-		console.log('[选择订单] 汇总并排序后的页面列表 billsList:', list)
-		billsList.value = list
+		// 一次性全量拉取后统一过滤聚合，不做上拉分页（与预派工添加产品一致）
+		uni.showLoading({ title: '加载中...' })
+		const allRows = await fetchAllBills()
+		uni.hideLoading()
+		accumulatedRawRows.value = allRows
+		billsList.value = buildDisplayListFromRawRows(accumulatedRawRows.value)
+	} catch (e) {
+		uni.hideLoading()
+		console.error('[选择订单] 全量拉取失败:', e)
+		uni.showToast({ title: '加载失败', icon: 'none' })
+		billsList.value = []
 	} finally {
 		listLoading.value = false
 	}
@@ -338,32 +334,6 @@ const search = async () => {
 const handleReset = () => {
 	searchForm.value.salesOrder = ''
 	search()
-}
-
-const loadMore = async () => {
-	if (!hasMore.value || loadingMore.value || listLoading.value) return
-	const nextPage = listPageNum.value + 1
-	loadingMore.value = true
-	try {
-		const billsRes = await fetchBillsPage(nextPage, true)
-		const rows = billsRes?.data || []
-		console.log(
-			`[选择订单] 加载更多 第${nextPage}页，条数:`,
-			rows.length,
-			'total:',
-			billsRes?.total
-		)
-		accumulatedRawRows.value = accumulatedRawRows.value.concat(rows)
-		listPageNum.value = nextPage
-		hasMore.value = updateHasMoreFromResponse(billsRes, nextPage)
-		billsList.value = buildDisplayListFromRawRows(accumulatedRawRows.value)
-	} finally {
-		loadingMore.value = false
-	}
-}
-
-const onScrollToLower = () => {
-	loadMore()
 }
 
 // 左箭头返回：根据来源决定返回页面
