@@ -3244,6 +3244,8 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 			const bId = b.rowid || ''
 			return aId.localeCompare(bId)
 		})
+		// 产品列表默认收起：所有订单折叠，仅显示订单号，点击订单再展开产品
+		collapsedOrderIds.value = [...new Set(productList.value.map(p => p.orderNo || '未分类'))]
 		// 记录产品列表的排列顺序（使用 uniqueKey）
 		productOrderMap.value = new Map()
 		productList.value.forEach((product, index) => {
