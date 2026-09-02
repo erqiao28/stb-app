@@ -18,7 +18,7 @@
 			>多对多派工查询</button>
 			<button v-if="isGongyiLimits" class="btn-craft" @click="goCraftOrder">工艺订单</button>
 			<button class="btn-workload" @click="goWorkload">员工工作量查询</button>
-			<button class="btn-pre-dispatched" @click="goPreDispatched">预派工</button>
+			<button v-if="showPreDispatched" class="btn-pre-dispatched" @click="goPreDispatched">预派工</button>
 		</view>
 	</view>
 </template>
@@ -38,10 +38,13 @@ const isGongyiLimits = computed(() => loginLimitsTrim.value === '工艺')
 
 const showDispatchEntryButtons = computed(() => !isGongyiLimits.value)
 
-/** 组装/喷涂/工艺权限显示「多对多派工查询」 */
-const showDispatchInquiryMore = computed(() => {
+/** 全账号显示「多对多派工查询」（已放开车间限制） */
+const showDispatchInquiryMore = computed(() => true)
+
+/** 车间权限显示「预派工」（工艺等非车间账号隐藏） */
+const showPreDispatched = computed(() => {
 	const w = loginLimitsTrim.value
-	return w === '组装车间' || w === '喷涂车间' || w === '工艺'
+	return w === '组装车间' || w === '喷涂车间' || w === '抛光车间' || w === '拉伸车间'
 })
 
 const goBackToIndex = () => {

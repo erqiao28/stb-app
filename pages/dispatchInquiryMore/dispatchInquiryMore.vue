@@ -224,7 +224,7 @@
 			<view></view>
 		</view>
 
-		<!-- 车间：喷涂 / 组装；默认登录权限，派工等入口可 URL 覆盖 -->
+		<!-- 车间：拉伸/喷涂/抛光/组装；默认登录权限，派工等入口可 URL 覆盖 -->
 		<view class="workshop-tabs">
 			<view
 				v-for="name in workshopTabOptions"
@@ -364,8 +364,8 @@ import { useStatusBar } from '../../composables/useStatusBar'
 const userStore = useUserStore()
 const { statusBarHeight } = useStatusBar()
 
-/** 本页仅喷涂、组装；默认优先登录权限，无 URL 时不用派工页带入车间 */
-const workshopTabOptions = ref(['喷涂车间', '组装车间'])
+/** 车间筛选：拉伸/喷涂/抛光/组装（从左到右）；进入默认取登录权限车间 */
+const workshopTabOptions = ref(['拉伸车间', '喷涂车间', '抛光车间', '组装车间'])
 const workshop = ref('组装车间')
 const modalWorkshop = ref('')
 
@@ -447,7 +447,7 @@ function cellWorkshopText(raw) {
 	return String(v).trim()
 }
 
-/** 与当前选中的「喷涂车间/组装车间」是否视为同一车间 */
+/** 行车间文本与当前选中的车间是否视为同一车间 */
 function workshopMatchesRow(rowLabel, selected) {
 	const b = String(selected || '').trim()
 	if (!b) return true
