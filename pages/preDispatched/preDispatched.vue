@@ -2939,44 +2939,20 @@ const handleProcessListConfirm = async (productRowid) => {
 
 	// 用户输入的派工数量（优先使用）
 	const rawUserInput = productDispatchCounts.value[productRowid]
-	// 只有当用户输入了有效数值（包括0）时才使用用户输入，为空时使用可派数量
-	const hasUserInput = rawUserInput !== undefined && rawUserInput !== '' && !isNaN(parseFloat(rawUserInput)) && parseFloat(rawUserInput) >= 0
+	// 只有当用户输入了大于0的有效数值时才传递用户输入；为空或为0时回退到可派数量
+	const hasUserInput = rawUserInput !== undefined && rawUserInput !== '' && !isNaN(parseFloat(rawUserInput)) && parseFloat(rawUserInput) > 0
 	if (rawUserInput !== undefined && rawUserInput !== '' && (isNaN(parseFloat(rawUserInput)) || parseFloat(rawUserInput) < 0)) {
 		uni.showToast({ title: '派工数量无效，请重新设置', icon: 'none' })
 		return
 	}
 	if (hasUserInput) {
-		// 用户输入了有效值，传用户输入的派工数量
+		// 用户输入了大于0的有效值，传用户输入的派工数量
 		dispatchCount = parseFloat(rawUserInput)
 	} else {
-		// 用户输入为空时，按以下优先级取值（与 openDispatchModal 逻辑一致）
-		// 优先级1：产品行的 dispatchCount 字段
-		const productDispatchCount = parseFloat(product?.dispatchCount)
-		if (Number.isFinite(productDispatchCount) && productDispatchCount > 0) {
-			dispatchCount = Math.round(productDispatchCount)
-		} else if (hasPreDispatchRowids.length > 0) {
-			// 优先级2：有预派工关联时，取关联工序的 needCount 平均值
-			// hasPreDispatchRowids 对应的工序在 pdRows 中已通过 processDetail 关联
-			// 需要筛选出有预派工关联的工序
-			const associatedProcessRowids = new Set()
-			pdRows.forEach(item => {
-				if (hasPreDispatchRowids.includes(item.rowid)) {
-					extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail]).forEach(sid => associatedProcessRowids.add(sid))
-				}
-			})
-			const associatedProcesses = processList.value.filter(p => associatedProcessRowids.has(p.rowid))
-			if (associatedProcesses.length > 0) {
-				const needVals = associatedProcesses.map(p => parseFloat(p.needCount) || 0)
-				if (needVals.length > 0) {
-					dispatchCount = Math.round(needVals.reduce((a, b) => a + b, 0) / needVals.length)
-				}
-			}
-		} else {
-			// 优先级3：无预派工时，取勾选工序的 needCount 平均值
-			const processNeedVals = checkedProcesses.map(p => parseFloat(p.needCount) || 0)
-			if (processNeedVals.length > 0) {
-				dispatchCount = Math.round(processNeedVals.reduce((a, b) => a + b, 0) / processNeedVals.length)
-			}
+		// 用户输入为空或为0时，取勾选工序的 needCount 平均值（与 openDispatchModal 逻辑一致）
+		const processNeedVals = checkedProcesses.map(p => parseFloat(p.needCount) || 0)
+		if (processNeedVals.length > 0) {
+			dispatchCount = Math.round(processNeedVals.reduce((a, b) => a + b, 0) / processNeedVals.length)
 		}
 	}
 
@@ -3014,35 +2990,74 @@ const handleProcessListConfirm = async (productRowid) => {
 		uni.hideLoading()
 		uni.showToast({ title: '提交成功', icon: 'success' })
 
-		// 提交后直接刷新，不等待后端工作流完成
+		// 提交后先轮询等待后端工作流数据到位（最长约15秒），再刷新页面。
+		// 仅当派工日期与顶部筛选日期一致时才等待：等待轮询内部按顶部日期过滤预派工，
+		// 跨日期派工（派工日期 ≠ 顶部日期）查不到该批预派工，等待必然超时，直接走下方整页刷新
 		const product = productList.value.find(item => item.uniqueKey === productRowid)
+		const selectedDispatchDate = productDispatchDates.value[productRowid]
+		// 派工日期与顶部筛选日期是否一致：一致才走"等待后局部刷新工序"，不一致直接整页刷新
+		const isSameDate = !selectedDispatchDate || selectedDispatchDate === filterDate.value
 
-		// 刷新该产品工序数据，保留勾选状态
+		if (product && isSameDate) {
+			const checkedRowids = checkedProcesses.map(p => p.rowid)
+			const isStretchWorkshop = loginWorkshop.value === '拉伸车间'
+			// 拉伸车间 + 老工序：工序需先生成预派工记录，等预派工关联完成后再刷新
+			const hasOldProcess = checkedProcesses.some(p => !p.isNewProcess)
+			const waited = isStretchWorkshop && hasOldProcess
+				? await waitForPreDispatchAssociation(product, checkedRowids, dispatchCount)
+				: await waitForPreDispatchDailyWage(product, checkedRowids, dispatchCount)
+			if (!waited) {
+				console.warn('等待派工数据到位超时，继续刷新', { productRowid, checkedRowids, dispatchCount })
+			}
+		}
+
 		if (product) {
-			// 保存当前勾选状态
-			const savedCheckedRowids = checkedProcesses.map(p => p.rowid)
-			loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
-			processList.value = processList.value.filter(p => p.productRowid !== productRowid)
-			await loadProductProcesses(product)
-			// 恢复勾选状态
-			savedCheckedRowids.forEach(rowid => {
-				if (!selectedProcessIds.value.includes(rowid)) {
-					selectedProcessIds.value.push(rowid)
-				}
-			})
+			if (isSameDate) {
+				// 派工日期与顶部日期一致：等待数据到位后，清缓存重载该产品工序（保留勾选状态）
+				// 保存当前勾选状态
+				const savedCheckedRowids = checkedProcesses.map(p => p.rowid)
+				loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
+				processList.value = processList.value.filter(p => p.productRowid !== productRowid)
+				await loadProductProcesses(product)
+				// 恢复勾选状态
+				savedCheckedRowids.forEach(rowid => {
+					if (!selectedProcessIds.value.includes(rowid)) {
+						selectedProcessIds.value.push(rowid)
+					}
+				})
+			} else {
+				// 跨日期派工：顶部日期下查不到该批预派工，此刻重载只会把"空员工/空数量"写入工序缓存，
+				// 导致切到派工日期后打开工序列表仍显示脏数据。直接清掉该产品工序缓存，
+				// 切换到派工日期后由 handleProductClick 重新触发加载（按正确日期拉取）
+				loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
+				processList.value = processList.value.filter(p => p.productRowid !== productRowid)
+			}
 		}
 		// 刷新员工数据
 		loadWorkshopEmployees()
 		loadEmployeeDispatchSummary()
 
-		// 派工设置日期与顶部日期不一致时，刷新产品列表和该产品工序列表
-		const selectedDispatchDate = productDispatchDates.value[productRowid]
-		if (selectedDispatchDate && selectedDispatchDate !== filterDate.value) {
-			await loadProducts(true)
-			if (product) {
-				loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
-				processList.value = processList.value.filter(p => p.productRowid !== productRowid)
-				await loadProductProcesses(product)
+		// 派工设置日期与顶部日期不一致时：后端异步把预派工迁移到派工日期，
+		// 立即整页刷新会拉得太早（产品仍在当前日期列表）。轮询等待该产品从当前列表消失，
+		// 期间每轮静默重拉列表；工序缓存已在上面清除，切到派工日期后由 handleProductClick 按正确日期重新加载
+		if (!isSameDate) {
+			// 基础 6 次(3秒)，每勾选 1 条工序增加 1 次，最多 10 次(5秒)，与确认派工轮询策略一致
+			const BASE_RETRY = 6
+			const EXTRA_PER_ITEM = 1
+			const MAX_RETRY = 10
+			const INTERVAL = 500
+			const maxRetry = Math.min(BASE_RETRY + checkedProcesses.length * EXTRA_PER_ITEM, MAX_RETRY)
+			let stillInList = true
+			for (let i = 0; i < maxRetry; i++) {
+				await loadProducts(true, true)
+				stillInList = productList.value.some(p => p.uniqueKey === productRowid)
+				if (!stillInList) break
+				if (i < maxRetry - 1) {
+					await new Promise(resolve => setTimeout(resolve, INTERVAL))
+				}
+			}
+			if (stillInList) {
+				console.warn('等待产品从当前日期列表移除超时，产品仍在列表中', { productRowid })
 			}
 		}
 	} catch (e) {
@@ -3321,21 +3336,11 @@ const openDispatchModal = async (product) => {
 		}
 	}
 
-	// 优先级1：如果产品行的派工数量字段有值且不为0，直接作为可派数量
-	const productDispatchCount = parseFloat(product.dispatchCount)
-	if (Number.isFinite(productDispatchCount) && productDispatchCount > 0) {
-		dispatchCount = Math.round(productDispatchCount)
-	} else if (pdRowids.length > 0 && associatedProcesses.length > 0) {
-		// 有预派工：获取预派工数据，跳过可派数量为0的数据
-		const needVals = associatedProcesses.map(p => parseFloat(p.needCount) || 0).filter(v => v > 0)
+	// 可派数量：只取勾选工序的待派数量（needCount）平均值，跳过为0的数据
+	const checkedProcesses = productProcesses.filter(p => selectedProcessIds.value.includes(p.rowid))
+	if (checkedProcesses.length > 0) {
+		const needVals = checkedProcesses.map(p => parseFloat(p.needCount) || 0).filter(v => v > 0)
 		if (needVals.length > 0) dispatchCount = Math.round(needVals.reduce((a, b) => a + b, 0) / needVals.length)
-	} else {
-		// 无预派工：用勾选的工序，跳过可派数量为0的数据
-		const checkedProcesses = productProcesses.filter(p => selectedProcessIds.value.includes(p.rowid))
-		if (checkedProcesses.length > 0) {
-			const needVals = checkedProcesses.map(p => parseFloat(p.needCount) || 0).filter(v => v > 0)
-			if (needVals.length > 0) dispatchCount = Math.round(needVals.reduce((a, b) => a + b, 0) / needVals.length)
-		}
 	}
 
 	dispatchModalDispatchCount.value = dispatchCount
