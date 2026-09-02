@@ -681,6 +681,11 @@ const changeWorkerFiltered = computed(() => {
 
 // 打开更改员工弹窗
 const openChangeWorkerModal = async (item) => {
+	// 二次守卫：仅「待报工」才允许打开
+	if (!canChangeWorker(item)) {
+		uni.showToast({ title: '仅“待报工”状态可以更改员工', icon: 'none' })
+		return
+	}
 	if (!item?.rowid) {
 		uni.showToast({ title: '缺少单据标识', icon: 'none' })
 		return
@@ -1001,9 +1006,16 @@ const canTransfer = (item) => {
 	return statusValid && isRedeployValid && isredeployValid
 }
 
-// 判断是否可以删除：与派工查询一致，仅「待报工」可删
+// 判断是否可以更改员工：仅「待报工」可改（兼容前后空白/不可见字符）
+const canChangeWorker = (item) => {
+	const status = (item?.status ?? '').toString().trim()
+	return status === '待报工'
+}
+
+// 判断是否可以删除：与派工查询一致，仅「待报工」可删（兼容前后空白/不可见字符）
 const canDeleteDispatch = (item) => {
-	return item.status === '待报工'
+	const status = (item?.status ?? '').toString().trim()
+	return status === '待报工'
 }
 
 // 删除多对多派工单据（与派工查询页同一接口）

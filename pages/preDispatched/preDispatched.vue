@@ -2807,19 +2807,24 @@ const getTotalPreDispatchCount = () => {
 
 const handleConfirmDispatch = async () => {
 	if (isConfirmDispatching.value) return
-	// 只获取选中产品的预派工 rowid，先去重避免重复查询和提交
-	const allRowids = [...new Set(
-		productList.value
-			.filter(item => selectedProductIds.value.includes(item.uniqueKey))
-			.flatMap(item => item.preDispatchRowids || [])
-			.filter(Boolean)
-	)]
+	// 只处理选中产品的预派工；按产品记录 rowid 归属，以便按"该产品的工序勾选状态"判定
+	const checkedProducts = productList.value.filter(item => selectedProductIds.value.includes(item.uniqueKey))
+	const productRowidsMap = new Map()
+	let allRowids = []
+	checkedProducts.forEach(item => {
+		const rowids = [...new Set((item.preDispatchRowids || []).filter(Boolean))]
+		if (rowids.length > 0) {
+			productRowidsMap.set(item.uniqueKey, rowids)
+			allRowids = allRowids.concat(rowids)
+		}
+	})
+	allRowids = [...new Set(allRowids)]
 	if (allRowids.length === 0) {
 		uni.showToast({ title: '没有可确认的预派工', icon: 'none' })
 		return
 	}
-	// 过滤出有员工的预派工
-	let validRowids = []
+	// 拉取这些预派工完整记录，过滤出满足条件（产品勾选+工序非空+工序被勾选+有员工）的预派工
+	let rows = []
 	if (allRowids.length > 0) {
 		const res = await callWorkflowListAll({
 			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
@@ -2832,19 +2837,37 @@ const handleConfirmDispatch = async () => {
 			}],
 			silent: true
 		}, 100)
-		const rows = Array.isArray(res?.data) ? res.data : []
-		// 同工序可能关联多条预派工（后端历史数据重复），按"取最早一条"过滤后再筛选有员工的
-		validRowids = filterFirstPreDispatchPerProcess(rows)
-			.filter(item => {
-				const dailyWage = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.dailyWage])
-				return dailyWage && dailyWage.length > 0
-			})
-			.map(item => item.rowid)
+		rows = Array.isArray(res?.data) ? res.data : []
+		// 同工序可能关联多条预派工（后端历史数据重复），按"取最早一条"过滤后再逐条判断
+		rows = filterFirstPreDispatchPerProcess(rows)
 	}
+	let validRowids = []
+	checkedProducts.forEach(item => {
+		// 该产品当前在工序列表中被勾选的工序（工序须已加载且被勾选，才允许确认派工）
+		const productCheckedProcessRowids = new Set(
+			processList.value
+				.filter(p => p.productRowid === item.uniqueKey && selectedProcessIds.value.includes(p.rowid))
+				.map(p => p.rowid)
+		)
+		const productRowidSet = new Set(productRowidsMap.get(item.uniqueKey) || [])
+		rows.forEach(row => {
+			if (!productRowidSet.has(row.rowid)) return
+			const dailyWage = extractRelationSids(row[PRE_DISPATCH_FIELD_MAP.dailyWage])
+			const processSids = extractRelationSids(row[PRE_DISPATCH_FIELD_MAP.processDetail])
+			const hasEmployee = dailyWage && dailyWage.length > 0
+			// 必须关联了工序（无工序的产品级兜底预派工不允许确认派工）
+			const hasProcess = processSids && processSids.length > 0
+			// 关联工序必须在该产品工序列表中被勾选
+			const processChecked = hasProcess && processSids.some(sid => productCheckedProcessRowids.has(sid))
+			if (hasEmployee && hasProcess && processChecked) {
+				validRowids.push(row.rowid)
+			}
+		})
+	})
 	// 二次去重，确保不会提交重复 rowid
 	validRowids = [...new Set(validRowids)]
 	if (validRowids.length === 0) {
-		uni.showToast({ title: '没有可确认的预派工（均无员工）', icon: 'none' })
+		uni.showToast({ title: '没有可确认的预派工（需在工序列表勾选工序且已分配员工）', icon: 'none' })
 		return
 	}
 	// 记录初始预派工总条数（当前列表所有产品行的预派工数量之和），用于确认派工成功后轮询判断
