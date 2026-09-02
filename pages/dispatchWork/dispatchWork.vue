@@ -820,7 +820,7 @@
               <button class="btn-detail" :disabled="!canClickDispatch(item)" @click.stop="dispatchWork(item)">操作</button>
               <button class="btn-delete" @click="addProcess(item)">添加工序</button>
               <button class="btn-normal-process" v-if="item.billType === '返工排产'" @click="useNormalProcess(item)">使用正常工序</button>
-              <button class="btn-multi-dispatch" v-if="workshop === '组装车间' || workshop === '喷涂车间'" :disabled="!canClickMultiDispatch(item)" @click="openMultiDispatchModal(item)">多对多派工</button>
+              <button class="btn-multi-dispatch" :disabled="!canClickMultiDispatch(item)" @click="openMultiDispatchModal(item)">多对多派工</button>
               <button class="btn-one-to-many" v-if="workshop === '抛光车间' && dispatchMode !== 'product'" :disabled="!canClickOneToManyDispatch(item)" @click="openOneToManyModal(item)">一对多派工</button>
             </view>
           </view>
@@ -1085,10 +1085,10 @@ const openWorkshopSelectModal = () => {
   showWorkshopModal.value = true
 }
 
-/** 工序列表支持多选：组装/抛光/喷涂（喷涂与组装一致，含多对多派工） */
+/** 工序列表支持多选：全部车间（组装/抛光/喷涂/拉伸）统一走多选逻辑 */
 const isMultiSelectProcessWorkshop = computed(() => {
   const w = workshop.value
-  return w === '组装车间' || w === '抛光车间' || w === '喷涂车间'
+  return w === '组装车间' || w === '抛光车间' || w === '喷涂车间' || w === '拉伸车间'
 })
 
 /** 仅喷涂、组装：展示工序大类联动开关（控制勾选时是否按大类批量联动） */
@@ -1948,9 +1948,6 @@ const canClickDispatch = (item) => {
 
 // 判断是否可以点击多对多派工按钮
 const canClickMultiDispatch = (item) => {
-  if (workshop.value !== '组装车间' && workshop.value !== '喷涂车间') {
-    return false
-  }
   const count = getSelectedProcessCount(item)
   return count >= 2
 }
@@ -3138,25 +3135,34 @@ const billKeyForMultiDispatch = (item) => {
 }
 
 /**
- * 组装/抛光/喷涂多选：
+ * 多选工序同步组：
  * - 抛光：始终按工序名跨单。
  * - 喷涂/组装：大类联动开 → 按大类批量；关 → 订单派工只勾当前格；产品派工仍按工序名跨单（与抛光一致，避免与「关大类」互斥导致无法多品选同名工序）。
- * - 其余车间：按工序名跨单。
+ * - 拉伸：产品派工按工序名跨单；订单派工只勾当前格（支持逐格多选）。
+ * - 其他车间：按工序名跨单（兜底）。
  */
 const toggleMultiProcessSyncedGroup = (item, process) => {
   const w = workshop.value
-  const pairs =
-    w === '抛光车间'
+  let pairs
+  if (w === '抛光车间') {
+    pairs = collectProductDispatchSyncedPairs(buildProductDispatchSyncKey(process))
+  } else if (w === '喷涂车间' || w === '组装车间') {
+    pairs = processBulkLinkEnabled.value
+      ? collectMultiProcessSyncedPairsByCategory(item, process)
+      : dispatchMode.value === 'product'
+        ? collectProductDispatchSyncedPairs(buildProductDispatchSyncKey(process))
+        : item && process
+          ? [{ item, process }]
+          : []
+  } else if (w === '拉伸车间') {
+    pairs = dispatchMode.value === 'product'
       ? collectProductDispatchSyncedPairs(buildProductDispatchSyncKey(process))
-      : w === '喷涂车间' || w === '组装车间'
-        ? processBulkLinkEnabled.value
-          ? collectMultiProcessSyncedPairsByCategory(item, process)
-          : dispatchMode.value === 'product'
-            ? collectProductDispatchSyncedPairs(buildProductDispatchSyncKey(process))
-            : item && process
-              ? [{ item, process }]
-              : []
-        : collectProductDispatchSyncedPairs(buildProductDispatchSyncKey(process))
+      : item && process
+        ? [{ item, process }]
+        : []
+  } else {
+    pairs = collectProductDispatchSyncedPairs(buildProductDispatchSyncKey(process))
+  }
   if (!pairs.length) return
   const pairIncluded = (pair) =>
     selectedMultiProcesses.value.some(
