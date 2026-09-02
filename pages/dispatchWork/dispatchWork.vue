@@ -15,9 +15,6 @@
       :visible="showAddEmployeeModal" @update:visible="handleAddEmployeeModalClose" @confirm="handleAddEmployeeConfirm"
       :workshopOptions="workshopOptions" :workshop="modalWorkshop" @update:workshop="onModalWorkshopChange"
       :maxSelection="addEmployeeMaxSelection"
-      :position-priority-keywords="employeeModalPositionKeywords"
-      :position-fallback-keywords="employeeModalFallbackKeywords"
-      :auto-select-matching="employeeModalAutoSelectMatching"
       :showEmployeeTypeSwitch="true"
       :employeeTypeFilter="employeeTypeFilter"
       @update:employeeTypeFilter="switchEmployeeType" />
@@ -1760,24 +1757,6 @@ const selectedProcessNamesForEmployeeModal = computed(() => {
   return []
 })
 
-/** 与工序对应的岗位关键字（组装车间等），用于列表分组排序与自动勾选。喷涂/拉伸：弹窗车间可能与页面不一致时仍以页面车间推导关键字 */
-const employeeModalPositionKeywords = computed(() => {
-  const pageW = workshop.value
-  const workshopForKeywords =
-    pageW === '喷涂车间' || pageW === '拉伸车间' || pageW === '抛光车间'
-      ? pageW
-      : (modalWorkshop.value || pageW)
-  return getPositionKeywordsForDispatch(
-    workshopForKeywords,
-    selectedProcessNamesForEmployeeModal.value
-  )
-})
-
-/** 抛光车间：主匹配未覆盖时，「机抛」「抛光」岗位次优先 */
-const employeeModalFallbackKeywords = computed(() =>
-  workshop.value === '抛光车间' ? [...POLISH_FALLBACK_POSITION_KEYWORDS] : []
-)
-
 /** 喷涂：所选工序任一含「高温过炉」时为 true（仅按岗位「喷涂」优先，不自动勾选） */
 const employeeModalSprayHighTemp = computed(() => {
   if (workshop.value !== '喷涂车间') return false
@@ -1807,19 +1786,6 @@ const sprayDispatchOrderedProcessNamesForModal = computed(() => {
     return [String(n).trim()].filter(Boolean)
   }
   return []
-})
-
-/** 组装车间「组装 / 包装」仅泛化「组装」时不自动勾选；拉伸/抛光：不自动勾选；喷涂：仅非高温过炉时自动勾选 */
-const employeeModalAutoSelectMatching = computed(() => {
-  if (workshop.value === '拉伸车间' || workshop.value === '抛光车间') return false
-  if (workshop.value === '喷涂车间') {
-    return !employeeModalSprayHighTemp.value
-  }
-  const kws = employeeModalPositionKeywords.value
-  if (!kws.length) return false
-  const unique = [...new Set(kws.map((k) => String(k || '').trim()).filter(Boolean))]
-  if (unique.length === 1 && unique[0] === '组装') return false
-  return true
 })
 
 /** 相同 body 并发时合并为一次 uni.request（防止极端双击）；地址见 utils/api DISPATCH_PROCESS_URL */
@@ -3914,8 +3880,8 @@ const loadMultiEmployeesForAdd = async () => {
     const currentDate = getCurrentDate()
     const selectedWorkshop = modalWorkshop.value || workshop.value
 
-    // 喷涂车间时同时获取喷涂+组装车间的员工
-    const workshopList = selectedWorkshop === '喷涂车间' ? ['喷涂车间', '组装车间'] : [selectedWorkshop]
+    // 只查所选车间员工，不再扩展喷涂+组装
+    const workshopList = [selectedWorkshop]
     const allRows = []
 
     for (const ws of workshopList) {
@@ -3946,6 +3912,8 @@ const loadMultiEmployeesForAdd = async () => {
         const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
         const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
         const dispatchWorkDate = item['69524e7b7a59e0522d855df6'] || ''
+        // 临时工字段（与 loadEmployees 一致）
+        const isTemp = item['6a744cdb4239d5290f2f6e4a'] == 1
 
         return {
           id: item['6943bd902161a0fc58bad5ab'] || '',
@@ -3953,13 +3921,24 @@ const loadMultiEmployeesForAdd = async () => {
           position: item['6943bf332161a0fc58bad7a4'] || '',
           totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
           unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
-          dispatchWorkDate: dispatchWorkDate
+          dispatchWorkDate: dispatchWorkDate,
+          isTemp
         }
       })
-      .filter(emp => emp.dispatchWorkDate === currentDate)
+      // 先按派工日期过滤，再按员工类型（普/临）过滤，与 loadEmployees 保持一致
+      const filteredEmployees = mappedEmployees
+        .filter(emp => emp.dispatchWorkDate === currentDate)
+        .filter(emp => {
+          if (employeeTypeFilter.value === 'normal') {
+            return !emp.isTemp  // 普：排除临时工
+          } else if (employeeTypeFilter.value === 'temp') {
+            return emp.isTemp  // 临：只选临时工
+          }
+          return true
+        })
 
       // 更新allEmployeesOptions和allEmployeesMap，供添加员工模态框使用
-      allEmployeesOptions.value = mappedEmployees.map(emp => ({
+      allEmployeesOptions.value = filteredEmployees.map(emp => ({
         label: emp.name,
         value: emp.id,
         position: emp.position || '',
@@ -3968,7 +3947,7 @@ const loadMultiEmployeesForAdd = async () => {
       }))
 
       allEmployeesMap.value = {}
-      mappedEmployees.forEach(emp => {
+      filteredEmployees.forEach(emp => {
         allEmployeesMap.value[emp.id] = emp
       })
     } else {
@@ -4762,13 +4741,8 @@ const loadEmployees = async (skipWorkshopFilter = false) => {
       "filterType": 8
     }]
 
-    // 非预派工模式时，添加车间过滤；喷涂车间时同时获取喷涂+组装
-    let workshopList = [selectedWorkshop]
-    if (!skipWorkshopFilter && selectedWorkshop) {
-      if (selectedWorkshop === '喷涂车间') {
-        workshopList = ['喷涂车间', '组装车间']
-      }
-    }
+    // 非预派工模式时，添加车间过滤（仅查所选车间，不再扩展喷涂+组装）
+    const workshopList = [selectedWorkshop]
 
     const allRows = []
     for (const ws of workshopList) {

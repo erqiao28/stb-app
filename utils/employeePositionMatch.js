@@ -1,5 +1,5 @@
 /**
- * 派工「添加员工」：按车间与当前所选工序名，推导员工岗位字段（含关键字即匹配）用于排序与预选。
+ * 派工：按车间与当前所选工序名，推导员工岗位字段（含关键字即匹配）用于员工列表排序。
  * 岗位字段来自员工档案 controlId，由页面映射为 option.position。
  */
 
@@ -81,31 +81,6 @@ export function getPositionKeywordsForDispatch(workshop, processNames) {
   // 其他车间：按需在此处补充 工序→岗位关键字
 
   return Array.from(keywords)
-}
-
-/**
- * @param {Array<{ value: any, position?: string }>} options
- * @param {string[]} keywords
- * @param {number} maxSelection AddWorkerRadiobox 的 maxSelection，0 表示不限制
- */
-export function pickAutoSelectEmployeeIds(options, keywords, maxSelection) {
-  if (!keywords?.length || !options?.length) return []
-
-  const matched = []
-  for (const opt of options) {
-    const pos = String(opt.position || '')
-    if (keywords.some((kw) => pos.includes(kw))) {
-      matched.push(opt.value)
-    }
-  }
-
-  if (maxSelection === 1) {
-    return matched.length ? [matched[0]] : []
-  }
-  if (maxSelection > 0) {
-    return matched.slice(0, maxSelection)
-  }
-  return matched
 }
 
 /**
@@ -220,45 +195,3 @@ export function reorderEmployeesBySprayProcessSequence(employees, orderedProcess
 /** 抛光车间：主匹配未命中岗位时，岗位含「机抛」「抛光」的员工次优先展示 */
 export const POLISH_FALLBACK_POSITION_KEYWORDS = ['机抛', '抛光']
 
-/**
- * 添加员工弹窗：喷涂与组装车间共用的岗位筛选（按钮文案与岗位包含匹配用的关键字，可多关键字 OR）
- */
-export const ADD_EMPLOYEE_MODAL_FILTERS_SPRAY_ASSEMBLY_SHARED = [
-  { label: '喷涂', keywords: ['喷涂'] },
-  { label: '去油', keywords: ['去油'] },
-  { label: '超声波', keywords: ['超声波'] },
-  { label: '喷砂', keywords: ['喷砂'] },
-  { label: '点焊', keywords: ['点焊', '电焊'] },
-  { label: '组装', keywords: ['组装'] }
-]
-
-/**
- * 添加员工弹窗：抛光车间独立配置（后续可与喷涂/组装分叉，不必改组件）
- */
-export const ADD_EMPLOYEE_MODAL_FILTERS_POLISH_WORKSHOP = [
-  ...ADD_EMPLOYEE_MODAL_FILTERS_SPRAY_ASSEMBLY_SHARED
-]
-
-/**
- * @param {string} workshop 弹窗当前所选车间（与 AddWorkerRadiobox 的 workshop 一致）
- * @returns {Array<{ label: string, keywords: string[] }>}
- */
-export function getAddEmployeeModalPositionFilters(workshop) {
-  const w = String(workshop || '').trim()
-  if (w === '喷涂车间' || w === '组装车间') {
-    return [...ADD_EMPLOYEE_MODAL_FILTERS_SPRAY_ASSEMBLY_SHARED]
-  }
-  if (w === '抛光车间') {
-    return [...ADD_EMPLOYEE_MODAL_FILTERS_POLISH_WORKSHOP]
-  }
-  return []
-}
-
-/**
- * 岗位字符串是否命中该筛选项（任一 keyword 包含即算命中）
- */
-export function employeePositionMatchesFilter(positionText, filterItem) {
-  if (!filterItem?.keywords?.length) return true
-  const pos = String(positionText || '')
-  return filterItem.keywords.some((kw) => pos.includes(String(kw)))
-}

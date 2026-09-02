@@ -265,8 +265,8 @@ const loadEmployeesForAdd = async () => {
 	try {
 		const currentDate = getCurrentDate()
 		const workshop = modalWorkshop.value || workshopForFilter(timeWorkForm.value.workshop)
-		// 喷涂车间时同时获取喷涂+组装车间的员工
-		const workshopList = workshop === '喷涂车间' ? ['喷涂车间', '组装车间'] : [workshop]
+		// 只查所选车间员工，不再扩展喷涂+组装
+		const workshopList = [workshop]
 		const allRows = []
 
 		for (const ws of workshopList) {

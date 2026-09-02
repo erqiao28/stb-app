@@ -4,7 +4,7 @@
         <view class="modal-header">
           <text class="modal-title">{{ title }}</text>
         </view>
-        <view class="modal-toolbar-row" :class="{ 'modal-toolbar-row--no-filters': !showPositionFilterBar && !showEmployeeTypeSwitch }">
+        <view class="modal-toolbar-row">
           <view class="modal-workshop-selector">
             <text class="workshop-label">车间：</text>
             <picker mode="selector" :range="workshopOptions" :value="workshopIndex" @change="onWorkshopChange">
@@ -12,6 +12,17 @@
                 {{ workshop || '请选择车间' }}
               </view>
             </picker>
+          </view>
+          <!-- 员工姓名模糊筛选（与车间同一行） -->
+          <view class="employee-search-box">
+            <input
+              v-model="searchKeyword"
+              class="employee-search-input"
+              type="text"
+              placeholder="输入员工姓名筛选"
+              placeholder-class="employee-search-placeholder"
+              confirm-type="search"
+            />
           </view>
           <view v-if="showEmployeeTypeSwitch" class="employee-type-switch">
             <view
@@ -25,28 +36,6 @@
               @click="onEmployeeTypeSwitch('temp')"
             >临</view>
           </view>
-          <view v-if="showPositionFilterBar" class="position-filter-bar">
-            <scroll-view scroll-x class="position-filter-scroll" :show-scrollbar="false">
-              <view class="position-filter-chips">
-                <view
-                  class="filter-chip"
-                  :class="{ 'filter-chip--active': activePositionFilterLabel === null }"
-                  @click="setPositionFilter(null)"
-                >
-                  全部
-                </view>
-                <view
-                  v-for="btn in positionFilterButtons"
-                  :key="btn.label"
-                  class="filter-chip"
-                  :class="{ 'filter-chip--active': activePositionFilterLabel === btn.label }"
-                  @click="setPositionFilter(btn.label)"
-                >
-                  {{ btn.label }}
-                </view>
-              </view>
-            </scroll-view>
-          </view>
         </view>
         <view class="modal-body">
           <view class="employee-table-header">
@@ -58,74 +47,19 @@
           </view>
           <view class="checkbox-group">
             <checkbox-group @change="onCheckboxChange">
-              <template v-if="partitionedEmployeeOptions.showSections">
-                <view v-if="partitionedEmployeeOptions.priority.length" class="employee-section-label">
-                  优先匹配（工序与岗位）
+              <label v-for="option in filteredEmployeeOptions" :key="option.value" class="checkbox-label">
+                <view class="col-checkbox">
+                  <checkbox :value="option.value" :checked="isChecked(option.value)" />
                 </view>
-                <label
-                  v-for="option in partitionedEmployeeOptions.priority"
-                  :key="'p-' + option.value"
-                  class="checkbox-label"
-                >
-                  <view class="col-checkbox">
-                    <checkbox :value="option.value" :checked="isChecked(option.value)" />
-                  </view>
-                  <view class="col-name">{{ option.label }}</view>
-                  <view class="col-position">{{ option.position || '-' }}</view>
-                  <view class="col-hours">{{ option.totalHours || 0 }} 时</view>
-                  <view class="col-hours">{{ option.unrecordedHours || 0 }} 时</view>
-                </label>
-                <view v-if="partitionedEmployeeOptions.fallback.length" class="employee-section-label">
-                  次优先（机抛、抛光）
-                </view>
-                <label
-                  v-for="option in partitionedEmployeeOptions.fallback"
-                  :key="'f-' + option.value"
-                  class="checkbox-label"
-                >
-                  <view class="col-checkbox">
-                    <checkbox :value="option.value" :checked="isChecked(option.value)" />
-                  </view>
-                  <view class="col-name">{{ option.label }}</view>
-                  <view class="col-position">{{ option.position || '-' }}</view>
-                  <view class="col-hours">{{ option.totalHours || 0 }} 时</view>
-                  <view class="col-hours">{{ option.unrecordedHours || 0 }} 时</view>
-                </label>
-                <view
-                  v-if="
-                    partitionedEmployeeOptions.rest.length &&
-                    (partitionedEmployeeOptions.priority.length || partitionedEmployeeOptions.fallback.length)
-                  "
-                  class="employee-section-label"
-                >
-                  其他员工
-                </view>
-                <label
-                  v-for="option in partitionedEmployeeOptions.rest"
-                  :key="'r-' + option.value"
-                  class="checkbox-label"
-                >
-                  <view class="col-checkbox">
-                    <checkbox :value="option.value" :checked="isChecked(option.value)" />
-                  </view>
-                  <view class="col-name">{{ option.label }}</view>
-                  <view class="col-position">{{ option.position || '-' }}</view>
-                  <view class="col-hours">{{ option.totalHours || 0 }} 时</view>
-                  <view class="col-hours">{{ option.unrecordedHours || 0 }} 时</view>
-                </label>
-              </template>
-              <template v-else>
-                <label v-for="option in optionsAfterPositionFilter" :key="option.value" class="checkbox-label">
-                  <view class="col-checkbox">
-                    <checkbox :value="option.value" :checked="isChecked(option.value)" />
-                  </view>
-                  <view class="col-name">{{ option.label }}</view>
-                  <view class="col-position">{{ option.position || '-' }}</view>
-                  <view class="col-hours">{{ option.totalHours || 0 }} 时</view>
-                  <view class="col-hours">{{ option.unrecordedHours || 0 }} 时</view>
-                </label>
-              </template>
+                <view class="col-name">{{ option.label }}</view>
+                <view class="col-position">{{ option.position || '-' }}</view>
+                <view class="col-hours">{{ option.totalHours || 0 }} 时</view>
+                <view class="col-hours">{{ option.unrecordedHours || 0 }} 时</view>
+              </label>
             </checkbox-group>
+            <view v-if="filteredEmployeeOptions.length === 0" class="employee-search-empty">
+              无匹配的员工
+            </view>
           </view>
         </view>
         <view class="modal-footer">
@@ -138,12 +72,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, nextTick } from 'vue'
-import {
-  pickAutoSelectEmployeeIds,
-  getAddEmployeeModalPositionFilters,
-  employeePositionMatchesFilter
-} from '../../utils/employeePositionMatch'
+import { ref, watch, computed } from 'vue'
 
 const props = defineProps({
   modelValue: {
@@ -174,21 +103,6 @@ const props = defineProps({
   maxSelection: {
     type: Number,
     default: 0
-  },
-  /** 岗位匹配关键字（岗位字段包含即视为匹配），用于排序靠前与自动勾选 */
-  positionPriorityKeywords: {
-    type: Array,
-    default: () => []
-  },
-  /** 次优先关键字（未命中主关键字时，岗位包含则排在「其他」之前），如抛光车间机抛/抛光 */
-  positionFallbackKeywords: {
-    type: Array,
-    default: () => []
-  },
-  /** 打开弹窗时自动勾选岗位匹配的员工（受 maxSelection 限制） */
-  autoSelectMatching: {
-    type: Boolean,
-    default: false
   },
   /** 是否显示员工类型切换按钮（普/临） */
   showEmployeeTypeSwitch: {
@@ -235,104 +149,28 @@ const processedOptions = computed(() => {
   return []
 })
 
-/** 当前车间在「添加员工」弹窗中是否展示岗位筛选条 */
-const positionFilterButtons = computed(() => getAddEmployeeModalPositionFilters(props.workshop))
-const showPositionFilterBar = computed(() => positionFilterButtons.value.length > 0)
-
-/** 选中的筛选按钮 label，null 表示全部 */
-const activePositionFilterLabel = ref(null)
-
-const setPositionFilter = (label) => {
-  activePositionFilterLabel.value = label
-}
-
-const optionsAfterPositionFilter = computed(() => {
-  const opts = processedOptions.value
-  const label = activePositionFilterLabel.value
-  if (label == null) return opts
-  const cfg = positionFilterButtons.value.find((b) => b.label === label)
-  if (!cfg) return opts
-  return opts.filter((o) => employeePositionMatchesFilter(o.position, cfg))
-})
-
-const positionMatchKeywords = computed(() =>
-  (props.positionPriorityKeywords || []).filter((k) => k != null && String(k).trim() !== '')
-)
-
-const positionFallbackMatchKeywords = computed(() =>
-  (props.positionFallbackKeywords || []).filter((k) => k != null && String(k).trim() !== '')
-)
-
-const optionMatchesPriority = (opt) => {
-  const kws = positionMatchKeywords.value
-  if (!kws.length) return false
-  const pos = String(opt.position || '')
-  return kws.some((kw) => pos.includes(String(kw)))
-}
-
-const optionMatchesFallbackOnly = (opt) => {
-  if (optionMatchesPriority(opt)) return false
-  const kws = positionFallbackMatchKeywords.value
-  if (!kws.length) return false
-  const pos = String(opt.position || '')
-  return kws.some((kw) => pos.includes(String(kw)))
-}
-
-/** 主匹配 → 次优先匹配 → 其余 */
-const partitionedEmployeeOptions = computed(() => {
-  const opts = optionsAfterPositionFilter.value
-  const primaryKws = positionMatchKeywords.value
-  const fbKws = positionFallbackMatchKeywords.value
-  if (!primaryKws.length && !fbKws.length) {
-    return { priority: [], fallback: [], rest: opts, showSections: false }
-  }
-  const priority = []
-  const fallback = []
-  const rest = []
-  for (const o of opts) {
-    if (optionMatchesPriority(o)) priority.push(o)
-    else if (optionMatchesFallbackOnly(o)) fallback.push(o)
-    else rest.push(o)
-  }
-  return {
-    priority,
-    fallback,
-    rest,
-    showSections: primaryKws.length > 0 || fbKws.length > 0
-  }
-})
-
 const internalModel = ref(Array.isArray(props.modelValue) ? [...props.modelValue] : [])
 let isClosing = false  // 标记是否正在关闭
 
-watch(
-  () => props.visible,
-  async (val) => {
-    if (val) {
-      isClosing = false
-      activePositionFilterLabel.value = null
-      await nextTick()
-      if (
-        props.autoSelectMatching &&
-        positionMatchKeywords.value.length &&
-        processedOptions.value.length
-      ) {
-        internalModel.value = pickAutoSelectEmployeeIds(
-          processedOptions.value,
-          positionMatchKeywords.value,
-          props.maxSelection
-        ).map((id) => normalizeId(id))
-      } else {
-        internalModel.value = Array.isArray(props.modelValue) ? [...props.modelValue] : []
-      }
-    }
-  }
-)
+// 员工姓名模糊筛选关键词（打开弹窗时清空）
+const searchKeyword = ref('')
+
+/** 按姓名模糊筛选后的员工列表（保留原顺序） */
+const filteredEmployeeOptions = computed(() => {
+  const kw = String(searchKeyword.value || '').trim()
+  const opts = processedOptions.value
+  if (!kw) return opts
+  return opts.filter(opt => String(opt.label || '').includes(kw))
+})
 
 watch(
-  () => props.workshop,
-  () => {
-    activePositionFilterLabel.value = null
+  () => props.visible,
+  (val) => {
+    if (val) {
+      isClosing = false
+      searchKeyword.value = ''
+      internalModel.value = Array.isArray(props.modelValue) ? [...props.modelValue] : []
+    }
   }
 )
 
@@ -445,18 +283,6 @@ const onCheckboxChange = (e) => {
   flex-shrink: 0;
   background: #fafafa;
   box-sizing: border-box;
-  &.modal-toolbar-row--no-filters {
-    .modal-workshop-selector {
-      max-width: none;
-      flex: 1;
-      min-width: 0;
-    }
-
-    .workshop-value {
-      max-width: none;
-      flex: 1;
-    }
-  }
 }
 
 .modal-workshop-selector {
@@ -510,48 +336,6 @@ const onCheckboxChange = (e) => {
   }
 }
 
-.position-filter-bar {
-  flex: 1;
-  min-width: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-
-  .position-filter-scroll {
-    width: 100%;
-    white-space: nowrap;
-  }
-
-  .position-filter-chips {
-    display: inline-flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: px2vw(12px);
-    padding: px2vw(4px) 0;
-  }
-
-  .filter-chip {
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: px2vw(10px) px2vw(22px);
-    font-size: px2vw(28px);
-    color: #444;
-    background: #fff;
-    border: px2vw(2px) solid #ddd;
-    border-radius: px2vw(24px);
-    box-sizing: border-box;
-
-    &.filter-chip--active {
-      color: #fff;
-      background: #5884f1;
-      border-color: #5884f1;
-    }
-  }
-}
-
 .modal-body {
   flex: 1;
   padding: px2vw(20px) px2vw(20px) px2vw(100px) px2vw(20px);
@@ -560,6 +344,37 @@ const onCheckboxChange = (e) => {
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
+}
+
+/* 员工姓名模糊筛选框（与车间选择同一行） */
+.employee-search-box {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.employee-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: px2vw(52px);
+  font-size: px2vw(28px);
+  color: #333;
+  padding: 0 px2vw(20px);
+  background: #fff;
+  border: px2vw(1px) solid #e5e5e5;
+  border-radius: px2vw(10px);
+}
+
+.employee-search-placeholder {
+  color: #999;
+}
+
+.employee-search-empty {
+  padding: px2vw(60px) 0;
+  text-align: center;
+  font-size: px2vw(28px);
+  color: #999;
 }
 
 .employee-table-header {
@@ -608,16 +423,6 @@ const onCheckboxChange = (e) => {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
-}
-
-.employee-section-label {
-  padding: px2vw(12px) px2vw(15px) px2vw(8px);
-  font-size: px2vw(26px);
-  color: #5884f1;
-  font-weight: bold;
-  background: #f0f5ff;
-  border-bottom: px2vw(1px) solid #e0e8ff;
-  flex-shrink: 0;
 }
 
 .checkbox-label {

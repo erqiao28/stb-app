@@ -4736,7 +4736,7 @@ const loadWorkshopEmployees = async () => {
 	}
 }
 
-// 员工选择框专用：喷涂车间时同时查喷涂+组装
+// 员工选择框专用：只查所选车间员工
 const loadWorkshopEmployeesForSelector = async () => {
 	try {
 		const t0 = Date.now()
