@@ -1538,15 +1538,10 @@ const goBack = () => {
 	})
 }
 
-const goToProcessConfig = () => {
-	uni.navigateTo({
-		url: '/pages/processConfig/processConfig'
-	})
-}
-
-const handleHeaderRefresh = async () => {
+// 刷新产品列表并为选中的产品重新加载工序（工艺配置等操作会修改工序数据，需清空缓存）
+const refreshProductsAndProcesses = async (showToast = false) => {
 	closeAllPanels()
-	// 清空已加载的工序，刷新后要为仍选中的产品重新拉取
+	// 清空已加载的工序缓存，确保能重新拉取最新工序数据
 	processList.value = []
 	loadedProductIds.value = []
 	await handleSearch()
@@ -1557,7 +1552,19 @@ const handleHeaderRefresh = async () => {
 			await loadProductProcesses(product)
 		}
 	}
-	uni.showToast({ title: '刷新成功', icon: 'success' })
+	if (showToast) {
+		uni.showToast({ title: '刷新成功', icon: 'success' })
+	}
+}
+
+const goToProcessConfig = () => {
+	uni.navigateTo({
+		url: '/pages/processConfig/processConfig'
+	})
+}
+
+const handleHeaderRefresh = async () => {
+	await refreshProductsAndProcesses(true)
 }
 
 const formatFieldValue = (v) => {
@@ -2137,18 +2144,20 @@ const confirmMultiSelectedProducts = async () => {
 		uni.showToast({ title: '请先选择产品', icon: 'none' })
 		return
 	}
-	// 收集选中的产品 rowid
+	// 收集选中的产品 rowid 与生产编号（一个产品可能对应多条预派工记录，轮询判断需以生产编号为准）
 	const selectedRowids = []
+	const selectedCodes = []
 	addProductList.value.forEach(group => {
 		group.products.forEach(product => {
 			if (multiSelectProductKeys.value.includes(product.productionCode)) {
 				selectedRowids.push(product.rowid)
+				selectedCodes.push(product.productionCode)
 			}
 		})
 	})
 	showAddProductModal.value = false
 	// 调用添加产品逻辑
-	await addProductsByRowids(selectedRowids)
+	await addProductsByRowids(selectedRowids, selectedCodes)
 }
 
 // 关闭添加产品弹窗
@@ -2498,7 +2507,7 @@ const confirmSelectedProducts = async () => {
 		})
 
 		// 添加成功后轮询等待新产品数据写入完成再刷新渲染
-		uni.showLoading({ title: '添加产品中...', mask: true })
+		// 复用上方"添加中..."的 loading，不再重复 showLoading（App 端 show/hide 计数式配对，多 show 一次会导致转圈无法关闭）
 		const MAX_RETRY = 20
 		const INTERVAL = 500
 		let found = false
@@ -2538,16 +2547,15 @@ const confirmSelectedProducts = async () => {
 }
 
 // 根据 rowid 数组添加产品到预派工
-const addProductsByRowids = async (rowids) => {
+// rowids：选中的预派工记录 rowid；productionCodes：选中的生产编号（用于轮询判断产品是否已写入）
+const addProductsByRowids = async (rowids, productionCodes = []) => {
 	if (rowids.length === 0) return
 
 	uni.showLoading({ title: '添加中...', mask: true })
 
 	try {
-		// 记录初始产品数量
-		const initialProductCount = productList.value.length
-		// 期望的产品数量 = 初始数量 + 选中数量
-		const expectedProductCount = initialProductCount + rowids.length
+		// 以生产编号为准判断产品是否已出现在列表（一个产品可能对应多条预派工记录，不能用记录数估算产品数）
+		const expectedCodes = [...new Set(productionCodes.filter(Boolean))]
 
 		// 调用添加接口，传递 rowid 数组
 		await http.post(PRE_DISPATCH_PRODUCT_ADD_URL, {
@@ -2565,7 +2573,11 @@ const addProductsByRowids = async (rowids) => {
 
 		for (let i = 0; i < maxRetry; i++) {
 			await loadProducts(true, true)
-			if (productList.value.length >= expectedProductCount) {
+			// 所有选中的生产编号都已出现在产品列表中，判定添加完成
+			const nowAllExist = expectedCodes.length > 0
+				? expectedCodes.every(code => productList.value.some(p => p.productionCode === code))
+				: productList.value.length > 0
+			if (nowAllExist) {
 				found = true
 				break
 			}
@@ -2645,7 +2657,7 @@ const addProductsByCodes = async (products) => {
 		})
 
 		// 添加成功后轮询等待新产品数据写入完成再刷新渲染
-		uni.showLoading({ title: '添加产品中...', mask: true })
+		// 复用上方"添加中..."的 loading，不再重复 showLoading（App 端 show/hide 计数式配对，多 show 一次会导致转圈无法关闭）
 		const MAX_RETRY = 20
 		const INTERVAL = 500
 		let found = false
@@ -2772,7 +2784,8 @@ const operatePreDispatch = async (mode, count) => {
 		let currentCount = 0
 
 		for (let i = 0; i < maxRetry; i++) {
-			await loadProducts(true)
+			// forceSilent=true：避免内层请求再次 showLoading 干扰外层"处理中..."的 loading
+			await loadProducts(true, true)
 			currentCount = getTotalPreDispatchCount()
 			// 延后/移除都会使对应预派工从当前"未派工"列表消失，按预派工条数验证
 			if (currentCount === expectedPreDispatchCount) {
@@ -3147,7 +3160,7 @@ const doConfirmDispatch = async () => {
 }
 
 const handleRefresh = () => {
-	handleSearch()
+	refreshProductsAndProcesses(false)
 }
 
 const loadProducts = async (reset = true, forceSilent = false) => {
@@ -5528,7 +5541,8 @@ const refreshPage = async () => {
 // 从其他页面返回时，若字典已加载则只刷新产品和员工，避免重复拉字典
 const refreshPageOnShow = async () => {
 	if (processDictMap.value.size > 0 && productList.value.length > 0) {
-		await handleSearch()
+		// 工艺配置等操作可能修改工序数据，返回后需清空工序缓存并重新加载选中产品的工序
+		await refreshProductsAndProcesses(false)
 	} else {
 		await refreshPage()
 	}
