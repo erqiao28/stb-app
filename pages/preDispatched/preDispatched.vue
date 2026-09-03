@@ -948,6 +948,10 @@ const todayDate = ref(getTodayDate())
 const productList = ref([])
 const loadingProducts = ref(false)
 
+// 操作后轮询刷新统一配置：先立即查询，未命中按 500ms 间隔轮询，最多 10 次（共 5 秒），超时走兜底刷新（有手动刷新按钮）
+const POLL_INTERVAL = 500
+const POLL_MAX_RETRIES = 10
+
 const selectedProductIds = ref([])
 const syncSelectEnabled = ref(false) // 同组产品同步勾选开关
 const SYNC_SELECT_ENABLED_STORAGE_KEY = 'preDispatched_syncSelectEnabled'
@@ -2508,11 +2512,9 @@ const confirmSelectedProducts = async () => {
 
 		// 添加成功后轮询等待新产品数据写入完成再刷新渲染
 		// 复用上方"添加中..."的 loading，不再重复 showLoading（App 端 show/hide 计数式配对，多 show 一次会导致转圈无法关闭）
-		const MAX_RETRY = 20
-		const INTERVAL = 500
 		let found = false
 
-		for (let i = 0; i < MAX_RETRY; i++) {
+		for (let i = 0; i < POLL_MAX_RETRIES; i++) {
 			await loadProducts(true, true)
 			const nowExists = selectedProductionCode
 				? productList.value.some(p => p.productionCode === selectedProductionCode)
@@ -2521,8 +2523,8 @@ const confirmSelectedProducts = async () => {
 				found = true
 				break
 			}
-			if (i < MAX_RETRY - 1) {
-				await new Promise(resolve => setTimeout(resolve, INTERVAL))
+			if (i < POLL_MAX_RETRIES - 1) {
+				await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL))
 			}
 		}
 
@@ -2658,18 +2660,16 @@ const addProductsByCodes = async (products) => {
 
 		// 添加成功后轮询等待新产品数据写入完成再刷新渲染
 		// 复用上方"添加中..."的 loading，不再重复 showLoading（App 端 show/hide 计数式配对，多 show 一次会导致转圈无法关闭）
-		const MAX_RETRY = 20
-		const INTERVAL = 500
 		let found = false
 
-		for (let i = 0; i < MAX_RETRY; i++) {
+		for (let i = 0; i < POLL_MAX_RETRIES; i++) {
 			await loadProducts(true, true)
 			if (productList.value.length > initialProductCount) {
 				found = true
 				break
 			}
-			if (i < MAX_RETRY - 1) {
-				await new Promise(resolve => setTimeout(resolve, INTERVAL))
+			if (i < POLL_MAX_RETRIES - 1) {
+				await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL))
 			}
 		}
 
@@ -2802,6 +2802,18 @@ const operatePreDispatch = async (mode, count) => {
 		if (!found) {
 			console.warn('操作预派工后轮询未匹配到预期预派工数量，当前:', currentCount, '预期:', expectedPreDispatchCount)
 		}
+
+		// 操作后（延后/移除）选中产品的预派工已变化，立即重载这些产品的工序列表并清理失效勾选
+		for (const id of selectedProductIds.value) {
+			const product = productList.value.find((p) => p.uniqueKey === id)
+			if (product) {
+				loadedProductIds.value = loadedProductIds.value.filter(pid => pid !== id)
+				processList.value = processList.value.filter(p => p.productRowid !== id)
+				await loadProductProcesses(product)
+			}
+		}
+		const validProcessRowids = new Set(processList.value.map(p => p.rowid))
+		selectedProcessIds.value = selectedProcessIds.value.filter(rowid => validProcessRowids.has(rowid))
 
 		// 刷新数据
 		loadEmployeeDispatchSummary()
@@ -3145,8 +3157,13 @@ const doConfirmDispatch = async () => {
 		}
 
 		uni.hideLoading()
-		// 无论是否轮询到，都执行刷新确保数据最新
-		handleSearch()
+		// 无论是否轮询到，都用静默刷新确保数据最新（与轮询期间保持一致，避免结尾突然弹 loading 闪烁）
+		await loadProducts(true, true)
+		loadEmployeeDispatchSummary()
+		loadWorkshopEmployees()
+		// 清理已失效的工序勾选：产品列表刷新后，勾选状态里残留的工序 rowid 可能已不存在，避免影响后续操作判定
+		const validProcessRowids = new Set(processList.value.map(p => p.rowid))
+		selectedProcessIds.value = selectedProcessIds.value.filter(rowid => validProcessRowids.has(rowid))
 		if (!found) {
 			console.warn('确认派工后轮询未匹配到预期数量，当前:', currentCount, '预期:', expectedPreDispatchCount)
 		}
@@ -3578,25 +3595,33 @@ const filterFirstPreDispatchPerProcess = (preDispatchRows) => {
 /**
  * 轮询等待已勾选的工序都关联上预派工及当日工资记录。
  * 当所有 checkedProcessRowids 都能查到 employeeNames 时返回 true，否则超时后返回 false。
+ * 先立即查询一次，未命中按 POLL_INTERVAL 轮询，最多 POLL_MAX_RETRIES 次（共 5 秒）。
  */
-const waitForPreDispatchDailyWage = async (product, checkedProcessRowids, targetDispatchCount, maxRetries = 15, interval = 1000) => {
+const waitForPreDispatchDailyWage = async (product, checkedProcessRowids, targetDispatchCount) => {
 	if (!checkedProcessRowids || checkedProcessRowids.length === 0) return true
-	for (let i = 0; i < maxRetries; i++) {
-		await new Promise(resolve => setTimeout(resolve, interval))
-		const associatedMap = await loadAssociatedProcessDetails(product)
-		const allReady = checkedProcessRowids.every(rowid => {
-			const info = associatedMap.get(rowid)
-			if (!info) return false
-			// 员工为空时按原逻辑等待员工匹配完成
-			if (!info.employeeNames || info.employeeNames.length === 0) return false
-			// 员工已存在时，还要等待派工数量更新到提交值
-			if (targetDispatchCount !== undefined) {
-				return parseFloat(info.dispatchCount) === parseFloat(targetDispatchCount)
+	for (let i = 0; i < POLL_MAX_RETRIES; i++) {
+		// 单轮查询失败不中断轮询，仅记日志，等待下一轮
+		try {
+			const associatedMap = await loadAssociatedProcessDetails(product)
+			const allReady = checkedProcessRowids.every(rowid => {
+				const info = associatedMap.get(rowid)
+				if (!info) return false
+				// 员工为空时按原逻辑等待员工匹配完成
+				if (!info.employeeNames || info.employeeNames.length === 0) return false
+				// 员工已存在时，还要等待派工数量更新到提交值
+				if (targetDispatchCount !== undefined) {
+					return parseFloat(info.dispatchCount) === parseFloat(targetDispatchCount)
+				}
+				return true
+			})
+			if (allReady) {
+				return true
 			}
-			return true
-		})
-		if (allReady) {
-			return true
+		} catch (e) {
+			console.warn('等待派工工资数据到位查询失败（第' + (i + 1) + '轮）:', e)
+		}
+		if (i < POLL_MAX_RETRIES - 1) {
+			await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL))
 		}
 	}
 	return false
@@ -3605,33 +3630,45 @@ const waitForPreDispatchDailyWage = async (product, checkedProcessRowids, target
 /**
  * 轮询等待单个预派工记录的员工信息更新完成。
  * 通过比对 dailyWage 中的员工 ID 与目标员工 ID 是否一致来判断是否更新完成。
+ * 先立即查询一次，未命中按 POLL_INTERVAL 轮询，最多 POLL_MAX_RETRIES 次（共 5 秒）。
  */
-const waitForPreDispatchEmployeeUpdate = async (preDispatchRowid, targetEmployeeIds, maxRetries = 15, interval = 1000) => {
-	for (let i = 0; i < maxRetries; i++) {
-		await new Promise(resolve => setTimeout(resolve, interval))
-		// 查询该预派工记录
-		const res = await callWorkflowListAll({
-			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
-			filters: [{
-				controlId: 'rowid',
-				dataType: 30,
-				spliceType: 1,
-				filterType: 1,
-				values: [preDispatchRowid]
-			}],
-			silent: true
-		}, 10)
-		const rows = Array.isArray(res?.data) ? res.data : []
-		const row = rows.find(item => item.rowid === preDispatchRowid)
-		if (!row) continue
-		// 获取 dailyWage 关联的员工 ID
-		const sids = extractRelationSids(row[PRE_DISPATCH_FIELD_MAP.dailyWage])
-		// 比对员工 ID 是否一致
-		const targetSet = new Set(targetEmployeeIds)
-		const sidSet = new Set(sids)
-		const isMatch = targetSet.size === sidSet.size && [...targetSet].every(id => sidSet.has(id))
-		if (isMatch) {
-			return true
+const waitForPreDispatchEmployeeUpdate = async (preDispatchRowid, targetEmployeeIds) => {
+	for (let i = 0; i < POLL_MAX_RETRIES; i++) {
+		// 单轮查询失败不中断轮询，仅记日志，等待下一轮
+		try {
+			const res = await callWorkflowListAll({
+				worksheetId: PRE_DISPATCH_WORKSHEET_ID,
+				filters: [{
+					controlId: 'rowid',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 1,
+					values: [preDispatchRowid]
+				}],
+				silent: true
+			}, 10)
+			const rows = Array.isArray(res?.data) ? res.data : []
+			const row = rows.find(item => item.rowid === preDispatchRowid)
+			if (!row) {
+				if (i < POLL_MAX_RETRIES - 1) {
+					await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL))
+				}
+				continue
+			}
+			// 获取 dailyWage 关联的员工 ID
+			const sids = extractRelationSids(row[PRE_DISPATCH_FIELD_MAP.dailyWage])
+			// 比对员工 ID 是否一致
+			const targetSet = new Set(targetEmployeeIds)
+			const sidSet = new Set(sids)
+			const isMatch = targetSet.size === sidSet.size && [...targetSet].every(id => sidSet.has(id))
+			if (isMatch) {
+				return true
+			}
+		} catch (e) {
+			console.warn('等待员工信息更新查询失败（第' + (i + 1) + '轮）:', e)
+		}
+		if (i < POLL_MAX_RETRIES - 1) {
+			await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL))
 		}
 	}
 	return false
@@ -3640,23 +3677,31 @@ const waitForPreDispatchEmployeeUpdate = async (preDispatchRowid, targetEmployee
 /**
  * 轮询等待工序关联预派工记录完成。
  * 检查勾选的工序是否都关联了预派工（preDispatchRowid 不为空）。
+ * 先立即查询一次，未命中按 POLL_INTERVAL 轮询，最多 POLL_MAX_RETRIES 次（共 5 秒）。
  */
-const waitForPreDispatchAssociation = async (product, checkedProcessRowids, targetDispatchCount, maxRetries = 15, interval = 1000) => {
-	for (let i = 0; i < maxRetries; i++) {
-		await new Promise(resolve => setTimeout(resolve, interval))
-		const associatedMap = await loadAssociatedProcessDetails(product)
-		const allAssociated = checkedProcessRowids.every(rowid => {
-			const info = associatedMap.get(rowid)
-			// 还没绑定预派工时，先等预派工关联完成
-			if (!info || !info.preDispatchRowid || info.preDispatchRowid.length === 0) return false
-			// 已经绑定预派工后，等待派工数量更新到提交值
-			if (targetDispatchCount !== undefined) {
-				return parseFloat(info.dispatchCount) === parseFloat(targetDispatchCount)
+const waitForPreDispatchAssociation = async (product, checkedProcessRowids, targetDispatchCount) => {
+	for (let i = 0; i < POLL_MAX_RETRIES; i++) {
+		// 单轮查询失败不中断轮询，仅记日志，等待下一轮
+		try {
+			const associatedMap = await loadAssociatedProcessDetails(product)
+			const allAssociated = checkedProcessRowids.every(rowid => {
+				const info = associatedMap.get(rowid)
+				// 还没绑定预派工时，先等预派工关联完成
+				if (!info || !info.preDispatchRowid || info.preDispatchRowid.length === 0) return false
+				// 已经绑定预派工后，等待派工数量更新到提交值
+				if (targetDispatchCount !== undefined) {
+					return parseFloat(info.dispatchCount) === parseFloat(targetDispatchCount)
+				}
+				return true
+			})
+			if (allAssociated) {
+				return true
 			}
-			return true
-		})
-		if (allAssociated) {
-			return true
+		} catch (e) {
+			console.warn('等待预派工关联查询失败（第' + (i + 1) + '轮）:', e)
+		}
+		if (i < POLL_MAX_RETRIES - 1) {
+			await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL))
 		}
 	}
 	return false
@@ -4337,10 +4382,25 @@ const handleDeleteTask = (task, index) => {
 				})
 				uni.hideLoading()
 				console.log('删除任务接口返回:', result)
-				// 后端 webhook 可能异步处理，先等一会再刷新
-				await new Promise((resolve) => setTimeout(resolve, 1500))
+
+				// 后端 webhook 异步处理，轮询等待任务从产品列表消失后立即刷新（最多 5 秒）
+				const targetRowid = task.preDispatchRowid
+				let removed = false
+				for (let i = 0; i < POLL_MAX_RETRIES; i++) {
+					await loadProducts(true, true)
+					const stillExists = productList.value.some(p => (p.preDispatchRowids || []).includes(targetRowid))
+					if (!stillExists) {
+						removed = true
+						break
+					}
+					if (i < POLL_MAX_RETRIES - 1) {
+						await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL))
+					}
+				}
+				if (!removed) {
+					console.warn('删除任务后轮询未检测到任务移除，仍执行一次刷新兜底')
+				}
 				console.log('开始刷新产品列表和员工列表')
-				await loadProducts(true)
 				await loadWorkshopEmployees()
 				console.log('刷新完成')
 				if (result && result.status === 1) {
@@ -4431,8 +4491,6 @@ const closeProcessActionModal = () => {
  */
 const waitForProcessUpdate = async (product, options = {}) => {
 	const { expectedCount, checkFunc } = options
-	const maxAttempts = 30 // 最多轮询30次
-	const intervalMs = 500 // 每500ms轮询一次
 	const productRowid = product?.uniqueKey || ''
 
 	// 获取当前工序快照
@@ -4445,26 +4503,31 @@ const waitForProcessUpdate = async (product, options = {}) => {
 	const initialSnapshot = getSnapshot()
 	const initialCount = initialSnapshot.length
 
-	// 开始轮询
-	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-		await new Promise(resolve => setTimeout(resolve, intervalMs))
+	// 开始轮询：先立即查询一次，未命中按 POLL_INTERVAL 轮询，最多 POLL_MAX_RETRIES 次（共 5 秒）
+	for (let attempt = 1; attempt <= POLL_MAX_RETRIES; attempt++) {
+		// 重新获取工序数据（先清除缓存再加载）；单轮失败不中断轮询，仅记日志
+		try {
+			loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
+			processList.value = processList.value.filter(p => p.productRowid !== productRowid)
+			await loadProductProcesses(product)
 
-		// 重新获取工序数据（先清除缓存再加载）
-		loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
-		processList.value = processList.value.filter(p => p.productRowid !== productRowid)
-		await loadProductProcesses(product)
+			const currentSnapshot = getSnapshot()
+			const currentCount = currentSnapshot.length
 
-		const currentSnapshot = getSnapshot()
-		const currentCount = currentSnapshot.length
+			// 检查数量变化
+			const countChanged = expectedCount !== undefined && (currentCount - initialCount) === expectedCount
 
-		// 检查数量变化
-		const countChanged = expectedCount !== undefined && (currentCount - initialCount) === expectedCount
+			// 自定义检查函数
+			const customChanged = checkFunc ? checkFunc(currentSnapshot, initialSnapshot) : false
 
-		// 自定义检查函数
-		const customChanged = checkFunc ? checkFunc(currentSnapshot, initialSnapshot) : false
-
-		if (countChanged || customChanged) {
-			return true
+			if (countChanged || customChanged) {
+				return true
+			}
+		} catch (e) {
+			console.warn('等待工序更新查询失败（第' + attempt + '轮）:', e)
+		}
+		if (attempt < POLL_MAX_RETRIES) {
+			await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL))
 		}
 	}
 
