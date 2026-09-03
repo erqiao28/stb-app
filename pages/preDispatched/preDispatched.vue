@@ -951,6 +951,19 @@ const loadingProducts = ref(false)
 // 操作后轮询刷新统一配置：先立即查询，未命中按 500ms 间隔轮询，最多 10 次（共 5 秒），超时走兜底刷新（有手动刷新按钮）
 const POLL_INTERVAL = 500
 const POLL_MAX_RETRIES = 10
+// 轮询内单次查询硬超时（毫秒）：网络差时避免单次请求挂起时间过长，保证整体等待可控
+const POLL_QUERY_TIMEOUT = 3000
+
+/**
+ * Promise 硬超时护栏：race 目标 promise 与定时 reject，保证最多占用 ms 毫秒。
+ * 网络差/请求挂起时及时掐断等待（请求在后台失败不影响界面），避免轮询整体被拖长。
+ */
+const withTimeout = (promise, ms) => {
+	return Promise.race([
+		promise,
+		new Promise((_, reject) => setTimeout(() => reject(new Error('查询超时')), ms))
+	])
+}
 
 const selectedProductIds = ref([])
 const syncSelectEnabled = ref(false) // 同组产品同步勾选开关
@@ -2515,7 +2528,8 @@ const confirmSelectedProducts = async () => {
 		let found = false
 
 		for (let i = 0; i < POLL_MAX_RETRIES; i++) {
-			await loadProducts(true, true)
+			// 单次查询包硬超时，避免网络差时挂起过长
+			await withTimeout(loadProducts(true, true), POLL_QUERY_TIMEOUT).catch(() => {})
 			const nowExists = selectedProductionCode
 				? productList.value.some(p => p.productionCode === selectedProductionCode)
 				: productList.value.length > 0
@@ -2574,7 +2588,8 @@ const addProductsByRowids = async (rowids, productionCodes = []) => {
 		let found = false
 
 		for (let i = 0; i < maxRetry; i++) {
-			await loadProducts(true, true)
+			// 单次查询包硬超时，避免网络差时挂起过长
+			await withTimeout(loadProducts(true, true), POLL_QUERY_TIMEOUT).catch(() => {})
 			// 所有选中的生产编号都已出现在产品列表中，判定添加完成
 			const nowAllExist = expectedCodes.length > 0
 				? expectedCodes.every(code => productList.value.some(p => p.productionCode === code))
@@ -2594,7 +2609,7 @@ const addProductsByRowids = async (rowids, productionCodes = []) => {
 			uni.showToast({ title: '添加成功', icon: 'success' })
 		} else {
 			// 轮询未达到期望数量，但接口已成功调用，直接刷新一次
-			await loadProducts(true, true)
+			await withTimeout(loadProducts(true, true), POLL_QUERY_TIMEOUT).catch(() => {})
 			uni.showToast({ title: '添加成功', icon: 'success' })
 		}
 
@@ -2663,7 +2678,8 @@ const addProductsByCodes = async (products) => {
 		let found = false
 
 		for (let i = 0; i < POLL_MAX_RETRIES; i++) {
-			await loadProducts(true, true)
+			// 单次查询包硬超时，避免网络差时挂起过长
+			await withTimeout(loadProducts(true, true), POLL_QUERY_TIMEOUT).catch(() => {})
 			if (productList.value.length > initialProductCount) {
 				found = true
 				break
@@ -2784,8 +2800,8 @@ const operatePreDispatch = async (mode, count) => {
 		let currentCount = 0
 
 		for (let i = 0; i < maxRetry; i++) {
-			// forceSilent=true：避免内层请求再次 showLoading 干扰外层"处理中..."的 loading
-			await loadProducts(true, true)
+			// forceSilent=true：避免内层请求再次 showLoading 干扰外层"处理中..."的 loading；单次查询包硬超时
+			await withTimeout(loadProducts(true, true), POLL_QUERY_TIMEOUT).catch(() => {})
 			currentCount = getTotalPreDispatchCount()
 			// 延后/移除都会使对应预派工从当前"未派工"列表消失，按预派工条数验证
 			if (currentCount === expectedPreDispatchCount) {
@@ -3097,7 +3113,8 @@ const handleProcessListConfirm = async (productRowid) => {
 			const maxRetry = Math.min(BASE_RETRY + checkedProcesses.length * EXTRA_PER_ITEM, MAX_RETRY)
 			let stillInList = true
 			for (let i = 0; i < maxRetry; i++) {
-				await loadProducts(true, true)
+				// 单次查询包硬超时，避免网络差时挂起过长
+				await withTimeout(loadProducts(true, true), POLL_QUERY_TIMEOUT).catch(() => {})
 				stillInList = productList.value.some(p => p.uniqueKey === productRowid)
 				if (!stillInList) break
 				if (i < maxRetry - 1) {
@@ -3142,7 +3159,8 @@ const doConfirmDispatch = async () => {
 		let currentCount = 0
 
 		for (let i = 0; i < maxRetry; i++) {
-			await loadProducts(true, true)
+			// 单次查询包硬超时，避免网络差时挂起过长
+			await withTimeout(loadProducts(true, true), POLL_QUERY_TIMEOUT).catch(() => {})
 			currentCount = productList.value.reduce(
 				(sum, item) => sum + (item.preDispatchRowids?.length || 0),
 				0
@@ -3158,7 +3176,7 @@ const doConfirmDispatch = async () => {
 
 		uni.hideLoading()
 		// 无论是否轮询到，都用静默刷新确保数据最新（与轮询期间保持一致，避免结尾突然弹 loading 闪烁）
-		await loadProducts(true, true)
+		await withTimeout(loadProducts(true, true), POLL_QUERY_TIMEOUT).catch(() => {})
 		loadEmployeeDispatchSummary()
 		loadWorkshopEmployees()
 		// 清理已失效的工序勾选：产品列表刷新后，勾选状态里残留的工序 rowid 可能已不存在，避免影响后续操作判定
@@ -3602,7 +3620,7 @@ const waitForPreDispatchDailyWage = async (product, checkedProcessRowids, target
 	for (let i = 0; i < POLL_MAX_RETRIES; i++) {
 		// 单轮查询失败不中断轮询，仅记日志，等待下一轮
 		try {
-			const associatedMap = await loadAssociatedProcessDetails(product)
+			const associatedMap = await withTimeout(loadAssociatedProcessDetails(product), POLL_QUERY_TIMEOUT)
 			const allReady = checkedProcessRowids.every(rowid => {
 				const info = associatedMap.get(rowid)
 				if (!info) return false
@@ -3636,7 +3654,7 @@ const waitForPreDispatchEmployeeUpdate = async (preDispatchRowid, targetEmployee
 	for (let i = 0; i < POLL_MAX_RETRIES; i++) {
 		// 单轮查询失败不中断轮询，仅记日志，等待下一轮
 		try {
-			const res = await callWorkflowListAll({
+			const res = await withTimeout(callWorkflowListAll({
 				worksheetId: PRE_DISPATCH_WORKSHEET_ID,
 				filters: [{
 					controlId: 'rowid',
@@ -3646,7 +3664,7 @@ const waitForPreDispatchEmployeeUpdate = async (preDispatchRowid, targetEmployee
 					values: [preDispatchRowid]
 				}],
 				silent: true
-			}, 10)
+			}, 10), POLL_QUERY_TIMEOUT)
 			const rows = Array.isArray(res?.data) ? res.data : []
 			const row = rows.find(item => item.rowid === preDispatchRowid)
 			if (!row) {
@@ -3683,7 +3701,7 @@ const waitForPreDispatchAssociation = async (product, checkedProcessRowids, targ
 	for (let i = 0; i < POLL_MAX_RETRIES; i++) {
 		// 单轮查询失败不中断轮询，仅记日志，等待下一轮
 		try {
-			const associatedMap = await loadAssociatedProcessDetails(product)
+			const associatedMap = await withTimeout(loadAssociatedProcessDetails(product), POLL_QUERY_TIMEOUT)
 			const allAssociated = checkedProcessRowids.every(rowid => {
 				const info = associatedMap.get(rowid)
 				// 还没绑定预派工时，先等预派工关联完成
@@ -4387,7 +4405,8 @@ const handleDeleteTask = (task, index) => {
 				const targetRowid = task.preDispatchRowid
 				let removed = false
 				for (let i = 0; i < POLL_MAX_RETRIES; i++) {
-					await loadProducts(true, true)
+					// 单次查询包硬超时，避免网络差时挂起过长
+					await withTimeout(loadProducts(true, true), POLL_QUERY_TIMEOUT).catch(() => {})
 					const stillExists = productList.value.some(p => (p.preDispatchRowids || []).includes(targetRowid))
 					if (!stillExists) {
 						removed = true
@@ -4509,7 +4528,7 @@ const waitForProcessUpdate = async (product, options = {}) => {
 		try {
 			loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
 			processList.value = processList.value.filter(p => p.productRowid !== productRowid)
-			await loadProductProcesses(product)
+			await withTimeout(loadProductProcesses(product), POLL_QUERY_TIMEOUT)
 
 			const currentSnapshot = getSnapshot()
 			const currentCount = currentSnapshot.length
