@@ -1078,14 +1078,26 @@ const employeeList = ref([])
 const positionProcessEmployeeList = ref([])
 const employeeDispatchSummary = ref([])
 
+// 派工数量设置以「产品 uniqueKey | 派工日期」为维度存储：同一产品在不同派工日期下分别记忆，
+// 避免把某一天（尤其跨日期设置）的旧数量带到另一天，出现"明明改了数量，提交时仍沿用旧数量"的问题
 const productDispatchCounts = ref({})
+// 产品最近一次在派工设置弹窗中选择的派工日期（工序列表"确定"时按此日期派工；未设置时回退顶部筛选日期）
 const productDispatchDates = ref({})
+// 生成派工数量设置的复合键：不同派工日期互不串用
+const getDispatchCountKey = (productKey, dispatchDate) => `${productKey}||${dispatchDate || ''}`
 const showDispatchModal = ref(false)
 const dispatchModalProduct = ref(null)
 const dispatchModalInput = ref('')
 const dispatchModalDispatchCount = ref(0)
 const dispatchModalFinishCount = ref(0)
 const dispatchModalDate = ref(getTomorrowDate())
+
+// 派工设置弹窗切换派工日期时，派工数量输入框同步为该日期已保存的数量（无保存则留空，表示按可派数量平均计算）
+watch(dispatchModalDate, (date) => {
+	const productKey = dispatchModalProduct.value?.uniqueKey
+	if (!productKey) return
+	dispatchModalInput.value = productDispatchCounts.value[getDispatchCountKey(productKey, date)] || ''
+})
 
 // 派工设置弹窗：勾选工序的平均小时产量
 const dispatchModalAverageHourlyOutput = computed(() => {
@@ -1191,6 +1203,11 @@ const confirmDispatchRowids = ref([])
 const isConfirmDispatching = ref(false)
 // 确认派工前的初始预派工总条数（用于轮询判断，产品行可能对应多条预派工，按预派工条数计算）
 const initialPreDispatchCountForConfirm = ref(0)
+// 本次确认派工提交的 rowid 中"命中当前页面列表"的数量：列表条数轮询以
+// （初始条数 - 命中条数）为期望值。服务端兜底查到的行可能尚未装配进页面列表，不计入列表条数变化
+const confirmListAffectedCount = ref(0)
+// 确认派工收集过程（含静默重拉/服务端兜底查询）进行中标记，防止重复点击触发多次收集
+const collectingConfirm = ref(false)
 
 // 订单选择相关
 const showSelectOrderModal = ref(false)
@@ -2796,52 +2813,46 @@ const showOperateConfirmModal = (mode, count, productsInfo) => {
 		cancelText: '取消',
 		success: async (res) => {
 			if (res.confirm) {
-				await operatePreDispatch(mode, count)
+				await operatePreDispatch(mode)
 			}
 		}
 	})
 }
 
 // 操作预派工（延后/移除）
-const operatePreDispatch = async (mode, count) => {
-	// 获取选中的预派工 rowid
-	const allRowids = productList.value
-		.filter(item => selectedProductIds.value.includes(item.uniqueKey))
-		.flatMap(item => item.preDispatchRowids || [])
-		.filter(Boolean)
+const operatePreDispatch = async (mode) => {
+	// 收集所选产品的生产编号数组：接口按“生产编号 + 派工日期”批量定位该日期下的全部预派工，
+	// 不再逐个收集预派工 rowid（左栏装配受筛选/岗位/分页裁剪，逐条收集会漏操作）
+	const selectedProducts = productList.value.filter(item => selectedProductIds.value.includes(item.uniqueKey))
+	const productionCodes = [...new Set(
+		selectedProducts.map(item => item.productionCode).filter(Boolean)
+	)]
 
-	if (allRowids.length === 0) return
+	if (selectedProducts.length === 0) return
+	if (productionCodes.length === 0) {
+		uni.showToast({ title: '所选产品缺少生产编号，无法操作', icon: 'none' })
+		return
+	}
 
 	uni.showLoading({ title: '处理中...', mask: true })
 
 	try {
-		// 记录初始预派工数量
-		const initialPreDispatchCount = getTotalPreDispatchCount()
-		// 期望的预派工数量
-		const expectedPreDispatchCount = initialPreDispatchCount - count
-
-		// 调用接口
+		// 调用接口：按所选产品的生产编号数组 + 派工日期批量操作（派工日期取顶部日期选择）
 		await http.post(PRE_DISPATCH_VOID_URL, {
-			rowid: allRowids,
+			productionCodes,
+			dispatchDate: filterDate.value,
 			mode: mode
 		})
 
-		// 统一走 pollUntil：墙钟最多 5 秒、单轮查询按剩余预算收缩、查询失败自动重试、命中即停。
-		// 复用执行器的 inFlight 复用机制（超时未归时下一轮等在途收尾，避免并发请求竞态），
-		// 配合 loadProducts 的版本号守卫，杜绝旧请求晚到覆盖新数据。
-		const removed = await pollUntil({
-			query: () => loadProducts(true, true),
-			isDone: () => getTotalPreDispatchCount() === expectedPreDispatchCount
+		// 接口按生产编号 + 日期批量操作，前端无法预知具体删减条数（左栏装配受筛选/岗位/分页
+		// 影响，与后端实际操作范围可能不一致），因此不再按“初始条数 - 期望条数”轮询判断，
+		// 改为直接静默重拉列表一次，确保数据最新
+		await loadProducts(true, true).catch((e) => {
+			console.error('操作预派工后刷新列表失败:', e)
 		})
-		if (!removed) {
-			console.warn('操作预派工后轮询未匹配到预期预派工数量', { expected: expectedPreDispatchCount, current: getTotalPreDispatchCount() })
-		}
 
 		uni.hideLoading()
 		uni.showToast({ title: '操作成功', icon: 'success' })
-
-		// 兜底静默刷新一次，确保数据最新（与轮询期间保持 silent 一致，避免结尾弹 loading 闪烁）
-		await withTimeout(loadProducts(true, true), POLL_QUERY_TIMEOUT).catch(() => {})
 
 		// 操作后（延后/移除）选中产品的预派工已变化，立即重载这些产品的工序列表并清理失效勾选
 		for (const id of selectedProductIds.value) {
@@ -2865,84 +2876,99 @@ const operatePreDispatch = async (mode, count) => {
 	}
 }
 
-// 获取当前列表预派工总数量（不限定选中产品，与确认派工轮询口径一致）
-const getTotalPreDispatchCount = () => {
-	return productList.value.reduce((sum, item) => sum + (item.preDispatchRowids?.length || 0), 0)
+// 依据"右栏工序勾选 + 权威预派工绑定"反向收集可确认的预派工 rowid。
+// 工序行加载时已由 loadAssociatedProcessDetails 按 productionCode 服务端直查并绑定：
+//   preDispatchRowid = 该工序的权威预派工行（同工序重复行已择优去重），
+//   employeeNames   = 该权威预派工关联的当日工资员工名。
+// 因此确认派工只需取"被勾选 ∧ 已关联预派工 ∧ 已分配员工"的工序所绑定的预派工行，
+// 不再从左栏 preDispatchRowids 正向过滤（左栏装配受筛选/岗位/分页裁剪，会造成漏收集）。
+const collectConfirmableByCheckedProcesses = (products) => {
+	const rowids = []
+	products.forEach(item => {
+		processList.value
+			.filter(p => p.productRowid === item.uniqueKey && selectedProcessIds.value.includes(p.rowid))
+			.forEach(p => {
+				// 只有已关联权威预派工行、且该行已分配到员工（工序行员工非空）的勾选工序才能确认派工
+				if (p.isAssociated && p.preDispatchRowid &&
+					Array.isArray(p.employeeNames) && p.employeeNames.length > 0) {
+					rowids.push(p.preDispatchRowid)
+				}
+			})
+	})
+	// 同一预派工行可能被多道工序共享关联，去重后再提交
+	return [...new Set(rowids.filter(Boolean))]
+}
+
+// 强制刷新选中产品的工序与权威预派工绑定：清缓存后 loadProductProcesses 会重新按
+// productionCode 服务端直查绑定（员工刚分配/预派工刚生成时工序行绑定可能滞后）。
+// 勾选状态在重载后保留：loadProductProcesses 内部只清理该产品已不存在的工序勾选，
+// 仍存在的工序勾选不会被清除；用户主动勾选过的关联工序还会被自动补勾
+const reloadProductProcessBindings = async (products) => {
+	for (const item of products) {
+		const key = item.uniqueKey
+		if (!key) continue
+		loadedProductIds.value = loadedProductIds.value.filter(id => id !== key)
+		processList.value = processList.value.filter(p => p.productRowid !== key)
+		await loadProductProcesses(item).catch(() => {})
+	}
 }
 
 const handleConfirmDispatch = async () => {
 	if (isConfirmDispatching.value) return
-	// 只处理选中产品的预派工；按产品记录 rowid 归属，以便按"该产品的工序勾选状态"判定
-	const checkedProducts = productList.value.filter(item => selectedProductIds.value.includes(item.uniqueKey))
-	const productRowidsMap = new Map()
-	let allRowids = []
-	checkedProducts.forEach(item => {
-		const rowids = [...new Set((item.preDispatchRowids || []).filter(Boolean))]
-		if (rowids.length > 0) {
-			productRowidsMap.set(item.uniqueKey, rowids)
-			allRowids = allRowids.concat(rowids)
+	// 收集过程涉及静默重拉/服务端兜底等多步接口，先加锁避免重复点击重复收集
+	if (collectingConfirm.value) return
+	collectingConfirm.value = true
+	try {
+		const selectedProducts = () => productList.value.filter(item => selectedProductIds.value.includes(item.uniqueKey))
+
+		// 可确认条件依赖右栏工序绑定：选中产品若工序尚未加载（例如跨日期派工后缓存被清空），先补加载
+		let products = selectedProducts()
+		const loadTasks = products
+			.filter(item => !processList.value.some(p => p.productRowid === item.uniqueKey))
+			.map(item => loadProductProcesses(item).catch(() => {}))
+		await Promise.all(loadTasks)
+
+		// 第一轮：按"勾选工序 → 权威预派工绑定"反向收集。
+		// 工序行绑定（preDispatchRowid/employeeNames）由 loadAssociatedProcessDetails 按
+		// productionCode 服务端直查而来，不受左栏筛选/岗位/分页影响，所见即所得
+		let validRowids = collectConfirmableByCheckedProcesses(selectedProducts())
+
+		// 第二轮：第一轮为空时，清缓存重载选中产品工序，刷新权威预派工绑定后再收集。
+		// 员工分配/生成预派工后工序行绑定可能尚未刷新到位（工序行未挂上 preDispatchRowid/员工），
+		// 重载会重新按 productionCode 服务端直查绑定，补回刚生成的可确认预派工；
+		// 勾选状态在重载后保留（见 reloadProductProcessBindings 注释）
+		if (validRowids.length === 0) {
+			await reloadProductProcessBindings(selectedProducts())
+			validRowids = collectConfirmableByCheckedProcesses(selectedProducts())
 		}
-	})
-	allRowids = [...new Set(allRowids)]
-	if (allRowids.length === 0) {
-		uni.showToast({ title: '没有可确认的预派工', icon: 'none' })
-		return
+
+		validRowids = [...new Set(validRowids)]
+		if (validRowids.length === 0) {
+			console.warn('[preDispatched] 确认派工未收集到可确认预派工', {
+				productKeys: selectedProducts().map(p => p.uniqueKey),
+				checkedProcesses: processList.value
+					.filter(p => selectedProductIds.value.includes(p.productRowid) && selectedProcessIds.value.includes(p.rowid))
+					.map(p => ({
+						rowid: p.rowid,
+						processName: p.processName,
+						isAssociated: p.isAssociated,
+						hasEmployees: (p.employeeNames || []).length > 0
+					}))
+			})
+			uni.showToast({ title: '没有可确认的预派工（需在工序列表勾选工序且已分配员工）', icon: 'none' })
+			return
+		}
+		// 记录初始预派工总条数，以及本次提交中"命中当前列表"的条数：
+		// 轮询以（初始总条数 - 命中条数）为期望值；绑定已含但左栏列表尚未同步的行不计入（不引起列表条数变化）
+		const allListRowids = new Set(productList.value.flatMap(p => p.preDispatchRowids || []))
+		initialPreDispatchCountForConfirm.value = allListRowids.size
+		confirmListAffectedCount.value = validRowids.filter(r => allListRowids.has(r)).length
+		confirmDispatchCount.value = validRowids.length
+		confirmDispatchRowids.value = validRowids
+		showConfirmDispatchModal.value = true
+	} finally {
+		collectingConfirm.value = false
 	}
-	// 拉取这些预派工完整记录，过滤出满足条件（产品勾选+工序非空+工序被勾选+有员工）的预派工
-	let rows = []
-	if (allRowids.length > 0) {
-		const res = await callWorkflowListAll({
-			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
-			filters: [{
-				controlId: 'rowid',
-				dataType: 30,
-				spliceType: 1,
-				filterType: 2,
-				values: allRowids
-			}],
-			silent: true
-		}, 100)
-		rows = Array.isArray(res?.data) ? res.data : []
-		// 同工序可能关联多条预派工（后端历史数据重复），按"取最早一条"过滤后再逐条判断
-		rows = filterFirstPreDispatchPerProcess(rows)
-	}
-	let validRowids = []
-	checkedProducts.forEach(item => {
-		// 该产品当前在工序列表中被勾选的工序（工序须已加载且被勾选，才允许确认派工）
-		const productCheckedProcessRowids = new Set(
-			processList.value
-				.filter(p => p.productRowid === item.uniqueKey && selectedProcessIds.value.includes(p.rowid))
-				.map(p => p.rowid)
-		)
-		const productRowidSet = new Set(productRowidsMap.get(item.uniqueKey) || [])
-		rows.forEach(row => {
-			if (!productRowidSet.has(row.rowid)) return
-			const dailyWage = extractRelationSids(row[PRE_DISPATCH_FIELD_MAP.dailyWage])
-			const processSids = extractRelationSids(row[PRE_DISPATCH_FIELD_MAP.processDetail])
-			const hasEmployee = dailyWage && dailyWage.length > 0
-			// 必须关联了工序（无工序的产品级兜底预派工不允许确认派工）
-			const hasProcess = processSids && processSids.length > 0
-			// 关联工序必须在该产品工序列表中被勾选
-			const processChecked = hasProcess && processSids.some(sid => productCheckedProcessRowids.has(sid))
-			if (hasEmployee && hasProcess && processChecked) {
-				validRowids.push(row.rowid)
-			}
-		})
-	})
-	// 二次去重，确保不会提交重复 rowid
-	validRowids = [...new Set(validRowids)]
-	if (validRowids.length === 0) {
-		uni.showToast({ title: '没有可确认的预派工（需在工序列表勾选工序且已分配员工）', icon: 'none' })
-		return
-	}
-	// 记录初始预派工总条数（当前列表所有产品行的预派工数量之和），用于确认派工成功后轮询判断
-	initialPreDispatchCountForConfirm.value = productList.value.reduce(
-		(sum, item) => sum + (item.preDispatchRowids?.length || 0),
-		0
-	)
-	confirmDispatchCount.value = validRowids.length
-	confirmDispatchRowids.value = validRowids
-	showConfirmDispatchModal.value = true
 }
 
 // 刷新单个产品的工序列表
@@ -3025,14 +3051,10 @@ const handleProcessListConfirm = async (productRowid) => {
 		})
 	}
 
-	// 用户输入的派工数量（优先使用）
-	const rawUserInput = productDispatchCounts.value[productRowid]
-	// 只有当用户输入了大于0的有效数值时才传递用户输入；为空或为0时回退到可派数量
+	// 用户在派工设置弹窗里为"该派工日期"自定义的派工数量（优先使用）
+	const rawUserInput = productDispatchCounts.value[getDispatchCountKey(productRowid, dispatchDate)]
+	// 只有已设置且大于 0 的有效数值才传递用户输入；未设置/已被清除时回退到可派数量平均
 	const hasUserInput = rawUserInput !== undefined && rawUserInput !== '' && !isNaN(parseFloat(rawUserInput)) && parseFloat(rawUserInput) > 0
-	if (rawUserInput !== undefined && rawUserInput !== '' && (isNaN(parseFloat(rawUserInput)) || parseFloat(rawUserInput) < 0)) {
-		uni.showToast({ title: '派工数量无效，请重新设置', icon: 'none' })
-		return
-	}
 	if (hasUserInput) {
 		// 用户输入了大于0的有效值，传用户输入的派工数量
 		dispatchCount = parseFloat(rawUserInput)
@@ -3121,6 +3143,12 @@ const handleProcessListConfirm = async (productRowid) => {
 				processList.value = processList.value.filter(p => p.productRowid !== productRowid)
 			}
 		}
+		// 本次派工设置已使用完毕：清除该产品在"该派工日期"下保存的数量及目标日期，
+		// 避免同一产品后续再次点"确定"时（例如还有剩余行需派工）沿用本次旧数量/旧日期
+		delete productDispatchCounts.value[getDispatchCountKey(productRowid, dispatchDate)]
+		if (productDispatchDates.value[productRowid] === dispatchDate) {
+			delete productDispatchDates.value[productRowid]
+		}
 		// 刷新员工数据
 		loadWorkshopEmployees()
 		loadEmployeeDispatchSummary()
@@ -3152,8 +3180,9 @@ const doConfirmDispatch = async () => {
 	if (isConfirmDispatching.value) return
 	isConfirmDispatching.value = true
 	showConfirmDispatchModal.value = false
-	// 期望的最终预派工条数 = 初始预派工总条数 - 确认派工条数
-	const expectedPreDispatchCount = initialPreDispatchCountForConfirm.value - confirmDispatchCount.value
+	// 期望的最终预派工条数 = 初始预派工总条数 - 本次提交中"命中当前列表"的条数。
+	// 仅命中列表的行会从当前筛选列表移除；服务端兜底查到的行尚未装配进列表，不影响列表条数变化
+	const expectedPreDispatchCount = initialPreDispatchCountForConfirm.value - confirmListAffectedCount.value
 	// 根据确认数量动态调整等待时长：基础 3 秒，每多 1 条增加 0.5 秒，墙钟最多 5 秒
 	const waitMs = Math.min(3000 + confirmDispatchCount.value * 500, 5000)
 
@@ -3415,8 +3444,8 @@ const openDispatchModal = async (product) => {
 	}
 
 	dispatchModalProduct.value = product
-	dispatchModalInput.value = productDispatchCounts.value[product.uniqueKey] || ''
 	dispatchModalDate.value = productDispatchDates.value[product.uniqueKey] || filterDate.value
+	dispatchModalInput.value = productDispatchCounts.value[getDispatchCountKey(product.uniqueKey, dispatchModalDate.value)] || ''
 
 	// 计算可派数量和完成数量
 	let dispatchCount = 0
@@ -3467,15 +3496,28 @@ const onDispatchModalDateChange = (e) => {
 const saveDispatchModal = () => {
 	if (!dispatchModalProduct.value) return
 
+	const productKey = dispatchModalProduct.value.uniqueKey
+	const date = dispatchModalDate.value
 	const val = dispatchModalInput.value.trim()
 	const num = parseFloat(val)
-	if (val === '' || isNaN(num) || num < 0) {
+
+	// 输入为空或为 0 表示"不自定义派工数量"：清除该日期已保存的数量，
+	// 提交时回退到勾选工序的可派数量平均（与工序列表"确定"的默认口径一致），日期仍按所选日期派工
+	if (val === '' || num === 0) {
+		productDispatchDates.value[productKey] = date
+		delete productDispatchCounts.value[getDispatchCountKey(productKey, date)]
+		closeDispatchModal()
+		return
+	}
+
+	if (isNaN(num) || num < 0) {
 		uni.showToast({ title: '请输入有效的非负派工数量', icon: 'none' })
 		return
 	}
 
-	productDispatchCounts.value[dispatchModalProduct.value.uniqueKey] = String(num)
-	productDispatchDates.value[dispatchModalProduct.value.uniqueKey] = dispatchModalDate.value
+	// 数量按「产品 + 派工日期」维度保存，避免跨日期串用旧数量
+	productDispatchDates.value[productKey] = date
+	productDispatchCounts.value[getDispatchCountKey(productKey, date)] = String(num)
 	closeDispatchModal()
 }
 
@@ -3535,30 +3577,32 @@ const loadAssociatedProcessDetails = async (product, statusFilter = '未派工')
 			})
 		}
 		// 业务规则：同一生产单号 + 工序 + 派工日期 只应存在一条预派工。
-		// 后端历史数据可能产生重复（根因待排查），前端按 rowid 升序取最早创建的一条作为"权威"记录，
+		// 后端历史数据可能产生重复（根因待排查），同工序多条记录时保留"信息最完整"的一条作为权威记录
+		// （有员工 > 有派工数量 > rowid 最早，与 filterFirstPreDispatchPerProcess 口径保持一致），
 		// 展示、修改派工数量、修改员工均针对此条，避免数据"看起来没生效"。
-		const sortedPreDispatchRows = [...preDispatchRows].sort((a, b) =>
-			String(a.rowid || '').localeCompare(String(b.rowid || ''))
-		)
+		const authoritativeRows = filterFirstPreDispatchPerProcess(preDispatchRows)
+		const authoritativeRowids = new Set(authoritativeRows.map((item) => item.rowid))
 		// 调试用：检测到同工序关联多条预派工时输出被忽略的 rowid，便于后端定位重复来源
 		const firstPdRowidByProcess = new Map()
-		sortedPreDispatchRows.forEach((item) => {
-			const sids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail])
-			sids.forEach((sid) => {
-				const existing = firstPdRowidByProcess.get(sid)
-				if (existing && existing !== item.rowid) {
-					console.warn(`[preDispatched] 工序 ${sid} 关联了多条预派工，已忽略 rowid=${item.rowid}（保留 rowid=${existing}）`)
-				} else {
-					firstPdRowidByProcess.set(sid, item.rowid)
+		authoritativeRows.forEach((item) => {
+			extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail]).forEach((sid) => {
+				if (!firstPdRowidByProcess.has(sid)) firstPdRowidByProcess.set(sid, item.rowid)
+			})
+		})
+		preDispatchRows.forEach((item) => {
+			if (authoritativeRowids.has(item.rowid)) return
+			extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail]).forEach((sid) => {
+				const kept = firstPdRowidByProcess.get(sid)
+				if (kept && kept !== item.rowid) {
+					console.warn(`[preDispatched] 工序 ${sid} 关联了多条预派工，已忽略 rowid=${item.rowid}（保留 rowid=${kept}）`)
 				}
 			})
 		})
 
-		// 每道工序只关联第一条（最早创建的）预派工；
-		// 员工名直接取该权威预派工自身的当日工资，不再跨预派工合并
+		// 每道工序只关联一条权威预派工；员工名直接取该权威预派工自身的当日工资，不再跨预派工合并
 		const preDispatchRowidMap = new Map()  // 工序 rowid -> 权威预派工 rowid
 		const processNamesMap = new Map()      // 工序 rowid -> 权威预派工的员工名数组
-		sortedPreDispatchRows.forEach((item) => {
+		authoritativeRows.forEach((item) => {
 			const pdRowid = item.rowid
 			const processSids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail])
 			const dailyWageSids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.dailyWage])
@@ -3577,7 +3621,7 @@ const loadAssociatedProcessDetails = async (product, statusFilter = '未派工')
 		const craftPositionMap = new Map()
 		const positionProcessMap = new Map()
 		const dispatchCountMap = new Map()
-		sortedPreDispatchRows.forEach((item) => {
+		authoritativeRows.forEach((item) => {
 			const pdRowid = item.rowid
 			const craftPositionId = formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.craftPosition]) || ''
 			// 尝试用工艺岗位字典转换 ID 为名称，找不到则留空
@@ -3614,34 +3658,55 @@ const loadAssociatedProcessDetails = async (product, statusFilter = '未派工')
 }
 
 /**
+ * 预派工记录质量评分：已分配员工 +2 分、已有派工数量 +1 分。
+ * 同工序关联多条预派工时（后端历史重复数据），优先保留"信息更完整"的那条作为权威记录。
+ * @param {Object} row 预派工原始记录
+ * @returns {Number} 质量分（0-3）
+ */
+const getPreDispatchRowScore = (row) => {
+	let score = 0
+	const dailyWageSids = extractRelationSids(row[PRE_DISPATCH_FIELD_MAP.dailyWage])
+	if (dailyWageSids && dailyWageSids.length > 0) score += 2
+	const count = parseFloat(formatFieldValue(row[PRE_DISPATCH_FIELD_MAP.dispatchCount]))
+	if (!isNaN(count) && count > 0) score += 1
+	return score
+}
+
+/**
  * 业务规则：同一生产单号 + 工序 + 派工日期 只应存在一条预派工。
- * 后端历史数据可能产生重复（根因待排查），前端按 rowid 升序取每道工序最早创建的那条作为"权威"记录。
+ * 后端历史数据可能产生重复（根因待排查），同工序多条记录时按
+ * "有员工 > 有派工数量 > rowid 最早" 选择权威记录：仅按 rowid 取最早一条时，
+ * 若最早那条还没分配员工而重复行其实已具备员工/数量，会导致"明明有可派工数据却提示没有"。
  * 没有工序关联的预派工（如产品级兜底预派工）始终保留，不参与按工序去重。
  * @param {Array} preDispatchRows 预派工记录数组
  * @returns {Array} 过滤后的预派工记录数组（每道工序最多保留一条）
  */
 const filterFirstPreDispatchPerProcess = (preDispatchRows) => {
 	if (!Array.isArray(preDispatchRows) || preDispatchRows.length === 0) return []
+	// 按 rowid 升序处理，质量分相同时保留最早创建的一条
 	const sorted = [...preDispatchRows].sort((a, b) =>
 		String(a.rowid || '').localeCompare(String(b.rowid || ''))
 	)
-	const firstByProcess = new Map()  // 工序 rowid -> 第一条预派工 rowid
-	const keptRowids = new Set()       // 保留的预派工 rowid
+	const bestByProcess = new Map() // 工序 rowid -> 当前最优预派工 { rowid, score }
 	sorted.forEach((item) => {
-		const sids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail])
-		if (sids.length === 0) {
-			// 无工序关联的预派工（产品级兜底）始终保留
-			keptRowids.add(item.rowid)
-			return
-		}
-		sids.forEach((sid) => {
-			if (!firstByProcess.has(sid)) {
-				firstByProcess.set(sid, item.rowid)
-				keptRowids.add(item.rowid)
+		const score = getPreDispatchRowScore(item)
+		extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail]).forEach((sid) => {
+			const best = bestByProcess.get(sid)
+			if (!best || best.score < score) {
+				bestByProcess.set(sid, { rowid: item.rowid, score })
 			}
 		})
 	})
-	return sorted.filter(item => keptRowids.has(item.rowid))
+	const bestRowids = new Set()
+	bestByProcess.forEach((best) => bestRowids.add(best.rowid))
+	return sorted.filter((item) => {
+		const sids = extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail])
+		if (sids.length === 0) {
+			// 无工序关联的预派工（产品级兜底）始终保留
+			return true
+		}
+		return bestRowids.has(item.rowid)
+	})
 }
 
 /**
