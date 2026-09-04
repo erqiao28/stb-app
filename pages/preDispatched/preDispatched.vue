@@ -696,7 +696,7 @@
 			<view class="dispatch-modal-body">
 				<view class="dispatch-date-row">
 					<text class="dispatch-date-label">派工日期</text>
-					<picker class="dispatch-date-picker" mode="date" :value="dispatchModalDate" :start="todayDate" @change="onDispatchModalDateChange">
+					<picker class="dispatch-date-picker" mode="date" :value="dispatchModalDate" :start="todayDate" :end="tomorrowDate" @change="onDispatchModalDateChange">
 						<view class="dispatch-date-display">
 							<text class="dispatch-date-text">{{ dispatchModalDate }}</text>
 							<text class="dispatch-date-icon">▼</text>
@@ -837,6 +837,7 @@
 import { ref, onMounted, computed, getCurrentInstance, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { callWorkflowListAPIPaged, callWorkflowListAll } from '../../utils/workflow'
+import { buildDateEnumFilter } from '../../utils/dateFilter'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
@@ -942,8 +943,14 @@ const filterInnerPaint = ref('')
 const filterPolish = ref('')
 const filterGuokou = ref('')
 const filterDate = ref(getTomorrowDate())
-// 日期选择器最小可选日期（今天），用于限制只能选择今天及以后
+// 顶部派工日期与派工设置日期选择器：最小可选今天、最大可选明天（即只能选择今天或明天）
 const todayDate = ref(getTodayDate())
+const tomorrowDate = ref(getTomorrowDate())
+// 派工日期只允许选择今天或明天（顶部日期选择与派工设置弹窗共用；
+// picker 的 start/end 在部分端仅提示不真正拦截，因此变更回调里再做硬性校验）
+const isAllowedDispatchDate = (dateStr) => {
+	return dateStr === todayDate.value || dateStr === tomorrowDate.value
+}
 
 const productList = ref([])
 const loadingProducts = ref(false)
@@ -1982,7 +1989,13 @@ const handleReset = () => {
 }
 
 const onDateChange = async (e) => {
-	filterDate.value = e.detail.value
+	const newDate = e.detail.value
+	// 硬性限制：顶部派工日期只允许今天/明天，拦截范围外选择并保持原日期不变
+	if (!isAllowedDispatchDate(newDate)) {
+		uni.showToast({ title: '只能选择今天或明天', icon: 'none' })
+		return
+	}
+	filterDate.value = newDate
 	try {
 		// 切换顶部日期时，先调用 hook 通知后端，再刷新页面数据
 		await http.post('/api/workflow/hooks/NmE1OWU1OGMzN2MwOTg0NTBhOTJiMGE2', {
@@ -3283,6 +3296,13 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 			})
 		}
 
+		// 按派工日期在接口层过滤（不再拉全量后前端筛），构造器见 utils/dateFilter.js
+		const dateFilter = buildDateEnumFilter({
+			controlId: PRE_DISPATCH_FIELD_MAP.dispatchDate,
+			date: filterDate.value
+		})
+		if (dateFilter) filters.push(dateFilter)
+
 		// 分页循环拉取"未派工"记录，每页 100 条，最多 10 页（1000 条）兜底，防止后端 total 值偏大时死循环
 		let raw = []
 		let pageNum = 1
@@ -3305,10 +3325,6 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 		}
 
 		let mapped = raw.map(mapPreDispatchRow)
-
-		if (filterDate.value) {
-			mapped = mapped.filter(item => item.dispatchDate === filterDate.value)
-		}
 
 		if (filterCraft.value.trim()) {
 			const keyword = filterCraft.value.trim().toLowerCase()
@@ -3490,7 +3506,13 @@ const closeDispatchModal = () => {
 }
 
 const onDispatchModalDateChange = (e) => {
-	dispatchModalDate.value = e.detail.value
+	const newDate = e.detail.value
+	// 硬性限制：派工设置日期只允许今天/明天，拦截范围外选择并保持原日期不变
+	if (!isAllowedDispatchDate(newDate)) {
+		uni.showToast({ title: '派工日期只能选择今天或明天', icon: 'none' })
+		return
+	}
+	dispatchModalDate.value = newDate
 }
 
 const saveDispatchModal = () => {
@@ -3523,26 +3545,27 @@ const saveDispatchModal = () => {
 
 const loadAssociatedProcessDetails = async (product, statusFilter = '未派工') => {
 	try {
-		// 按生产单号查询预派工记录，避免 product.preDispatchRowids 过期导致员工信息不刷新
-		// 查到后再按当前派工日期过滤
+		// 按生产单号查询预派工记录，避免 product.preDispatchRowids 过期导致员工信息不刷新；
+		// 派工日期直接作为接口筛选条件（DateEnum(17)，构造器见 utils/dateFilter.js）下推，不再拉全量后本地过滤
+		const filters = [{
+			controlId: PRE_DISPATCH_FIELD_MAP.productionCode,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: [product.productionCode]
+		}]
+		const dateFilter = buildDateEnumFilter({
+			controlId: PRE_DISPATCH_FIELD_MAP.dispatchDate,
+			date: filterDate.value
+		})
+		if (dateFilter) filters.push(dateFilter)
+
 		const res = await callWorkflowListAll({
 			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
-			filters: [{
-				controlId: PRE_DISPATCH_FIELD_MAP.productionCode,
-				dataType: 30,
-				spliceType: 1,
-				filterType: 2,
-				values: [product.productionCode]
-			}],
+			filters,
 			silent: true
 		}, 100)
 		let preDispatchRows = Array.isArray(res?.data) ? res.data : []
-		if (filterDate.value) {
-			preDispatchRows = preDispatchRows.filter(item => {
-				const d = formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.dispatchDate])
-				return d === filterDate.value
-			})
-		}
 		// 工序列表只关联状态为未派工的预派工
 		if (statusFilter) {
 			preDispatchRows = preDispatchRows.filter(item => {
@@ -4020,7 +4043,6 @@ const toggleOrderCollapse = (orderNo) => {
 const loadEmployeeInfoMap = async () => {
 	const infoMap = new Map()
 	try {
-		const currentDate = filterDate.value
 		const wsFilter = employeeWorkshopFilter.value
 		const filters = []
 		if (wsFilter) {
@@ -4032,10 +4054,16 @@ const loadEmployeeInfoMap = async () => {
 				values: [wsFilter]
 			})
 		}
-		// 接口无法按日期筛选，逐页获取并在前端按日期过滤（与 loadWorkshopEmployees 相同策略）
+		// 日期下推到接口层过滤（构造器见 utils/dateFilter.js），逐页取回当日记录即可
+		const dateFilter = buildDateEnumFilter({
+			controlId: EMPLOYEE_FIELD_MAP.dispatchDate,
+			date: filterDate.value
+		})
+		if (dateFilter) filters.push(dateFilter)
+
+		// 日期已在接口层过滤（DateEnum(17)），逐页取回当日记录即可，无需再前端筛日期
 		const pageSize = 100
 		let pageNum = 1
-		let foundData = false
 		let hasMore = true
 		const MAX_PAGES = 500
 		while (hasMore && pageNum <= MAX_PAGES) {
@@ -4046,8 +4074,7 @@ const loadEmployeeInfoMap = async () => {
 			}, pageSize, pageNum)
 			const rows = Array.isArray(res?.data) ? res.data : []
 			if (rows.length === 0) break
-			const filtered = rows.filter((item) => formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) === currentDate)
-			filtered.forEach((item) => {
+			rows.forEach((item) => {
 				const name = formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName])
 				if (!name || infoMap.has(name)) return
 				const isNewEmployeeRaw = formatFieldValue(item[EMPLOYEE_FIELD_MAP.isNewEmployee])
@@ -4060,14 +4087,8 @@ const loadEmployeeInfoMap = async () => {
 					isTempEmployee: isTempEmployeeRaw == 1
 				})
 			})
-			if (filtered.length > 0) foundData = true
-			if (foundData && filtered.length === 0) {
-				hasMore = false
-			} else if (rows.length < pageSize) {
-				hasMore = false
-			} else {
-				pageNum++
-			}
+			hasMore = rows.length === pageSize
+			pageNum++
 		}
 	} catch (e) {
 		console.error('加载员工信息失败:', e)
@@ -4082,7 +4103,6 @@ const loadEmployeeDailyWageExtraMap = async () => {
 	const preDispatchMap = new Map()
 	const wageThresholdMap = new Map()
 	try {
-		const currentDate = filterDate.value
 		const wsFilter = employeeWorkshopFilter.value
 		const filters = []
 		if (wsFilter) {
@@ -4094,10 +4114,15 @@ const loadEmployeeDailyWageExtraMap = async () => {
 				values: [wsFilter]
 			})
 		}
-		// 与 loadEmployeeInfoMap 相同策略：接口无法按日期筛选，逐页获取并在前端按日期过滤
+		// 派工日期在接口层过滤（DateEnum(17)，构造器见 utils/dateFilter.js），逐页取回当日记录即可
+		const dateFilter = buildDateEnumFilter({
+			controlId: DAILY_WAGE_FIELD_MAP.dispatchDate,
+			date: filterDate.value
+		})
+		if (dateFilter) filters.push(dateFilter)
+
 		const pageSize = 100
 		let pageNum = 1
-		let foundData = false
 		let hasMore = true
 		const MAX_PAGES = 500
 		while (hasMore && pageNum <= MAX_PAGES) {
@@ -4108,8 +4133,7 @@ const loadEmployeeDailyWageExtraMap = async () => {
 			}, pageSize, pageNum)
 			const rows = Array.isArray(res?.data) ? res.data : []
 			if (rows.length === 0) break
-			const filtered = rows.filter((item) => formatFieldValue(item[DAILY_WAGE_FIELD_MAP.dispatchDate]) === currentDate)
-			filtered.forEach((item) => {
+			rows.forEach((item) => {
 				const name = formatFieldValue(item[DAILY_WAGE_FIELD_MAP.employeeName])
 				if (!name) return
 				const has = extractRelationSids(item[DAILY_WAGE_FIELD_MAP.preDispatch]).length > 0
@@ -4122,14 +4146,8 @@ const loadEmployeeDailyWageExtraMap = async () => {
 					}
 				}
 			})
-			if (filtered.length > 0) foundData = true
-			if (foundData && filtered.length === 0) {
-				hasMore = false
-			} else if (rows.length < pageSize) {
-				hasMore = false
-			} else {
-				pageNum++
-			}
+			hasMore = rows.length === pageSize
+			pageNum++
 		}
 	} catch (e) {
 		console.error('加载员工当日工资扩展信息失败:', e)
@@ -4173,15 +4191,31 @@ const loadEmployeeDispatchSummary = async () => {
 				values: [wsFilter]
 			})
 		}
-		const res = await callWorkflowListAPIPaged({
-			worksheetId: DAILY_WAGE_WORKSHEET_ID,
-			filters,
-			pageSize: 100,
-			pageNum: 1,
-			silent: true
+		// 派工日期在接口层过滤（DateEnum(17)，构造器见 utils/dateFilter.js），只取当日记录；
+		// 当日记录可能超过单页上限，改为循环分页取全，避免此前只读第一页（100 条）导致遗漏
+		const dateFilter = buildDateEnumFilter({
+			controlId: DAILY_WAGE_FIELD_MAP.dispatchDate,
+			date: currentDate
 		})
-		let rows = Array.isArray(res?.data) ? res.data : []
-		rows = rows.filter((item) => formatFieldValue(item[DAILY_WAGE_FIELD_MAP.dispatchDate]) === currentDate)
+		if (dateFilter) filters.push(dateFilter)
+
+		let rows = []
+		const pageSize = 100
+		let pageNum = 1
+		let hasMore = true
+		const MAX_PAGES = 500
+		while (hasMore && pageNum <= MAX_PAGES) {
+			const res = await callWorkflowListAPIPaged({
+				worksheetId: DAILY_WAGE_WORKSHEET_ID,
+				filters,
+				silent: true
+			}, pageSize, pageNum)
+			const pageRows = Array.isArray(res?.data) ? res.data : []
+			if (pageRows.length === 0) break
+			rows = rows.concat(pageRows)
+			hasMore = pageRows.length === pageSize
+			pageNum++
+		}
 
 		const dailyWageList = rows.map((item) => ({
 			rowid: item.rowid,
@@ -4811,7 +4845,6 @@ const confirmProcessAction = async () => {
 
 const loadWorkshopEmployees = async () => {
 	try {
-		const currentDate = filterDate.value
 		const wsFilter = employeeWorkshopFilter.value
 		const filters = []
 		if (wsFilter) {
@@ -4823,13 +4856,16 @@ const loadWorkshopEmployees = async () => {
 				values: [wsFilter]
 			})
 		}
+		// 日期已下推到接口层（构造器见 utils/dateFilter.js），无需前端逐页筛日期；分页循环只负责取回当日记录
+		const dateFilter = buildDateEnumFilter({
+			controlId: EMPLOYEE_FIELD_MAP.dispatchDate,
+			date: filterDate.value
+		})
+		if (dateFilter) filters.push(dateFilter)
 
-		// 由于接口无法按日期筛选，逐页获取并在前端按日期过滤：
-		// 阶段1：找到第一条符合日期的数据前，持续获取；
-		// 阶段2：找到数据后，继续获取后续页，直到某一页筛选后为空或返回不足一页。
+		// 日期已下推到接口层（DateEnum(17)），无需前端逐页筛日期；分页循环只负责取回当日记录
 		const pageSize = 100
 		let pageNum = 1
-		let foundData = false
 		let allRows = []
 		let hasMore = true
 		const MAX_PAGES = 500
@@ -4843,22 +4879,14 @@ const loadWorkshopEmployees = async () => {
 			const rows = Array.isArray(res?.data) ? res.data : []
 			if (rows.length === 0) break
 
-			const filtered = rows.filter((item) => {
-				if (formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) !== currentDate) return false
-				// 过滤掉临时工
+			// 临时工不在员工图表展示，这里直接过滤掉
+			rows.forEach((item) => {
 				const isTemp = String(formatFieldValue(item[EMPLOYEE_FIELD_MAP.isTempEmployee]) || '').trim() === '1'
-				return !isTemp
+				if (!isTemp) allRows.push(item)
 			})
-			allRows.push(...filtered)
 
-			if (filtered.length > 0) foundData = true
-			if (foundData && filtered.length === 0) {
-				hasMore = false
-			} else if (rows.length < pageSize) {
-				hasMore = false
-			} else {
-				pageNum++
-			}
+			hasMore = rows.length === pageSize
+			pageNum++
 		}
 
 		// 加载当日工资表扩展信息（预派工关联 + 工资阀值），用于未派判断、派满判断及柱子状态显示
@@ -4905,7 +4933,6 @@ const loadWorkshopEmployees = async () => {
 const loadWorkshopEmployeesForSelector = async () => {
 	try {
 		const t0 = Date.now()
-		const currentDate = filterDate.value
 		const workshopList = selectedSelectorWorkshop.value ? [selectedSelectorWorkshop.value] : []
 		const allRows = []
 
@@ -4914,10 +4941,15 @@ const loadWorkshopEmployeesForSelector = async () => {
 			const filters = [
 				{ controlId: EMPLOYEE_FIELD_MAP.workshop, dataType: 30, spliceType: 1, filterType: 2, values: [ws] }
 			]
+			// 日期下推到接口层过滤（构造器见 utils/dateFilter.js），只取当日记录
+			const dateFilter = buildDateEnumFilter({
+				controlId: EMPLOYEE_FIELD_MAP.dispatchDate,
+				date: filterDate.value
+			})
+			if (dateFilter) filters.push(dateFilter)
 
 			const pageSize = 100
 			let pageNum = 1
-			let foundData = false
 			let hasMore = true
 			const MAX_PAGES = 500
 			let totalPages = 0
@@ -4931,21 +4963,10 @@ const loadWorkshopEmployeesForSelector = async () => {
 				}, pageSize, pageNum)
 				const rows = Array.isArray(res?.data) ? res.data : []
 				if (rows.length === 0) break
+				allRows.push(...rows)
 
-				const filtered = rows.filter((item) => {
-				if (formatFieldValue(item[EMPLOYEE_FIELD_MAP.dispatchDate]) !== currentDate) return false
-				return true
-			})
-				allRows.push(...filtered)
-
-				if (filtered.length > 0) foundData = true
-				if (foundData && filtered.length === 0) {
-					hasMore = false
-				} else if (rows.length < pageSize) {
-					hasMore = false
-				} else {
-					pageNum++
-				}
+				hasMore = rows.length === pageSize
+				pageNum++
 			}
 			console.log(`loadWorkshopEmployeesForSelector [${ws}] pages=${totalPages} filtered=${allRows.length} cost=${Date.now() - t0}ms`)
 		}
