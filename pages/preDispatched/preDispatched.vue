@@ -3890,14 +3890,22 @@ const loadProductProcesses = async (product) => {
 		// 先清除该产品已有的工序数据，避免重复点击或网络抖动导致同一工序重复渲染
 		processList.value = processList.value.filter(p => p.productRowid !== product.uniqueKey)
 		processList.value.push(...newProcesses)
-		// 只清理当前产品中已不存在的工序选中状态，不影响其他产品的勾选
+		// 清理本产品工序的选中状态：仅移除“已不在当前工序列表中的旧工序”勾选，
+		// 不影响其他产品的勾选
 		const currentProcessRowids = new Set(newProcesses.map(p => p.rowid))
-		selectedProcessIds.value = selectedProcessIds.value.filter(rowid => {
+		const keptRowids = selectedProcessIds.value.filter(rowid => {
 			return !oldProductProcessRowids.has(rowid) || currentProcessRowids.has(rowid)
 		})
-		// 只对用户主动勾选过的工序进行关联预派工自动勾选
+		// 工序 rowid 全局唯一，同一工序重复勾选永远无意义。历史 bug 会在选中集合
+		// 残留同一工序的多份重复项（每次加载重复 push 累积），导致取消勾选时一次只删一条、
+		// 要点很多次才能取消，这里统一去重只保留一份（对已残留的多份也一次性修正）
+		selectedProcessIds.value = [...new Set(keptRowids)]
+		// 对用户主动勾选过的关联工序做自动恢复：保留步骤已恢复了“仍存在的勾选”，
+		// 这里补勾时需判重，避免每次加载都给同一工序重复 push 一份导致重复项累积
 		newProcesses.forEach(p => {
-			if (p.isAssociated && userCheckedProcessIds.value.has(p.rowid) && !manuallyDeselectedProcessIds.value.has(p.rowid)) {
+			if (p.isAssociated && userCheckedProcessIds.value.has(p.rowid) &&
+				!manuallyDeselectedProcessIds.value.has(p.rowid) &&
+				!selectedProcessIds.value.includes(p.rowid)) {
 				selectedProcessIds.value.push(p.rowid)
 			}
 		})
@@ -3912,8 +3920,9 @@ const toggleProcessSelection = (process) => {
 	if (!process.rowid) return
 	const index = selectedProcessIds.value.indexOf(process.rowid)
 	if (index > -1) {
-		// 取消勾选，记录该工序ID，刷新时保留取消状态
-		selectedProcessIds.value.splice(index, 1)
+		// 取消勾选：同一工序可能在历史 bug 下残留多份重复项，一次移除全部副本，
+		// 否则（indexOf+splice 只删第一条）会出现“点一下没反应、要点很多下才能取消”的问题
+		selectedProcessIds.value = selectedProcessIds.value.filter(rowid => rowid !== process.rowid)
 		if (process.isAssociated) {
 			manuallyDeselectedProcessIds.value.add(process.rowid)
 		}
@@ -3922,7 +3931,10 @@ const toggleProcessSelection = (process) => {
 			autoDeselectRelatedProcesses(process)
 		}
 	} else {
-		selectedProcessIds.value.push(process.rowid)
+		// 勾选前判重，避免并发/联动路径下同一工序被 push 多次
+		if (!selectedProcessIds.value.includes(process.rowid)) {
+			selectedProcessIds.value.push(process.rowid)
+		}
 		// 记录用户主动勾选，刷新时保留勾选状态
 		userCheckedProcessIds.value.add(process.rowid)
 		// 归类联动：开关开启时才联动
@@ -3965,10 +3977,8 @@ const autoDeselectRelatedProcesses = (process) => {
 			const isMatch = relatedProcessNames.includes(p.processName) ||
 				relatedProcessNames.some(cp => p.processName.startsWith(cp) || cp.startsWith(p.processName))
 			if (isMatch) {
-				const idx = selectedProcessIds.value.indexOf(p.rowid)
-				if (idx > -1) {
-					selectedProcessIds.value.splice(idx, 1)
-				}
+				// 一次移除全部重复项（与 toggleProcessSelection 取消逻辑一致）
+				selectedProcessIds.value = selectedProcessIds.value.filter(rowid => rowid !== p.rowid)
 			}
 		}
 	})
@@ -4035,6 +4045,15 @@ const toggleOrderCollapse = (orderNo) => {
 		collapsedOrderIds.value.splice(idx, 1)
 	} else {
 		collapsedOrderIds.value.push(orderNo)
+		// 收起订单 = 取消选择该订单下的所有产品：该产品从选中集合移除后，
+		// 右侧工序列表（groupedProcessList）与顶部选中数/底部批量按钮作用范围都会随之更新
+		const group = groupedProductList.value.find(g => g.orderNo === orderNo)
+		if (group) {
+			const keys = new Set(group.products.map(p => p.uniqueKey).filter(Boolean))
+			if (keys.size > 0) {
+				selectedProductIds.value = selectedProductIds.value.filter(k => !keys.has(k))
+			}
+		}
 	}
 }
 
