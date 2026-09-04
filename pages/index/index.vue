@@ -49,6 +49,52 @@
 				<button class="check-update" @click="checkUpdate()">
 					<image src="/static/update.svg"></image>检查更新
 				</button>
+				<button class="check-update date-test-btn" @click="openDateTest">
+					<image src="/static/time.svg"></image>日期接口测试
+				</button>
+			</view>
+
+			<!-- 日期接口筛选测试弹窗（开发调试用：验证预派工“派工日期”能否在接口层做筛选） -->
+			<view class="date-test-mask" v-if="showDateTestModal" @click.self="closeDateTest">
+				<view class="date-test-panel" @click.stop>
+					<view class="date-test-header">
+						<text class="date-test-title">日期接口筛选测试</text>
+						<text class="date-test-close" @click="closeDateTest">×</text>
+					</view>
+					<view class="date-test-body">
+						<view class="date-test-field-row">
+							<text class="date-test-label">派工日期：</text>
+							<picker mode="date" :value="dateTestDate" @change="(e) => (dateTestDate = e.detail.value)">
+								<view class="date-test-picker">{{ dateTestDate || '请选择日期' }}</view>
+							</picker>
+						</view>
+						<button class="date-test-go" :loading="dateTestLoading" :disabled="dateTestLoading || !dateTestDate"
+							@click="runDateTest">
+							获取预派工数据
+						</button>
+						<view v-if="dateTestBaseline !== null" class="date-test-baseline">
+							对照基准（仅“未派工”、无日期限制）：接口共 <text class="date-test-baseline-num">{{ dateTestBaseline }}</text> 条
+						</view>
+						<view v-if="dateTestResults.length" class="date-test-results">
+							<view v-for="(r, idx) in dateTestResults" :key="idx" class="date-test-result">
+								<view class="date-test-result-head">
+									<text class="date-test-result-name">{{ idx + 1 }}. {{ r.label }}</text>
+									<text class="date-test-result-tag"
+										:class="r.error ? 'tag-fail' : (r.restricted ? 'tag-ok' : 'tag-fail')">
+										{{ r.error ? '失败' : (r.restricted ? '接口层生效' : '未生效') }}
+									</text>
+								</view>
+								<view class="date-test-result-meta" v-if="r.error">
+									请求失败：{{ r.error }}
+								</view>
+								<view class="date-test-result-meta" v-else>
+									接口total {{ r.total }} ｜ 本页返回 {{ r.returned }} ｜ 本页日期匹配 {{ r.matched }}
+								</view>
+							</view>
+							<view class="date-test-tip">各写法请求参数与返回明细已打印到控制台（console）</view>
+						</view>
+					</view>
+				</view>
 			</view>
 			<!-- 中间输入框区域 -->
 			<view class="login-center">
@@ -382,6 +428,151 @@ const del = (rowid) => {
 	const index = userStore.userlist.findIndex(item => item.rowid === rowid)
 	if (index === -1) return
 	userStore.userlist.splice(index, 1)
+}
+
+// ---------------- 日期接口筛选测试（登录页调试用） ----------------
+// 预派工工作表与字段（与 pages/preDispatched/preDispatched.vue 一致）
+const DATE_TEST_WS_ID = '6a1e468d27514927ff33cbae'
+const DATE_TEST_DATE_FIELD = '6a1e488327514927ff33cca9' // 派工日期
+const DATE_TEST_STATUS_FIELD = '6a1e49c427514927ff33ccf5' // 状态（单选下拉）
+
+const showDateTestModal = ref(false)
+const dateTestLoading = ref(false)
+const dateTestDate = ref('')
+// 无日期限制（仅未派工）的对照总条数，用于判断日期条件是否真的在接口层生效
+const dateTestBaseline = ref(null)
+const dateTestResults = ref([])
+
+const pad2 = (n) => String(n).padStart(2, '0')
+const formatDateStr = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+
+// 预派工按“明天”排产为主，打开弹窗默认给明天
+const getDefaultTestDate = () => {
+	const d = new Date()
+	d.setDate(d.getDate() + 1)
+	return formatDateStr(d)
+}
+
+const openDateTest = () => {
+	dateTestDate.value = getDefaultTestDate()
+	dateTestBaseline.value = null
+	dateTestResults.value = []
+	showDateTestModal.value = true
+}
+
+const closeDateTest = () => {
+	showDateTestModal.value = false
+}
+
+// 归一化接口返回的日期原始值（可能带时间部分、对象或数组），只取前 10 位 yyyy-MM-dd
+const toDatePrefix = (v) => {
+	if (v == null) return ''
+	if (Array.isArray(v)) v = v[0]
+	if (v && typeof v === 'object') v = v.value ?? v.name ?? v.text ?? ''
+	return String(v).trim().slice(0, 10)
+}
+
+// 候选日期筛选写法（filterType 枚举含义见 utils/filterTypeEnum.js；
+// minValue/maxValue/dateRange 等扩展字段参考明道云官方筛选器说明）
+const buildDateFilterCandidates = (date) => {
+	const common = {
+		controlId: DATE_TEST_DATE_FIELD,
+		dataType: 15, // 15=日期(年-月-日)，见 utils/dataTypeEnum.js
+		spliceType: 1
+	}
+	return [{
+			label: 'Eq(2) values=[日期]',
+			filter: { ...common, filterType: 2, values: [date] }
+		},
+		{
+			label: 'DateEnum(17) value=日期',
+			filter: { ...common, filterType: 17, dateRange: 18, dateRangeType: 1, value: date, values: [] }
+		},
+		{
+			label: 'DateEnum(17) value=日期 00:00:00',
+			filter: { ...common, filterType: 17, dateRange: 18, dateRangeType: 1, value: `${date} 00:00:00`, values: [] }
+		},
+		{
+			label: 'DateBetween(31) minValue/maxValue 整天',
+			filter: {
+				...common,
+				filterType: 31,
+				dateRange: 18,
+				dateRangeType: 1,
+				minValue: `${date} 00:00:00`,
+				maxValue: `${date} 23:59:59`,
+				values: []
+			}
+		}
+	]
+}
+
+// 执行测试：先取“仅未派工”对照 total，再逐个跑各候选写法，结果输出到弹窗与控制台
+const runDateTest = async () => {
+	const date = dateTestDate.value
+	if (!date || dateTestLoading.value) return
+	dateTestLoading.value = true
+	dateTestResults.value = []
+	const statusFilter = {
+		controlId: DATE_TEST_STATUS_FIELD,
+		dataType: 11, // 11=单选下拉，与预派工页一致
+		spliceType: 1,
+		filterType: 2,
+		values: ['未派工']
+	}
+	try {
+		// 对照基准：不加日期条件，仅未派工
+		const base = await callWorkflowListAPIPaged({
+			worksheetId: DATE_TEST_WS_ID,
+			filters: [statusFilter],
+			pageSize: 1,
+			silent: true
+		})
+		dateTestBaseline.value = base.total || 0
+		console.log('【日期接口测试】对照（仅未派工、无日期限制）接口 total =', base.total)
+
+		// 逐个请求各候选写法（只取第一页用于判定，total 由接口返回；单个写法失败不影响其他写法）
+		const results = []
+		for (const c of buildDateFilterCandidates(date)) {
+			try {
+				const res = await callWorkflowListAPIPaged({
+					worksheetId: DATE_TEST_WS_ID,
+					filters: [statusFilter, c.filter],
+					pageSize: 100,
+					silent: true
+				})
+				const rows = Array.isArray(res.data) ? res.data : []
+				const total = res.total || 0
+				const matched = rows.filter((r) => toDatePrefix(r[DATE_TEST_DATE_FIELD]) === date).length
+				// 判定是否在接口层生效：接口 total 明显小于对照值，或返回行全部命中所选日期
+				const restricted = dateTestBaseline.value != null &&
+					(total < dateTestBaseline.value || (rows.length > 0 && matched === rows.length))
+				console.log('【日期接口测试】' + c.label, {
+					请求filter: c.filter,
+					接口total: total,
+					本页返回: rows.length,
+					本页日期匹配: matched,
+					接口层是否生效: restricted
+					})
+				results.push({ label: c.label, total, returned: rows.length, matched, restricted, rows })
+				// 生效的写法，把完整第一页数据打出来便于核对
+				if (restricted) {
+					console.log('【日期接口测试】' + c.label + ' 已生效，完整返回数据：', rows)
+				}
+			} catch (err) {
+				console.error('【日期接口测试】' + c.label + ' 请求失败:', err)
+				results.push({ label: c.label, error: err.message || '请求失败', total: '-', returned: 0, matched: 0, restricted: false })
+			}
+		}
+		dateTestResults.value = results.map(({ rows, ...rest }) => rest)
+		const anyHit = dateTestResults.value.some((r) => r.restricted)
+		console.log('【日期接口测试】结论：' + (anyHit ? '日期可以在接口层做限制（见上方生效写法）' : '以上写法均未生效，日期限制需继续在前端处理或调整写法'))
+	} catch (e) {
+		console.error('【日期接口测试】请求失败:', e)
+		showToast('测试失败：' + (e.message || '未知错误'))
+	} finally {
+		dateTestLoading.value = false
+	}
 }
 
 // 跳转主页面（index 页面）
@@ -791,6 +982,158 @@ const goFieldTypes = async () => {
 				flex-shrink: 0;
 			}
 		}
+	}
+
+	/* 登录页右侧“日期接口测试”按钮 */
+	.date-test-btn {
+		margin-top: px2vw(20px);
+		background: rgba(255, 255, 255, 0.08);
+	}
+
+	/* 日期接口筛选测试弹窗 */
+	.date-test-mask {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.55);
+		z-index: 1000;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.date-test-panel {
+		width: 640rpx;
+		max-width: 92vw;
+		max-height: 80vh;
+		overflow: auto;
+		background: #ffffff;
+		border-radius: 24rpx;
+		padding: 30rpx 34rpx;
+		box-sizing: border-box;
+	}
+
+	.date-test-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 24rpx;
+	}
+
+	.date-test-title {
+		font-size: 34rpx;
+		font-weight: 600;
+		color: #222;
+	}
+
+	.date-test-close {
+		font-size: 44rpx;
+		line-height: 1;
+		color: #999;
+		padding: 6rpx 10rpx;
+	}
+
+	.date-test-field-row {
+		display: flex;
+		align-items: center;
+		margin-bottom: 24rpx;
+	}
+
+	.date-test-label {
+		font-size: 28rpx;
+		color: #333;
+		margin-right: 20rpx;
+		flex-shrink: 0;
+	}
+
+	.date-test-picker {
+		flex: 1;
+		height: 76rpx;
+		line-height: 76rpx;
+		padding: 0 24rpx;
+		background: #f2f4f7;
+		border-radius: 12rpx;
+		font-size: 28rpx;
+		color: #222;
+	}
+
+	.date-test-go {
+		width: 100%;
+		height: 80rpx;
+		line-height: 80rpx;
+		background: #3556e3;
+		color: #fff;
+		font-size: 30rpx;
+		border-radius: 40rpx;
+
+		&::after {
+			border: none;
+		}
+	}
+
+	.date-test-baseline {
+		margin-top: 22rpx;
+		font-size: 26rpx;
+		color: #666;
+	}
+
+	.date-test-baseline-num {
+		color: #3556e3;
+		font-weight: 600;
+	}
+
+	.date-test-results {
+		margin-top: 18rpx;
+	}
+
+	.date-test-result {
+		background: #f7f8fa;
+		border-radius: 12rpx;
+		padding: 16rpx 20rpx;
+		margin-top: 14rpx;
+	}
+
+	.date-test-result-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.date-test-result-name {
+		font-size: 26rpx;
+		color: #333;
+	}
+
+	.date-test-result-tag {
+		font-size: 22rpx;
+		padding: 4rpx 14rpx;
+		border-radius: 20rpx;
+		flex-shrink: 0;
+		margin-left: 16rpx;
+	}
+
+	.tag-ok {
+		color: #0a7d32;
+		background: #e6f7ec;
+	}
+
+	.tag-fail {
+		color: #c0392b;
+		background: #fdecea;
+	}
+
+	.date-test-result-meta {
+		margin-top: 10rpx;
+		font-size: 24rpx;
+		color: #888;
+	}
+
+	.date-test-tip {
+		margin-top: 16rpx;
+		font-size: 24rpx;
+		color: #b06d00;
 	}
 }
 </style>
