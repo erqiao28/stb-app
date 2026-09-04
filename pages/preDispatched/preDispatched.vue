@@ -2,7 +2,7 @@
 	<view class="pre-dispatched-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="goBack"></image>
-			<picker class="header-date-picker" mode="date" :value="filterDate" :start="todayDate" @change="onDateChange">
+			<picker class="header-date-picker" mode="date" :value="filterDate" :end="tomorrowDate" @change="onDateChange">
 				<view class="header-date-display">
 					<text class="header-date-text">{{ filterDate }}</text>
 					<text class="header-date-icon">▼</text>
@@ -696,7 +696,7 @@
 			<view class="dispatch-modal-body">
 				<view class="dispatch-date-row">
 					<text class="dispatch-date-label">派工日期</text>
-					<picker class="dispatch-date-picker" mode="date" :value="dispatchModalDate" :start="todayDate" :end="tomorrowDate" @change="onDispatchModalDateChange">
+					<picker class="dispatch-date-picker" mode="date" :value="dispatchModalDate" :end="tomorrowDate" @change="onDispatchModalDateChange">
 						<view class="dispatch-date-display">
 							<text class="dispatch-date-text">{{ dispatchModalDate }}</text>
 							<text class="dispatch-date-icon">▼</text>
@@ -943,13 +943,12 @@ const filterInnerPaint = ref('')
 const filterPolish = ref('')
 const filterGuokou = ref('')
 const filterDate = ref(getTomorrowDate())
-// 顶部派工日期与派工设置日期选择器：最小可选今天、最大可选明天（即只能选择今天或明天）
-const todayDate = ref(getTodayDate())
-const tomorrowDate = ref(getTomorrowDate())
-// 派工日期只允许选择今天或明天（顶部日期选择与派工设置弹窗共用；
+// 顶部派工日期与派工设置日期选择器：最大可选明天、过去日期不限（即只能选过去日期、今天或明天；
 // picker 的 start/end 在部分端仅提示不真正拦截，因此变更回调里再做硬性校验）
+const tomorrowDate = ref(getTomorrowDate())
 const isAllowedDispatchDate = (dateStr) => {
-	return dateStr === todayDate.value || dateStr === tomorrowDate.value
+	// 允许任意过去日期、今天与明天；仅拦截晚于明天的日期（yyyy-MM-dd 字符串可直接按字典序比较）
+	return dateStr && dateStr <= tomorrowDate.value
 }
 
 const productList = ref([])
@@ -1990,9 +1989,9 @@ const handleReset = () => {
 
 const onDateChange = async (e) => {
 	const newDate = e.detail.value
-	// 硬性限制：顶部派工日期只允许今天/明天，拦截范围外选择并保持原日期不变
+	// 硬性限制：顶部派工日期不允许晚于明天（过去日期/今天/明天可选），拦截超限选择并保持原日期不变
 	if (!isAllowedDispatchDate(newDate)) {
-		uni.showToast({ title: '只能选择今天或明天', icon: 'none' })
+		uni.showToast({ title: '派工日期不能晚于明天', icon: 'none' })
 		return
 	}
 	filterDate.value = newDate
@@ -3507,9 +3506,9 @@ const closeDispatchModal = () => {
 
 const onDispatchModalDateChange = (e) => {
 	const newDate = e.detail.value
-	// 硬性限制：派工设置日期只允许今天/明天，拦截范围外选择并保持原日期不变
+	// 硬性限制：派工设置日期不允许晚于明天（过去日期/今天/明天可选），拦截超限选择并保持原日期不变
 	if (!isAllowedDispatchDate(newDate)) {
-		uni.showToast({ title: '派工日期只能选择今天或明天', icon: 'none' })
+		uni.showToast({ title: '派工日期不能晚于明天', icon: 'none' })
 		return
 	}
 	dispatchModalDate.value = newDate
