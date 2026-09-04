@@ -186,6 +186,7 @@ import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
+import { buildDateEnumFilter } from '../../utils/dateFilter'
 import http from '../../utils/request'
 import { TIME_WORK_DISPATCH_URL, TIME_WORK_UPDATE_HOURLY_URL } from '../../utils/api'
 import { useUserStore } from '../../store/user.store'
@@ -271,15 +272,23 @@ const loadEmployeesForAdd = async () => {
 
 		for (const ws of workshopList) {
 			if (!ws) continue
+			const filters = [{
+				controlId: '696075d19223cfe3a0c169dc',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: [ws]
+			}]
+			// 派工日期在接口层过滤（DateEnum(17)，构造器见 utils/dateFilter.js），只取当日员工记录
+			const dateFilter = buildDateEnumFilter({
+				controlId: '69524e7b7a59e0522d855df6',
+				date: currentDate
+			})
+			if (dateFilter) filters.push(dateFilter)
+
 			const res = await callWorkflowListAPIPaged({
 				worksheetId: 'yggs',
-				filters: [{
-					controlId: '696075d19223cfe3a0c169dc',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: [ws]
-				}],
+				filters,
 				pageSize: 100,
 				pageNum: 1
 			})
@@ -299,7 +308,7 @@ const loadEmployeesForAdd = async () => {
 					unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
 					dispatchWorkDate
 				}
-			}).filter(emp => emp.id).filter(emp => emp.dispatchWorkDate === currentDate)
+			}).filter(emp => emp.id)
 			allEmployeesOptions.value = mapped.map(emp => ({
 				label: emp.name,
 				value: emp.id,

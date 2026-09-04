@@ -1050,6 +1050,7 @@ import {
   PRE_DISPATCH_ADD_URL,
 } from '../../utils/api'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
+import { buildDateEnumFilter } from '../../utils/dateFilter'
 import {
   getPositionKeywordsForDispatch,
   POLISH_FALLBACK_POSITION_KEYWORDS,
@@ -3517,20 +3518,28 @@ const loadBatchEmployees = async () => {
   try {
     const currentDate = getCurrentDate()
     const selectedWorkshop = modalWorkshop.value || workshop.value
+    const filters = [{
+      "controlId": "696075d19223cfe3a0c169dc",
+      "dataType": 30,
+      "spliceType": 1,
+      "filterType": 2,
+      "values": [selectedWorkshop]
+    }, {
+      "controlId": "6943bd902161a0fc58bad5ab",
+      "dataType": 30,
+      "spliceType": 1,
+      "filterType": 8
+    }]
+    // 派工日期在接口层过滤（DateEnum(17)，构造器见 utils/dateFilter.js），只取当日员工记录
+    const dateFilter = buildDateEnumFilter({
+      controlId: '69524e7b7a59e0522d855df6',
+      date: currentDate
+    })
+    if (dateFilter) filters.push(dateFilter)
+
     const res = await callWorkflowListAPIPaged({
       worksheetId: 'yggs',
-      filters: [{
-        "controlId": "696075d19223cfe3a0c169dc",
-        "dataType": 30,
-        "spliceType": 1,
-        "filterType": 2,
-        "values": [selectedWorkshop]
-      }, {
-        "controlId": "6943bd902161a0fc58bad5ab",
-        "dataType": 30,
-        "spliceType": 1,
-        "filterType": 8
-      }],
+      filters,
       pageSize: 100,
       pageNum: 1
     })
@@ -3547,7 +3556,7 @@ const loadBatchEmployees = async () => {
           unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
           dispatchWorkDate: dispatchWorkDate
         }
-      }).filter(emp => emp.dispatchWorkDate === currentDate)
+      })
     } else {
       batchDispatchEmployees.value = []
     }
@@ -3891,20 +3900,28 @@ const loadMultiEmployeesForAdd = async () => {
     const allRows = []
 
     for (const ws of workshopList) {
+      const filters = [{
+        "controlId": "696075d19223cfe3a0c169dc",
+        "dataType": 30,
+        "spliceType": 1,
+        "filterType": 2,
+        "values": [ws]
+      }, {
+        "controlId": "6943bd902161a0fc58bad5ab",
+        "dataType": 30,
+        "spliceType": 1,
+        "filterType": 8
+      }]
+      // 派工日期在接口层过滤（DateEnum(17)，构造器见 utils/dateFilter.js），只取当日员工记录
+      const dateFilter = buildDateEnumFilter({
+        controlId: '69524e7b7a59e0522d855df6',
+        date: currentDate
+      })
+      if (dateFilter) filters.push(dateFilter)
+
       const res = await callWorkflowListAPIPaged({
         worksheetId: 'yggs',
-        filters: [{
-          "controlId": "696075d19223cfe3a0c169dc",
-          "dataType": 30,
-          "spliceType": 1,
-          "filterType": 2,
-          "values": [ws]
-        }, {
-          "controlId": "6943bd902161a0fc58bad5ab",
-          "dataType": 30,
-          "spliceType": 1,
-          "filterType": 8
-        }],
+        filters,
         pageSize: 100,
         pageNum: 1
       })
@@ -3931,9 +3948,8 @@ const loadMultiEmployeesForAdd = async () => {
           isTemp
         }
       })
-      // 先按派工日期过滤，再按员工类型（普/临）过滤，与 loadEmployees 保持一致
+      // 日期已在接口层过滤，此处仅按员工类型（普/临）过滤，与 loadEmployees 保持一致
       const filteredEmployees = mappedEmployees
-        .filter(emp => emp.dispatchWorkDate === currentDate)
         .filter(emp => {
           if (employeeTypeFilter.value === 'normal') {
             return !emp.isTemp  // 普：排除临时工
@@ -4746,6 +4762,13 @@ const loadEmployees = async (skipWorkshopFilter = false) => {
       "spliceType": 1,
       "filterType": 8
     }]
+    // 派工日期在接口层过滤（DateEnum(17)，构造器见 utils/dateFilter.js），只取当日员工记录；
+    // 挂到 baseFilters 上，两个查询分支（跨车间/按车间）均自动携带
+    const dateFilter = buildDateEnumFilter({
+      controlId: '69524e7b7a59e0522d855df6',
+      date: currentDate
+    })
+    if (dateFilter) baseFilters.push(dateFilter)
 
     // 非预派工模式时，添加车间过滤（仅查所选车间，不再扩展喷涂+组装）
     const workshopList = [selectedWorkshop]
@@ -4791,7 +4814,8 @@ const loadEmployees = async (skipWorkshopFilter = false) => {
           isTemp
         }
       })
-      const filteredEmployees = mappedEmployees.filter(emp => emp.dispatchWorkDate === currentDate)
+      // 日期已在接口层过滤，此处仅按员工类型（普/临）过滤
+      const filteredEmployees = mappedEmployees
         .filter(emp => {
           // 根据员工类型筛选
           if (employeeTypeFilter.value === 'normal') {

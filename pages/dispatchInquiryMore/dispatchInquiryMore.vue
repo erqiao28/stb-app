@@ -351,6 +351,7 @@ import { useUserStore } from '../../store/user.store'
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
+import { buildDateEnumFilter } from '../../utils/dateFilter'
 import Radiobox from '../../component/radiobox/radiobox.vue'
 import AddWorkerRadiobox from '../../component/addWorkerRadiobox/addWorkerRadiobox.vue'
 import http from '../../utils/request'
@@ -940,15 +941,23 @@ const loadEmployees = async () => {
 		const allRows = []
 
 		for (const ws of workshopList) {
+			const filters = [{
+				"controlId": "696075d19223cfe3a0c169dc",
+				"dataType": 30,
+				"spliceType": 1,
+				"filterType": 2,
+				"values": [ws]
+			}]
+			// 派工日期在接口层过滤（DateEnum(17)，构造器见 utils/dateFilter.js），只取当日员工记录
+			const dateFilter = buildDateEnumFilter({
+				controlId: '69524e7b7a59e0522d855df6',
+				date: currentDate
+			})
+			if (dateFilter) filters.push(dateFilter)
+
 			const res = await callWorkflowListAPIPaged({
 				worksheetId: 'yggs',
-				filters: [{
-					"controlId": "696075d19223cfe3a0c169dc",
-					"dataType": 30,
-					"spliceType": 1,
-					"filterType": 2,
-					"values": [ws]
-				}],
+				filters,
 				pageSize: 100,
 				pageNum: 1
 			})
@@ -971,7 +980,6 @@ const loadEmployees = async () => {
 				}
 			})
 			.filter(emp => emp.id)
-			.filter(emp => emp.dispatchWorkDate === currentDate)
 
 			allEmployeesOptions.value = mappedEmployees.map(emp => ({
 				rowid: emp.rowid,

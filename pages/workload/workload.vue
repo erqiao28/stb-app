@@ -67,6 +67,7 @@ import { useUserStore } from '../../store/user.store'
 const userStore = useUserStore()
 const { statusBarHeight } = useStatusBar()
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
+import { buildDateEnumFilter } from '../../utils/dateFilter'
 import { defaultWorkshopFromLoginLimits } from '../../utils/workshop'
 import { DataTypeEnum } from '../../utils/dataTypeEnum'
 import { FilterTypeEnum } from '../../utils/filterTypeEnum'
@@ -142,18 +143,26 @@ const getWorkloadList = async (pageNum, isRefresh = false) => {
 	const currentDate = getCurrentDate()
 	console.log('员工工作量查询页面 - 获取员工列表 - 当前日期:', currentDate)
 	
-	// 先获取所有数据（仅按车间过滤），然后在前端过滤日期
+	// 日期作为接口筛选条件下推（DateEnum(17)，构造器见 utils/dateFilter.js），只取当日员工记录，
+	// 不再“仅按车间拉取后在前端过滤日期”，接口 total 即当日条数，滚动分页判断保持不变
+	const filters = [
+		{
+			"controlId": "696075d19223cfe3a0c169dc",
+			"dataType": DataTypeEnum.EXTERNAL_FIELD,
+			"spliceType": 1,
+			"filterType": FilterTypeEnum.Eq,
+			"values": [selectedWorkshop.value]
+		}
+	]
+	const dateFilter = buildDateEnumFilter({
+		controlId: '69524e7b7a59e0522d855df6',
+		date: currentDate
+	})
+	if (dateFilter) filters.push(dateFilter)
+
 	const res = await callWorkflowListAPIPaged({
 		worksheetId: 'yggs',
-		filters: [
-			{
-				"controlId": "696075d19223cfe3a0c169dc",
-				"dataType": DataTypeEnum.EXTERNAL_FIELD,
-				"spliceType": 1,
-				"filterType": FilterTypeEnum.Eq,
-				"values": [selectedWorkshop.value]
-			}
-		]
+		filters
 	}, pageSize.value, pageNum)
 
 	console.log('[员工工作量查询] 获取数据', { total: res?.total, dataLength: res?.data?.length })
@@ -167,10 +176,8 @@ const getWorkloadList = async (pageNum, isRefresh = false) => {
 		estimatedSalary: item['69a652043b5e707f84d2a269'] ?? '',
 		dispatchWorkDate: item['69524e7b7a59e0522d855df6'] || ''
 	}))
-	// 前端过滤日期
-	.filter(item => item.dispatchWorkDate === currentDate)
 
-	console.log('[员工工作量查询] 前端过滤后数据', { currentDate, mappedCount: mappedData.length })
+	console.log('[员工工作量查询] 接口层日期过滤后数据', { currentDate, mappedCount: mappedData.length })
 
 	if (isRefresh) {
 		tableData.value = mappedData
