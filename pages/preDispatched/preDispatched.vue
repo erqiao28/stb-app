@@ -1313,23 +1313,27 @@ const allEmployeeOptions = ref([])
 const employeeListLoading = ref(false)
 
 // 记录上次加载员工列表时的筛选条件，用于判断是否需要重新加载
+// （改为当天全量后仅按日期缓存，车间切换走前端过滤不触发重拉）
 const lastEmployeeOptionsParams = ref({
-	workshop: '',
-	date: '',
-	type: 'normal'
+	date: ''
 })
 
 // 员工类型切换：normal-正常员工，temp-临时工
 const employeeTypeFilter = ref('normal')
 
-// 筛选后的员工列表（前端根据 employeeTypeFilter 过滤显示）
+// 员工列表展示过滤（车间 + 员工类型）：
+// 全量数据按 selectedSelectorWorkshop 前端过滤出当前车间员工展示；
+// 员工类型 normal/temp 过滤 isTempEmployee；勾选状态保存在 editData.selectedEmployeeIds 与列表无关
 const filteredEmployees = computed(() => {
+	let list = allEmployeeOptions.value
+	const ws = selectedSelectorWorkshop.value
+	if (ws) list = list.filter(emp => emp.workshop === ws)
 	if (employeeTypeFilter.value === 'normal') {
-		return allEmployeeOptions.value.filter(emp => !emp.isTempEmployee)
+		return list.filter(emp => !emp.isTempEmployee)
 	} else if (employeeTypeFilter.value === 'temp') {
-		return allEmployeeOptions.value.filter(emp => emp.isTempEmployee)
+		return list.filter(emp => emp.isTempEmployee)
 	}
-	return allEmployeeOptions.value
+	return list
 })
 
 const showProcessActionModal = ref(false)
@@ -5046,15 +5050,15 @@ const loadWorkshopEmployees = async () => {
 	}
 }
 
-// 员工选择框专用：只查所选车间员工
+// 员工选择框专用：按「所选日期」遍历全部车间拉取当天员工（仅日期在接口层过滤），
+// 每条记录带上所属车间标签 workshop；弹窗内切换车间/类型不再请求后端，只做前端过滤，
+// 已勾选的其它车间员工始终保留，切换回对应车间即恢复勾选，确认时全量匹配不会丢人
 const loadWorkshopEmployeesForSelector = async () => {
 	try {
 		const t0 = Date.now()
-		const workshopList = selectedSelectorWorkshop.value ? [selectedSelectorWorkshop.value] : []
 		const allRows = []
 
-		for (const ws of workshopList) {
-			if (!ws) continue
+		for (const ws of workshopOptions) {
 			const filters = [
 				{ controlId: EMPLOYEE_FIELD_MAP.workshop, dataType: 30, spliceType: 1, filterType: 2, values: [ws] }
 			]
@@ -5080,7 +5084,7 @@ const loadWorkshopEmployeesForSelector = async () => {
 				}, pageSize, pageNum)
 				const rows = Array.isArray(res?.data) ? res.data : []
 				if (rows.length === 0) break
-				allRows.push(...rows)
+				allRows.push(...rows.map(item => ({ item, workshop: ws })))
 
 				hasMore = rows.length === pageSize
 				pageNum++
@@ -5088,7 +5092,7 @@ const loadWorkshopEmployeesForSelector = async () => {
 			console.log(`loadWorkshopEmployeesForSelector [${ws}] pages=${totalPages} filtered=${allRows.length} cost=${Date.now() - t0}ms`)
 		}
 
-		const mapped = allRows.map((item) => {
+		const mapped = allRows.map(({ item, workshop }) => {
 			const totalHours = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.totalHours]) || '0') || 0
 			const wage = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.wage]) || '0') || 0
 			const attendance = formatFieldValue(item[EMPLOYEE_FIELD_MAP.attendance]) || ''
@@ -5100,6 +5104,7 @@ const loadWorkshopEmployeesForSelector = async () => {
 			return {
 				id: item.rowid || '',
 				name: formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName]) || '-',
+				workshop,
 				totalHours,
 				wage,
 				attendance,
@@ -5572,14 +5577,11 @@ const toggleWorkshopDropdown = () => {
 	showWorkshopDropdown.value = !showWorkshopDropdown.value
 }
 
-// 选择车间
+// 选择车间：仅切换展示车间（前端过滤）；员工已按当天全量缓存，此处不再请求后端，
+// 已勾选的其它车间员工保留，切换回对应车间即恢复勾选
 const selectWorkshop = async (ws) => {
 	selectedSelectorWorkshop.value = ws
 	showWorkshopDropdown.value = false
-	uni.showLoading({ title: '加载中...' })
-	await loadEmployeeOptions()
-	uni.hideLoading()
-	sortEmployeeOptionsByPosition()
 }
 
 // 切换员工类型（普/临）：数据已合并，只需要切换筛选条件
@@ -5681,21 +5683,20 @@ function getYesterdayDate() {
 const loadEmployeeOptions = async () => {
 	try {
 		const currentDate = filterDate.value
-		// 缓存有效时直接复用，避免重复请求
+		// 全量数据按日期缓存，缓存有效（当天 + 列表非空）时直接复用；切车间/类型走前端过滤不触发重拉
 		if (
 			allEmployeeOptions.value.length > 0 &&
-			lastEmployeeOptionsParams.value.workshop === selectedSelectorWorkshop.value &&
-			lastEmployeeOptionsParams.value.date === currentDate &&
-			lastEmployeeOptionsParams.value.type === employeeTypeFilter.value
+			lastEmployeeOptionsParams.value.date === currentDate
 		) {
 			return
 		}
-		// 员工选择框按当前选中车间查询
+		// 按当前所选日期全量拉取（不再按车间过滤，车间在展示层过滤）
 		const empList = await loadWorkshopEmployeesForSelector()
 		allEmployeeOptions.value = empList.map(item => ({
 			id: item.id || '',
 			name: item.name || '-',
 			position: item.position || '',
+			workshop: item.workshop || '',
 			totalHours: item.totalHours || 0,
 			wage: item.wage || 0,
 			isNewEmployee: item.isNewEmployee || false,
@@ -5704,9 +5705,7 @@ const loadEmployeeOptions = async () => {
 		}))
 		// 记录当前筛选条件
 		lastEmployeeOptionsParams.value = {
-			workshop: selectedSelectorWorkshop.value,
-			date: currentDate,
-			type: employeeTypeFilter.value
+			date: currentDate
 		}
 	} catch (error) {
 		console.error('加载员工列表失败:', error)
