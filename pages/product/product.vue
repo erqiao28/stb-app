@@ -91,6 +91,13 @@
                     <view class="progress-bottom-divider"></view>
                     <text class="bottom-right">{{ process.finishCount || 0 }}</text>
                   </view>
+                  <view class="progress-divider"></view>
+                  <!-- 第三层：返工(黄) | 废品(红)，仅显示数值 -->
+                  <view class="progress-third">
+                    <text class="third-rework">{{ process.reworkCount || 0 }}</text>
+                    <view class="progress-bottom-divider"></view>
+                    <text class="third-waste">{{ process.wasteCount || 0 }}</text>
+                  </view>
                 </view>
               </view>
               <text class="process-name">{{ process.processName }}</text>
@@ -338,6 +345,8 @@ const loadProcessList = async () => {
     finishCount: item['697c8b023b5e707f84ce02cc'] || 0,
     allcount: item['68099ac75d6fc47331574e82'] || 0,
     dispatchedCount: item['69840b633b5e707f84cf341e'] || 0,
+    reworkCount: item['697c93643b5e707f84ce0449'] || 0,
+    wasteCount: item['697c93643b5e707f84ce0448'] || 0,
     processOrder: item['6593b07ae97eb866a50eeba1'] || '',
     productcode: item['691d6160535b29cbd5c6c0a9'] || '',
     worktime: item['69211dac21066a9f124f62df'] || '',
@@ -883,6 +892,30 @@ const deleteSelectedProcess = async () => {
       flex: 1;
       text-align: center;
       font-size: px2vw(18px);
+    }
+
+    /* 第三层：返工(黄) | 废品(红)，仅显示数值 */
+    .progress-third {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .third-rework,
+    .third-waste {
+      flex: 1;
+      text-align: center;
+      font-size: px2vw(16px);
+      font-weight: bold;
+    }
+
+    .third-rework {
+      color: #e6a23c; /* 返工-黄 */
+    }
+
+    .third-waste {
+      color: #f56c6c; /* 废品-红 */
     }
 
     .process-name {
