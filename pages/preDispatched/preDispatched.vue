@@ -4259,25 +4259,12 @@ const loadEmployeeDailyWageExtraMap = async () => {
 }
 
 const buildEmployeeTaskProcessName = (pd) => {
-	const workshop = pd.workshop || ''
-	// 拉伸车间和抛光车间只显示工序名称
-	if (workshop === '拉伸车间' || workshop === '抛光车间') {
-		return pd.processName || '-'
-	}
-	// 喷涂车间和组装车间：岗位工序 -> 工序归类 -> 工序名称
-	if (workshop === '喷涂车间' || workshop === '组装车间') {
-		const positionProcessNames = (pd.positionProcessRowids || [])
-			.map((sid) => positionProcessDictMap.value.get(sid))
-			.filter(Boolean)
-			.join('、')
-		if (positionProcessNames) return positionProcessNames
-		const craftPositionName = pd.craftPosition ? (craftPositionDictMap.value.get(pd.craftPosition) || '') : ''
-		if (craftPositionName) return craftPositionName
-		return pd.processName || '-'
-	}
-	// 其他车间：工序归类 -> 工序名称
+	// 统一显示工序归类名称；归类为「拉伸」「抛光」时显示工序名称
 	const craftPositionName = pd.craftPosition ? (craftPositionDictMap.value.get(pd.craftPosition) || '') : ''
-	return craftPositionName || pd.processName || '-'
+	if (craftPositionName && craftPositionName !== '拉伸' && craftPositionName !== '抛光') {
+		return craftPositionName
+	}
+	return pd.processName || '-'
 }
 
 const loadEmployeeDispatchSummary = async () => {
