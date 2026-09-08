@@ -267,7 +267,7 @@
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 4, gridColumn: 4 + idx }">{{ p.dailyOutput || 0 }}</view>
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 5, gridColumn: 4 + idx }">{{ p.orderCount || 0 }}</view>
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 6, gridColumn: 4 + idx }">{{ p.allcount || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 7, gridColumn: 4 + idx }">{{ p.flowRemainCount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 7, gridColumn: 4 + idx }">{{ p.needCount || 0 }}</view>
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 8, gridColumn: 4 + idx }">{{ p.finishCount || 0 }}</view>
 							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 9, gridColumn: 4 + idx }">{{ p.dispatchCount || 0 }}</view>
 							<view
@@ -725,14 +725,14 @@
 						<text class="grid-cell-label">完成数量</text>
 						<text class="grid-cell-value">{{ dispatchModalFinishCount }}</text>
 					</view>
-					<!-- 第二行：流转剩余 / 小时产量 / 派工数量 / 工时 -->
+					<!-- 第二行：流转剩余 / 待派数 / 派工数量 / 工时 -->
 					<view class="dispatch-grid-cell">
 						<text class="grid-cell-label">流转剩余</text>
 						<text class="grid-cell-value">{{ dispatchModalFlowRemainCount }}</text>
 					</view>
 					<view class="dispatch-grid-cell">
-						<text class="grid-cell-label">小时产量</text>
-						<text class="grid-cell-value">{{ Math.round(dispatchModalAverageHourlyOutput) }}</text>
+						<text class="grid-cell-label">待派数</text>
+						<text class="grid-cell-value">{{ dispatchModalNeedCount }}</text>
 					</view>
 					<view class="dispatch-grid-cell">
 						<text class="grid-cell-label">派工数量</text>
@@ -752,12 +752,7 @@
 			</view>
 			<view class="dispatch-modal-buttons">
 				<view class="dispatch-btn-cancel" @click="closeDispatchModal">取消</view>
-				<!-- 派工数量非法（超过流转剩余/暂无产品流转）时置灰，点击由 saveDispatchModal 兜底提示 -->
-				<view
-					class="dispatch-btn-confirm"
-					:style="{ opacity: dispatchModalQtyInvalid ? 0.4 : 1 }"
-					@click="saveDispatchModal"
-				>确认</view>
+				<view class="dispatch-btn-confirm" @click="saveDispatchModal">确认</view>
 			</view>
 		</view>
 	</view>
@@ -1120,6 +1115,8 @@ const dispatchModalProductionCount = ref(0)
 const dispatchModalFinishCount = ref(0)
 const dispatchModalPreFlowCount = ref(0)
 const dispatchModalFlowRemainCount = ref(0)
+// 待派数：勾选工序的待派数（needCount）平均值，弹窗内代替原"小时产量"展示
+const dispatchModalNeedCount = ref(0)
 const dispatchModalDate = ref(getTomorrowDate())
 
 // 派工设置弹窗切换派工日期时，派工数量输入框同步为该日期已保存的数量（无保存则留空，表示提交时按流转剩余平均计算）
@@ -1129,7 +1126,7 @@ watch(dispatchModalDate, (date) => {
 	dispatchModalInput.value = productDispatchCounts.value[getDispatchCountKey(productKey, date)] || ''
 })
 
-// 派工设置弹窗：勾选工序的平均小时产量
+// 派工设置弹窗：勾选工序的平均小时产量（不再在弹窗展示，仅用于下方工时计算）
 const dispatchModalAverageHourlyOutput = computed(() => {
 	const product = dispatchModalProduct.value
 	if (!product) return 0
@@ -1149,18 +1146,7 @@ const dispatchModalWorkHours = computed(() => {
 	return parseFloat((input / avg).toFixed(2))
 })
 
-// 派工数量非法判定：数量超过流转剩余，或流转剩余为 0/空（无可派产品：该工序已完成或暂无产品流转）却填了正数；
-// 为空/0 视为"不自定义派工数量"，不属于非法。非法时弹窗"确认"按钮禁用、禁止保存
-const dispatchModalQtyInvalid = computed(() => {
-	const val = dispatchModalInput.value
-	if (val === '' || val === null || val === undefined) return false
-	const num = Number(val)
-	if (isNaN(num) || num <= 0) return false
-	const flowRemain = dispatchModalFlowRemainCount.value
-	if (flowRemain <= 0) return true
-	return num > flowRemain
-})
-
+// 派工数量不做可派数量限制，任意非负数值均可保存
 const isEmployeeExpanded = ref(false)
 
 const showEmployeeTaskPopover = ref(false)
@@ -1197,7 +1183,9 @@ const PROCESS_DETAIL_FIELD_MAP = {
 	orderCount: '6a015a2ac03685667d63787f',
 	dailyOutput: '69a96d623b5e707f84d380b6',
 	hourlyoutput: '693a879a0f64427fac25da92',
-	// 流转剩余/前道流转字段：表格"待派数"列与派工设置弹窗展示、派工限制均以流转剩余为准
+	// 待派数字段：工序列表"待派数"列与派工设置弹窗展示均取该字段（区别于流转剩余）
+	needCount: '690dc19f8d797ee211e7fc60',
+	// 前道流转/流转剩余字段：派工设置弹窗展示与派工默认值以流转剩余为准
 	preFlow: '6a961d33a7343a33805f4ae3',
 	flowRemain: '6a9bc8de3c1a1cdddc4ae539',
 }
@@ -3050,15 +3038,6 @@ const handleProcessListConfirm = async (productRowid) => {
 		return
 	}
 
-	// 勾选工序中任一流转剩余为 0/空（无可派产品）时禁止派工：
-	// 完成数量为 0/空 的工序优先提示"暂无产品流转到该工序"；勾选工序全部已完成（完成数量 > 0）则提示"该工序已完成"
-	const emptyFlowRemainProcesses = checkedProcesses.filter(p => (parseFloat(p.flowRemainCount) || 0) <= 0)
-	if (emptyFlowRemainProcesses.length > 0) {
-		const hasNotFlowYet = emptyFlowRemainProcesses.some(p => (parseFloat(p.finishCount) || 0) <= 0)
-		uni.showToast({ title: buildNoFlowRemainTip(!hasNotFlowYet), icon: 'none' })
-		return
-	}
-
 	const noPreDispatchRowidSet = new Set()
 	checkedProcesses.forEach(p => {
 		if (!p.preDispatchRowid) {
@@ -3067,7 +3046,7 @@ const handleProcessListConfirm = async (productRowid) => {
 	})
 	const noPreDispatchRowids = [...noPreDispatchRowidSet]
 
-	// 计算可派数量和完成数量
+	// 计算派工数量和完成数量
 	const dispatchDate = productDispatchDates.value[productRowid] || filterDate.value
 	let dispatchCount = 0
 	let finishCount = 0
@@ -3115,21 +3094,23 @@ const handleProcessListConfirm = async (productRowid) => {
 	}
 
 	// 用户在派工设置弹窗里为"该派工日期"自定义的派工数量（优先使用）
-	// 只有已设置且大于 0 的有效数值才传递用户输入；未设置/已被清除时回退到流转剩余平均
+	// 只有已设置且大于 0 的有效数值才传递用户输入；未设置/已被清除时按默认值口径计算
 	const rawUserInput = productDispatchCounts.value[getDispatchCountKey(productRowid, dispatchDate)]
 	const hasUserInput = rawUserInput !== undefined && rawUserInput !== '' && !isNaN(parseFloat(rawUserInput)) && parseFloat(rawUserInput) > 0
-	// 流转剩余平均值：勾选工序中流转剩余的平均值（上方已校验勾选工序流转剩余均 > 0，派工上限即流转剩余）
+	// 默认值口径：先取勾选工序的流转剩余平均，流转剩余为 0/空 时再取待派数平均
 	const flowRemainAvg = calcProcessFieldAverage(checkedProcesses, 'flowRemainCount')
+	const needCountAvg = calcProcessFieldAverage(checkedProcesses, 'needCount')
 	if (hasUserInput) {
-		// 用户自定义过派工数量：校验其不能超过当前流转剩余平均，超限拒绝提交并提示（不纠正数值，需回派工设置修改）
+		// 用户自定义过派工数量：已取消可派数量限制，按用户输入原样提交
 		dispatchCount = parseFloat(rawUserInput)
-		if (dispatchCount > flowRemainAvg) {
-			uni.showToast({ title: `派工数量不能超过流转剩余 ${flowRemainAvg}，请到派工设置修改`, icon: 'none' })
+	} else {
+		// 用户未自定义数量时：默认值先取流转剩余平均，流转剩余为 0/空 时再取待派数平均
+		dispatchCount = flowRemainAvg > 0 ? flowRemainAvg : needCountAvg
+		// 流转剩余与待派数均无有效值：没有可默认派工的数量，禁止提交（需先到派工设置自定义数量）
+		if (dispatchCount <= 0) {
+			uni.showToast({ title: '流转剩余和待派数均无有效数量，请到派工设置填写派工数量', icon: 'none' })
 			return
 		}
-	} else {
-		// 用户未自定义数量时：默认值取流转剩余平均（与派工设置弹窗口径一致）
-		dispatchCount = flowRemainAvg
 	}
 	// 完成数量：取关联工序的 finishCount 平均值
 	if (pdRows.length > 0) {
@@ -3492,16 +3473,12 @@ const handleProductClick = (product) => {
 }
 
 // 取工序集合中某数量字段大于 0 的平均值；无有效值时返回 0（字段为空或全为 0 视为无该数据）
-// 用于派工设置弹窗展示字段（生产数量/前道流转/流转剩余/完成数量），并作为派工数量上限（流转剩余）与默认值口径
+// 用于派工设置弹窗展示字段（生产数量/前道流转/流转剩余/待派数/完成数量），并作为派工数量默认值口径（流转剩余优先，待派数次之）
 const calcProcessFieldAverage = (processes, field) => {
 	const vals = processes.map(p => parseFloat(p[field]) || 0).filter(v => v > 0)
 	if (vals.length === 0) return 0
 	return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)
 }
-
-// 流转剩余为 0/空（无可派产品）时的提示文案：
-// 完成数量 > 0 说明该工序已完成（产品已做完，无剩余可流转）；完成数量为 0/空 说明暂无产品流转到该工序
-const buildNoFlowRemainTip = (finished) => (finished ? '该工序已完成' : '暂无产品流转到该工序')
 
 // 根据 productRowid 打开派工设置弹窗
 const openDispatchModalFromRowid = async (productRowid) => {
@@ -3548,15 +3525,17 @@ const openDispatchModal = async (product) => {
 		}
 	}
 
-	// 新增展示字段：前道流转 / 流转剩余 / 生产数量 = 勾选工序的平均值（跳过0）
+	// 新增展示字段：前道流转 / 流转剩余 / 待派数 / 生产数量 = 勾选工序的平均值（跳过0）
 	const preFlowAvg = calcProcessFieldAverage(checkedProcesses, 'preFlowCount')
 	const flowRemainAvg = calcProcessFieldAverage(checkedProcesses, 'flowRemainCount')
+	const needCountAvg = calcProcessFieldAverage(checkedProcesses, 'needCount')
 	const productionAvg = calcProcessFieldAverage(checkedProcesses, 'allcount')
 
 	dispatchModalProductionCount.value = productionAvg
 	dispatchModalFinishCount.value = finishCount
 	dispatchModalPreFlowCount.value = preFlowAvg
 	dispatchModalFlowRemainCount.value = flowRemainAvg
+	dispatchModalNeedCount.value = needCountAvg
 
 	showDispatchModal.value = true
 }
@@ -3579,21 +3558,9 @@ const onDispatchModalDateChange = (e) => {
 
 // 派工数量输入处理（不做数值纠正，保留用户原样输入）：
 // 受控输入（:value + @input）的唯一同步入口，先原样同步进模型（工时/保存口径一致）；
-// 输入非法（超过流转剩余 / 流转剩余为 0 或空却填了正数）时立即提示，
-// 此时弹窗"确认"按钮会置灰禁用（dispatchModalQtyInvalid），禁止保存
+// 已取消可派数量限制，输入时不再做任何数量校验提示
 const onDispatchModalInputChange = (e) => {
-	const raw = e.detail.value
-	dispatchModalInput.value = raw
-
-	const flowRemain = dispatchModalFlowRemainCount.value
-	const num = parseFloat(raw)
-	if (isNaN(num) || num <= 0) return
-	if (flowRemain <= 0) {
-		// 无可派产品：完成数量 > 0 提示"该工序已完成"，完成数量为 0/空 提示"暂无产品流转到该工序"
-		uni.showToast({ title: buildNoFlowRemainTip(dispatchModalFinishCount.value > 0), icon: 'none' })
-	} else if (num > flowRemain) {
-		uni.showToast({ title: `派工数量不能超过流转剩余 ${flowRemain}`, icon: 'none' })
-	}
+	dispatchModalInput.value = e.detail.value
 }
 
 const saveDispatchModal = () => {
@@ -3605,7 +3572,7 @@ const saveDispatchModal = () => {
 	const num = parseFloat(val)
 
 	// 输入为空或为 0 表示"不自定义派工数量"：清除该日期已保存的数量，
-	// 提交时回退到勾选工序的流转剩余平均（与工序列表"确定"的默认口径一致），日期仍按所选日期派工
+	// 提交时按默认口径计算（先取流转剩余平均，流转剩余为 0/空 时再取待派数平均，与工序列表"确定"一致），日期仍按所选日期派工
 	if (val === '' || num === 0) {
 		productDispatchDates.value[productKey] = date
 		delete productDispatchCounts.value[getDispatchCountKey(productKey, date)]
@@ -3615,17 +3582,6 @@ const saveDispatchModal = () => {
 
 	if (isNaN(num) || num < 0) {
 		uni.showToast({ title: '请输入有效的非负派工数量', icon: 'none' })
-		return
-	}
-
-	// 数量非法（超过流转剩余 / 流转剩余为 0 或空却填了正数）：不允许保存
-	// （弹窗"确认"按钮已置灰，此处兜底提示，不纠正用户输入的数值）
-	if (dispatchModalQtyInvalid.value) {
-		const flowRemain = dispatchModalFlowRemainCount.value
-		const tip = flowRemain <= 0
-			? buildNoFlowRemainTip(dispatchModalFinishCount.value > 0)
-			: `派工数量不能超过流转剩余 ${flowRemain}`
-		uni.showToast({ title: tip, icon: 'none' })
 		return
 	}
 
@@ -3968,9 +3924,11 @@ const loadProductProcesses = async (product) => {
 				hourlyoutput: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.hourlyoutput]) || 0,
 				allcount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.allcount]) || 0,
 				finishCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.finishCount]) || 0,
-				// 前道流转 / 流转剩余：派工设置弹窗展示与派工数量限制均以流转剩余（待派数）为准
+				// 前道流转 / 流转剩余：派工设置弹窗展示与派工默认值均以流转剩余为准
 				preFlowCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.preFlow]) || 0,
 				flowRemainCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.flowRemain]) || 0,
+				// 待派数：工序列表"待派数"列与派工设置弹窗展示取该字段
+				needCount: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.needCount]) || 0,
 				isAssociated,
 				isBeforeAssociated: !isAssociated && seq <= maxAssociatedSequence,
 				isAfterAssociated: !isAssociated && seq > maxAssociatedSequence,
@@ -4667,12 +4625,11 @@ const isDispatchEnabled = (productRowid) => {
 	return selectedProcessIds.value.some(rowid => currentProcessIds.includes(rowid))
 }
 
-// 判断"确定"是否可点击：已勾选工序，且勾选工序的流转剩余都 > 0（0/空 表示无可派产品：该工序已完成或暂无产品流转，禁止派工）
+// 判断"确定"是否可点击：已勾选工序即可（不再校验待派数/流转剩余，允许任意数量派工）
 const isDispatchConfirmEnabled = (productRowid) => {
 	const checkedProcesses = processList.value
 		.filter(p => p.productRowid === productRowid && selectedProcessIds.value.includes(p.rowid))
-	if (checkedProcesses.length === 0) return false
-	return checkedProcesses.every(p => (parseFloat(p.flowRemainCount) || 0) > 0)
+	return checkedProcesses.length > 0
 }
 
 const openProcessActionModalByRowid = (productRowid) => {
