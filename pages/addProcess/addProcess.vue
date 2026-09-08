@@ -108,12 +108,6 @@ const orderData = ref({
 	billType: '' // 从派工页面传过来的单据类型（正常排产、返工排产）
 })
 
-/** 拉伸/喷涂车间：工序字典仅展示名称中含「新」字的工序 */
-const NEW_PROCESS_NAME_CHAR = '新'
-
-const shouldLimitAddProcessListToNewChar = (workshop) =>
-	workshop === '拉伸车间' || workshop === '喷涂车间'
-
 const tableData = ref([])
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -213,7 +207,6 @@ const getProcessList = async (pageNum, isRefresh = false) => {
 	if (loading.value && !isRefresh) return;
 	const seq = ++requestSeq
 	loading.value = true;
-	console.log('workshop:', orderData.value.workshop)
 	const baseFilters = [
 		{
 			controlId: '6614d7ed1f7f1264f3a332c3',
@@ -245,8 +238,7 @@ const getProcessList = async (pageNum, isRefresh = false) => {
 		}
 	]
 
-	// 动态添加工序名称 filter（有搜索词用搜索；拉伸/喷涂且无搜索时按「新」字模糊缩小范围）
-	const limitNewChar = shouldLimitAddProcessListToNewChar(orderData.value.workshop)
+	// 动态添加工序名称 filter（有搜索词时按名称模糊筛选）
 	let filters = [...baseFilters]
 	const nameSearch = searchValue.value.trim()
 	if (nameSearch) {
@@ -256,15 +248,6 @@ const getProcessList = async (pageNum, isRefresh = false) => {
 			spliceType: 1,
 			filterType: 1,  // 模糊匹配
 			values: [nameSearch]
-		})
-		console.log('搜索 filters:', filters)  // 日志确认搜索条件
-	} else if (limitNewChar) {
-		filters.push({
-			controlId: '6614b6721103c1d5d3a08122',
-			dataType: 30,
-			spliceType: 1,
-			filterType: 1,
-			values: [NEW_PROCESS_NAME_CHAR]
 		})
 	}
 
@@ -288,20 +271,12 @@ const getProcessList = async (pageNum, isRefresh = false) => {
 	}
 	// 已有更新的请求发出，丢弃本次过期结果
 	if (seq !== requestSeq) return
-	console.log('API res total:', res.total, 'data length:', res.data.length)
-	console.log('API res data:', res.data)  // 日志确认数据
-	let mappedData = res.data.map(item => {
+	let mappedData = (res.data || []).map(item => {
 		return {
 			processName: item['Name'],
 			rowid: item['rowid'] || ''
 		}
 	})
-	if (limitNewChar) {
-		mappedData = mappedData.filter((row) =>
-			String(row.processName || '').includes(NEW_PROCESS_NAME_CHAR)
-		)
-	}
-	console.log(mappedData)
 
 	if (isRefresh) {
 		tableData.value = mappedData

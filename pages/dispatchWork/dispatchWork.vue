@@ -1422,10 +1422,6 @@ const isReworkMergeProcessBtn = (item) => {
 }
 
 // ---------- 合并工序模态（按车间拉工序字典，同添加工序页 getProcessList） ----------
-/** 与 addProcess 页一致：拉伸/喷涂仅名称含「新」字的工序 */
-const MERGE_PROCESS_LIST_NEW_CHAR = '新'
-const mergeProcessListLimitToNewChar = (ws) => ws === '拉伸车间' || ws === '喷涂车间'
-
 const showReworkStartModal = ref(false)
 const reworkStartItem = ref(null)
 const mergeProcessTableData = ref([])
@@ -1444,7 +1440,6 @@ const fetchMergeProcessList = async (pageNum, isRefresh = false) => {
     return
   }
   mergeProcessLoading.value = true
-  const limitNewChar = mergeProcessListLimitToNewChar(ws)
   const baseFilters = [
     { controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
     { controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
@@ -1461,14 +1456,6 @@ const fetchMergeProcessList = async (pageNum, isRefresh = false) => {
       filterType: 1,
       values: [nameSearch]
     })
-  } else if (limitNewChar) {
-    filters.push({
-      controlId: '6614b6721103c1d5d3a08122',
-      dataType: 30,
-      spliceType: 1,
-      filterType: 1,
-      values: [MERGE_PROCESS_LIST_NEW_CHAR]
-    })
   }
   const params = {
     worksheetId: 'shujuzidian',
@@ -1481,11 +1468,6 @@ const fetchMergeProcessList = async (pageNum, isRefresh = false) => {
       processName: item['Name'],
       rowid: item['rowid'] || ''
     }))
-    if (limitNewChar) {
-      mapped = mapped.filter((row) =>
-        String(row.processName || '').includes(MERGE_PROCESS_LIST_NEW_CHAR)
-      )
-    }
     if (isRefresh) {
       mergeProcessTableData.value = mapped
     } else {
@@ -5103,13 +5085,15 @@ const addProcess = async (item) => {
   let baseProcess = null
 
   if (isMultiSelectProcessWorkshop.value) {
-    // 组装/抛光/喷涂：使用多选工序列表
-    const selected = selectedMultiProcesses.value.find(p => isSameBillAs(p.item, item))
-    if (!selected) {
+    // 组装/抛光/喷涂：使用多选工序列表，以勾选工序中生产顺序最大者为插入基准
+    const selected = selectedMultiProcesses.value.filter(p => isSameBillAs(p.item, item))
+    if (!selected.length) {
       uni.showToast({ title: '请先选择一个工序', icon: 'none' })
       return
     }
-    baseProcess = selected.process
+    baseProcess = selected.reduce((max, p) =>
+      (parseFloat(p.process.sequence) || 0) > (parseFloat(max.process.sequence) || 0) ? p : max
+    ).process
   } else {
     // 拉伸等车间：使用单选选中的工序（与工序点击一致）；产品派工按同步键取当前单据工序
     if (dispatchMode.value === 'product' && productDispatchProcessSyncKey.value) {
@@ -5127,7 +5111,7 @@ const addProcess = async (item) => {
     }
   }
 
-  // 基于当前选中工序计算新工序顺序：选中工序顺序 + 0.01
+  // 基于基准工序（多选时为顺序最大者）计算新工序顺序：基准工序顺序 + 0.01
   const currentSequence = parseFloat(baseProcess.sequence || 0)
   const selectedSequence = parseFloat((currentSequence + 0.01).toFixed(2))
 
@@ -5286,8 +5270,9 @@ const confirmDeleteProcess = async () => {
   }
   try {
     uni.showLoading({ title: '删除中...' })
+    // 删除接口传 rowids 数组（弹窗内为单道，仍按数组格式与预派工页面保持一致）
     const result = await http.post(DELETE_PROCESS_URL, {
-      rowid: processRowid
+      rowids: [processRowid]
     })
     uni.hideLoading()
 

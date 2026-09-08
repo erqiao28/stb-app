@@ -65,7 +65,7 @@
               class="process-item"
               :class="{
                 'process-over': process.isOver == 1,
-                'process-selected': selectedProcess?.rowid === process.rowid
+                'process-selected': isProcessSelected(process)
               }"
               @click="selectProcess(process)"
             >
@@ -114,7 +114,7 @@
     <view class="fab-refresh" @click="onManualRefresh">
       <text class="fab-refresh-text">&#x27F3;</text>
     </view>
-    <view class="fab-action" :class="{ 'fab-action--disabled': !selectedProcess }" @click="openActionModal">
+    <view class="fab-action" :class="{ 'fab-action--disabled': !selectedProcesses.length }" @click="openActionModal">
       <text class="fab-action-text">&#x2699;</text>
     </view>
 
@@ -128,8 +128,8 @@
 
         <view class="modal-body">
           <!-- 当前选中工序信息 -->
-          <view class="selected-process-info" v-if="selectedProcess">
-            <text class="selected-process-name">{{ selectedProcess.processName || '-' }}</text>
+          <view class="selected-process-info" v-if="selectedProcesses.length">
+            <text class="selected-process-name">已选 {{ selectedProcesses.length }} 道：{{ selectedProcessNames }}</text>
           </view>
 
           <!-- 搜索 -->
@@ -205,7 +205,7 @@
 
 <script setup>
 import { onLoad } from '@dcloudio/uni-app'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import http from '../../utils/request.js'
@@ -230,7 +230,26 @@ const productionCode = ref('')
 const orderCode = ref('')
 const productInfo = ref(null)
 const processList = ref([])
-const selectedProcess = ref(null)
+// 勾选的工序（支持多选，与预派工页面工艺调整口径一致）
+const selectedProcesses = ref([])
+
+// 是否已勾选某道工序
+const isProcessSelected = (process) => {
+  return selectedProcesses.value.some(p => p.rowid === process.rowid)
+}
+
+// 勾选工序中生产顺序最大的那道（添加/替换目标与生产顺序默认值口径）
+const maxSequenceSelectedProcess = computed(() => {
+  if (!selectedProcesses.value.length) return null
+  return selectedProcesses.value.reduce((max, p) =>
+    (parseFloat(p.sequence) || 0) > (parseFloat(max.sequence) || 0) ? p : max
+  )
+})
+
+// 已选工序名称（顿号连接，用于弹窗展示）
+const selectedProcessNames = computed(() => {
+  return selectedProcesses.value.map(p => p.processName || '-').join('、')
+})
 
 onLoad((options) => {
   const pc = options?.productionCode
@@ -369,10 +388,11 @@ const loadProcessList = async () => {
 }
 
 const selectProcess = (process) => {
-  if (selectedProcess.value?.rowid === process.rowid) {
-    selectedProcess.value = null
+  const index = selectedProcesses.value.findIndex(p => p.rowid === process.rowid)
+  if (index >= 0) {
+    selectedProcesses.value.splice(index, 1)
   } else {
-    selectedProcess.value = process
+    selectedProcesses.value.push(process)
   }
 }
 
@@ -421,9 +441,9 @@ const modifyModeOptions = ref(['添加', '替换', '删除'])
 const modalModifyModeIndex = ref(0)
 
 const openActionModal = () => {
-  // 必须选中一个工序才能打开模态框
-  if (!selectedProcess.value) {
-    uni.showToast({ title: '请先选择一个工序', icon: 'none' })
+  // 必须至少勾选一道工序才能打开模态框（支持多选）
+  if (!selectedProcesses.value.length) {
+    uni.showToast({ title: '请先选择工序', icon: 'none' })
     return
   }
   showActionModal.value = true
@@ -431,10 +451,9 @@ const openActionModal = () => {
   modalSearchValue.value = ''
   modalSelectedProcess.value = null
   modalModifyModeIndex.value = 0
-  // 计算生产顺序：在选中的工序后添加
-  const currentSequence = parseFloat(selectedProcess.value.sequence || 0)
-  const selectedSequence = parseFloat((currentSequence + 0.01).toFixed(2))
-  modalProductionSequence.value = selectedSequence.toFixed(2)
+  // 计算生产顺序：取勾选工序中最大顺序 + 0.01
+  const maxSequence = parseFloat(maxSequenceSelectedProcess.value?.sequence || 0)
+  modalProductionSequence.value = (maxSequence + 0.01).toFixed(2)
   // 加载工序列表
   loadModalProcessList(1, true)
 }
@@ -522,7 +541,8 @@ const confirmAction = async () => {
     processRowid: modalSelectedProcess.value.rowid || '',
     sequence: parseFloat(modalProductionSequence.value) || 0,
     modifyMode: mode,
-    selectedProcessId: selectedProcess.value?.rowid || '',
+    // 多选时以勾选工序中生产顺序最大者为操作目标（与预派工页面口径一致）
+    selectedProcessId: maxSequenceSelectedProcess.value?.rowid || '',
     productionCode: productionCode.value || ''
   }
 
@@ -539,8 +559,8 @@ const confirmAction = async () => {
     if (res && (typeof res === 'string' || res.status === 1 || res.status === 0 || res.success === true || res.code === 200 || res.data)) {
       uni.showToast({ title: '操作成功', icon: 'success' })
       closeActionModal()
-      // 清空选中状态并刷新
-      selectedProcess.value = null
+      // 清空勾选状态并刷新
+      selectedProcesses.value = []
       setTimeout(() => {
         loadData()
       }, 1000)
@@ -559,17 +579,17 @@ const confirmAction = async () => {
   }
 }
 
-// 删除选中的工序
+// 删除选中的工序：传所有勾选工序的 rowid 数组
 const deleteSelectedProcess = async () => {
-  const processRowid = selectedProcess.value?.rowid || ''
-  if (!processRowid) {
+  const processRowids = selectedProcesses.value.map(p => p.rowid || '').filter(Boolean)
+  if (processRowids.length === 0) {
     uni.showToast({ title: '工序ID不存在', icon: 'none' })
     return
   }
 
   uni.showModal({
     title: '确认删除',
-    content: `确定要删除工序「${selectedProcess.value?.processName || ''}」吗？删除后无法恢复。`,
+    content: `确定要删除选中的 ${processRowids.length} 道工序吗？删除后无法恢复。`,
     confirmText: '删除',
     cancelText: '取消',
     success: async (modalRes) => {
@@ -577,7 +597,7 @@ const deleteSelectedProcess = async () => {
         uni.showLoading({ title: '删除中...' })
         try {
           const result = await http.post(DELETE_PROCESS_URL, {
-            rowid: processRowid
+            rowids: processRowids
           })
           uni.hideLoading()
 
@@ -588,8 +608,8 @@ const deleteSelectedProcess = async () => {
 
           uni.showToast({ title: '删除成功' })
           closeActionModal()
-          // 清空选中状态
-          selectedProcess.value = null
+          // 清空勾选状态
+          selectedProcesses.value = []
           setTimeout(() => {
             loadData()
           }, 1000)

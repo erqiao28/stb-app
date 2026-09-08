@@ -4608,13 +4608,13 @@ const openProcessActionModal = (product) => {
 	loadProcessActionList()
 }
 
-// 判断当前产品下是否只选中了一道有效的工序
+// 判断当前产品下是否选中了工序：勾选一道或多道均可使用工艺调整
 const isProcessActionEnabled = (productRowid) => {
 	const currentProcessIds = processList.value
 		.filter(p => p.productRowid === productRowid)
 		.map(p => p.rowid)
 	const selectedCount = selectedProcessIds.value.filter(rowid => currentProcessIds.includes(rowid)).length
-	return selectedCount === 1
+	return selectedCount > 0
 }
 
 // 判断当前产品下是否至少选中了一道工序
@@ -4633,27 +4633,15 @@ const isDispatchConfirmEnabled = (productRowid) => {
 }
 
 const openProcessActionModalByRowid = (productRowid) => {
-	// 获取当前产品下的所有工序 ID
-	const currentProcessIds = processList.value
-		.filter(p => p.productRowid === productRowid)
-		.map(p => p.rowid)
-	// 检查当前产品是否只选中了一道工序
-	const selectedInCurrentProduct = selectedProcessIds.value.filter(rowid => currentProcessIds.includes(rowid))
-	if (selectedInCurrentProduct.length !== 1) {
-		uni.showToast({ title: '请先勾选一道工序', icon: 'none' })
+	// 当前产品下勾选的工序（可多选）
+	const checkedProcesses = processList.value.filter(p => p.productRowid === productRowid && selectedProcessIds.value.includes(p.rowid))
+	if (checkedProcesses.length === 0) {
+		uni.showToast({ title: '请先勾选工序', icon: 'none' })
 		return
 	}
-	const selectedProcessId = selectedInCurrentProduct[0]
-	const selectedProcess = processList.value.find((p) => p.rowid === selectedProcessId)
-	// 校验选中的工序是否属于当前产品（双重保险）
-	if (!selectedProcess || selectedProcess.productRowid !== productRowid) {
-		uni.showToast({ title: '请勾选当前产品下的工序', icon: 'none' })
-		return
-	}
-	// 获取选中工序的顺序
-	const selectedSeq = selectedProcess ? parseFloat(selectedProcess.sequence) || 0 : 0
-	// 生产顺序默认为选中工序顺序 + 0.01
-	processActionSequence.value = (selectedSeq + 0.01).toFixed(2)
+	// 生产顺序默认取勾选工序中最大顺序 + 0.01
+	const maxSeq = Math.max(...checkedProcesses.map(p => parseFloat(p.sequence) || 0))
+	processActionSequence.value = (maxSeq + 0.01).toFixed(2)
 	const product = productList.value.find((p) => p.uniqueKey === productRowid)
 	openProcessActionModal(product || { uniqueKey: productRowid, productName: '' })
 }
@@ -4818,21 +4806,23 @@ const confirmProcessAction = async () => {
 	}
 
 	if (mode === '删除') {
-		// 调用删除工序接口，删除勾选的那道工序
-		const processRowid = selectedProcessIds.value[0] || ''
-		if (!processRowid) {
+		// 调用删除工序接口：传当前产品下所有勾选工序的 rowid 数组
+		const productRowid = product?.uniqueKey || ''
+		const processRowids = processList.value
+			.filter(p => p.productRowid === productRowid && selectedProcessIds.value.includes(p.rowid))
+			.map(p => p.rowid)
+		if (processRowids.length === 0) {
 			uni.showToast({ title: '工序ID不存在', icon: 'none' })
 			return
 		}
-		const productRowid = product?.uniqueKey || ''
 		try {
 			uni.showLoading({ title: '删除中...' })
-			await http.post(DELETE_PROCESS_URL, { rowid: processRowid })
+			await http.post(DELETE_PROCESS_URL, { rowids: processRowids })
 			uni.hideLoading()
 			closeProcessActionModal()
 			uni.showToast({ title: '删除成功', icon: 'success' })
-			// 轮询等待工序数量减少
-			const updated = await waitForProcessUpdate(product, { expectedCount: -1 })
+			// 轮询等待工序数量减少（删除几道期望就减少几道）
+			const updated = await waitForProcessUpdate(product, { expectedCount: -processRowids.length })
 			if (!updated) {
 				// 超时后强制刷新一次
 				loadedProductIds.value = loadedProductIds.value.filter(id => id !== productRowid)
@@ -4861,12 +4851,21 @@ const confirmProcessAction = async () => {
 			return
 		}
 		const productRowid = product?.uniqueKey || ''
+		// 多选时以勾选工序中生产顺序最大的那道作为操作目标（与生产顺序默认值口径一致）
+		const checkedProcesses = processList.value.filter(p => p.productRowid === productRowid && selectedProcessIds.value.includes(p.rowid))
+		if (checkedProcesses.length === 0) {
+			uni.showToast({ title: '请先勾选工序', icon: 'none' })
+			return
+		}
+		const targetProcess = checkedProcesses.reduce((max, p) =>
+			(parseFloat(p.sequence) || 0) > (parseFloat(max.sequence) || 0) ? p : max
+		)
 		const params = {
 			processName: selected.processName || '',
 			processRowid: selected.rowid || '',
 			sequence: parseFloat(processActionSequence.value) || 0,
 			modifyMode: mode,
-			selectedProcessId: selectedProcessIds.value[0] || '',
+			selectedProcessId: targetProcess.rowid,
 			productionCode: productionCode,
 			workshop: loginWorkshop.value || ''
 		}
@@ -4885,13 +4884,9 @@ const confirmProcessAction = async () => {
 			const updated = await waitForProcessUpdate(product, {
 				expectedCount,
 				checkFunc: replaceMode ? (current) => {
-					// 替换时检查：当前选中工序的 processName 是否已经在列表中
-					const selectedProcessRowid = selectedProcessIds.value[0] || ''
-					const selectedProcess = processList.value.find(p => p.rowid === selectedProcessRowid)
-					if (selectedProcess) {
-						return current.some(p => p.processName === selectedProcess.processName)
-					}
-					return false
+					// 替换时检查：被替换工序（勾选工序中顺序最大者）的 processName 是否已经在列表中
+					const selectedProcess = processList.value.find(p => p.rowid === targetProcess.rowid) || targetProcess
+					return current.some(p => p.processName === selectedProcess.processName)
 				} : undefined
 			})
 
