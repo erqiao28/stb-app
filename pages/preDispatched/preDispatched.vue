@@ -752,7 +752,12 @@
 			</view>
 			<view class="dispatch-modal-buttons">
 				<view class="dispatch-btn-cancel" @click="closeDispatchModal">取消</view>
-				<view class="dispatch-btn-confirm" @click="saveDispatchModal">确认</view>
+				<!-- 派工数量超过待派数时置灰，点击由 saveDispatchModal 兜底提示 -->
+				<view
+					class="dispatch-btn-confirm"
+					:style="{ opacity: dispatchModalQtyInvalid ? 0.4 : 1 }"
+					@click="saveDispatchModal"
+				>确认</view>
 			</view>
 		</view>
 	</view>
@@ -1146,7 +1151,16 @@ const dispatchModalWorkHours = computed(() => {
 	return parseFloat((input / avg).toFixed(2))
 })
 
-// 派工数量不做可派数量限制，任意非负数值均可保存
+// 派工数量非法判定：正数不能超过待派数（needCount 平均值）；
+// 为空/0 视为"不自定义派工数量"，不属于非法。非法时弹窗"确认"按钮禁用、禁止保存
+const dispatchModalQtyInvalid = computed(() => {
+	const val = dispatchModalInput.value
+	if (val === '' || val === null || val === undefined) return false
+	const num = Number(val)
+	if (isNaN(num) || num <= 0) return false
+	return num > dispatchModalNeedCount.value
+})
+
 const isEmployeeExpanded = ref(false)
 
 const showEmployeeTaskPopover = ref(false)
@@ -3101,8 +3115,12 @@ const handleProcessListConfirm = async (productRowid) => {
 	const flowRemainAvg = calcProcessFieldAverage(checkedProcesses, 'flowRemainCount')
 	const needCountAvg = calcProcessFieldAverage(checkedProcesses, 'needCount')
 	if (hasUserInput) {
-		// 用户自定义过派工数量：已取消可派数量限制，按用户输入原样提交
+		// 用户自定义过派工数量：校验其不能超过待派数平均，超限拒绝提交并提示（不纠正数值，需回派工设置修改）
 		dispatchCount = parseFloat(rawUserInput)
+		if (dispatchCount > needCountAvg) {
+			uni.showToast({ title: `派工数量不能超过待派数 ${needCountAvg}，请到派工设置修改`, icon: 'none' })
+			return
+		}
 	} else {
 		// 用户未自定义数量时：默认值先取流转剩余平均，流转剩余为 0/空 时再取待派数平均
 		dispatchCount = flowRemainAvg > 0 ? flowRemainAvg : needCountAvg
@@ -3558,9 +3576,17 @@ const onDispatchModalDateChange = (e) => {
 
 // 派工数量输入处理（不做数值纠正，保留用户原样输入）：
 // 受控输入（:value + @input）的唯一同步入口，先原样同步进模型（工时/保存口径一致）；
-// 已取消可派数量限制，输入时不再做任何数量校验提示
+// 输入正数超过待派数时立即提示，此时弹窗"确认"按钮置灰禁用（dispatchModalQtyInvalid），禁止保存
 const onDispatchModalInputChange = (e) => {
-	dispatchModalInput.value = e.detail.value
+	const raw = e.detail.value
+	dispatchModalInput.value = raw
+
+	const needCount = dispatchModalNeedCount.value
+	const num = parseFloat(raw)
+	if (isNaN(num) || num <= 0) return
+	if (num > needCount) {
+		uni.showToast({ title: `派工数量不能超过待派数 ${needCount}`, icon: 'none' })
+	}
 }
 
 const saveDispatchModal = () => {
@@ -3582,6 +3608,12 @@ const saveDispatchModal = () => {
 
 	if (isNaN(num) || num < 0) {
 		uni.showToast({ title: '请输入有效的非负派工数量', icon: 'none' })
+		return
+	}
+
+	// 数量超过待派数：不允许保存（弹窗"确认"按钮已置灰，此处兜底提示，不纠正用户输入的数值）
+	if (dispatchModalQtyInvalid.value) {
+		uni.showToast({ title: `派工数量不能超过待派数 ${dispatchModalNeedCount.value}`, icon: 'none' })
 		return
 	}
 
