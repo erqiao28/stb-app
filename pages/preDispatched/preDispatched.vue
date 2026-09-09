@@ -49,7 +49,7 @@
 								<view class="employee-chart-bar process-bar" :style="{ height: '100%', backgroundColor: emp.barColor }" @click="toggleEmployeeExpand(emp)">
 									<view class="attendance-btn attendance-btn-up" @click.stop="handlePositionEmployeeNew(emp)">新</view>
 									<text class="employee-chart-name">{{ emp.name }}</text>
-									<view class="attendance-btn attendance-btn-down" @click.stop="handlePositionEmployeeOld(emp)">老</view>
+								<view class="attendance-btn attendance-btn-down" @click.stop="handlePositionEmployeeOld(emp)">老</view>
 								</view>
 							</view>
 							<view class="employee-expand-panel" v-if="expandedEmployeeId === emp.id">
@@ -1459,7 +1459,9 @@ const handleProcessDropdownItemClick = async (proc) => {
 			employeeRowid: emp.id,
 			processSeq: selectedProcessSeq.value,
 			processRowid: proc.rowid,
-			workshop: loginWorkshop.value || ''
+			workshop: loginWorkshop.value || '',
+			// 所选数据类型：工序员工点选的是工序，岗位员工点选的是岗位
+			processType: emp.employeeType === '岗位' ? '岗位' : '工序'
 		}
 		await http.post(POSITION_PROCESS_SELECT_URL, params)
 		uni.hideLoading()
@@ -1483,7 +1485,9 @@ const handleProcessDelete = async (emp, seq) => {
 		const params = {
 			employeeId: emp.id,
 			processSeq: seq,
-			workshop: loginWorkshop.value || ''
+			workshop: loginWorkshop.value || '',
+			// 所选数据类型：与该员工的类型一致（工序员工删工序，岗位员工删岗位）
+			processType: emp.employeeType === '岗位' ? '岗位' : '工序'
 		}
 		await http.post(POSITION_PROCESS_DELETE_URL, params)
 		uni.hideLoading()
@@ -1518,8 +1522,8 @@ const loadProcessDropdownList = async (emp) => {
 	try {
 		const ws = loginWorkshop.value
 
-		if (ws === '拉伸车间') {
-			// 拉伸车间：从工序字典获取三级工序
+		// 工序员工：从工序字典获取本车间全部三级工序
+		if (emp?.employeeType !== '岗位') {
 			const filters = [
 				{ controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
 				{ controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
@@ -1545,7 +1549,7 @@ const loadProcessDropdownList = async (emp) => {
 			return
 		}
 
-		// 喷涂、抛光、组装车间：从岗位工序表获取岗位
+		// 岗位员工：从岗位工序表获取本车间岗位（喷涂车间同时取组装车间的岗位）
 		const filters = []
 		filters.push({
 			controlId: '6a3124a86d70ffabc66c8515',
@@ -5028,15 +5032,20 @@ const loadPositionProcessEmployees = async () => {
 			silent: true
 		}, 100)
 		const rows = Array.isArray(res?.data) ? res.data : []
-		// 拉伸车间获取工序，其他车间（喷涂、抛光、组装）获取岗位
-		const processFieldIds = wsFilter === '拉伸车间'
-			? POSITION_PROCESS_FIELD_MAP.stretchAndPolish
-			: POSITION_PROCESS_FIELD_MAP.assembly
 		const mapped = rows.filter((item) => {
 			// 过滤掉临时工：临时工字段（6a744a494239d5290f2f6be3）为 1 是临时工，为 0 是正式工
 			return item['6a744a494239d5290f2f6be3'] != 1
 		}).map((item) => {
 			const isNewEmployee = item['6a7154c54239d5290f2ca6d4'] == '1'
+			// 先取员工五个工序字段，全部为空再回退到五个岗位字段，并标记员工类型：
+			// 有工序数据的是"工序员工"，无工序有岗位的是"岗位员工"；两者都为空默认按工序员工处理但不显示类型标记
+			const processVals = POSITION_PROCESS_FIELD_MAP.stretchAndPolish.map((fieldId) => formatFieldValue(item[fieldId]))
+			const isProcessEmployee = processVals.some((v) => Boolean(v))
+			const positionVals = POSITION_PROCESS_FIELD_MAP.assembly.map((fieldId) => formatFieldValue(item[fieldId]))
+			const isPositionEmployee = !isProcessEmployee && positionVals.some((v) => Boolean(v))
+			const vals = isProcessEmployee ? processVals : positionVals
+			const type = isProcessEmployee || !isPositionEmployee ? '工序' : '岗位'
+			console.log('[抽屉调试] 员工映射:', formatFieldValue(item['6695dc2a2503723eec1aa766']), '工序值:', JSON.stringify(processVals), '岗位值:', JSON.stringify(positionVals), '=>', type)
 			return {
 				id: item.rowid || '',
 				rowid: item.rowid || '',
@@ -5045,7 +5054,8 @@ const loadPositionProcessEmployees = async () => {
 				wage: 0,
 				barHeight: '0%',
 				barColor: isNewEmployee ? '#4caf50' : '#5884f1',
-				processNames: processFieldIds.map((fieldId) => formatFieldValue(item[fieldId]) || '-')
+				employeeType: type,
+				processNames: vals.map((v) => v || '-')
 			}
 		})
 		positionProcessEmployeeList.value = mapped
