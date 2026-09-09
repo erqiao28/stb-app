@@ -3914,7 +3914,9 @@ const loadProductProcesses = async (product) => {
 			controlId: '691d6160535b29cbd5c6c0a9',
 			dataType: 30,
 			spliceType: 1,
-			filterType: 1,
+			// 生产编号必须精确匹配：模糊匹配会把编号存在包含关系的其他产品工序也查出来，
+			// 导致工艺调整添加时把其他产品工序排产明细的 rowid 作为锚点传给后端
+			filterType: 2,
 			values: [productionCode]
 		}]
 		if (loginWorkshop.value) {
