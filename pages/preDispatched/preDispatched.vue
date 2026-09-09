@@ -9,16 +9,6 @@
 				</view>
 			</picker>
 			<view class="header-btn-bar">
-			<!-- 组装车间岗位筛选按钮：数据来自岗位工序表，仅组装车间权限时显示，样式与功能按钮区分 -->
-			<template v-if="loginWorkshop === '组装车间'">
-				<view
-					v-for="position in assemblyPositionButtons"
-					:key="position.rowid"
-					class="header-btn header-btn-position"
-					:class="{ active: activeAssemblyPosition === position.name }"
-					@click="handleAssemblyPositionClick(position)"
-				>{{ position.name }}</view>
-			</template>
 			<view class="header-btn" :class="{ active: showProcessPanel }" @click="toggleProcessPanel">岗位工序</view>
 			<view class="header-btn" :class="{ active: showAttendancePanel }" @click="toggleAttendancePanel">员工出勤</view>
 			<view class="header-btn" v-if="loginWorkshop === '喷涂车间'" :class="{ active: showSprayPanel }" @click="toggleSprayPanel">喷涂工序</view>
@@ -553,65 +543,6 @@
 					</view>
 					<view v-if="!selectedProductList.length" class="selected-list-empty">暂无选中产品</view>
 				</scroll-view>
-			</view>
-		</view>
-	</view>
-
-	<view class="edit-modal" v-if="showEditModal" @click.self="closeEditModal">
-		<view class="edit-modal-content" @click.stop>
-			<view class="edit-modal-title">预派工调整</view>
-			<view class="edit-modal-body">
-				<view class="edit-form">
-					<view class="edit-row">
-						<text class="edit-label">订单编号:</text>
-						<text class="edit-value">{{ editData.orderNo || '-' }}</text>
-					</view>
-					<view class="edit-row">
-						<text class="edit-label">产品名称:</text>
-						<text class="edit-value">{{ editData.productNameNew || '-' }}</text>
-					</view>
-					<view class="edit-row">
-						<text class="edit-label">工序:</text>
-						<text class="edit-value">{{ editData.processDisplay || '-' }}</text>
-					</view>
-					<view class="edit-row">
-						<text class="edit-label">派工日期:</text>
-						<picker mode="date" :value="editData.dispatchDate" @change="onDispatchDateChange">
-							<view class="edit-date-picker">
-								<text class="edit-date-text">{{ editData.dispatchDate || '请选择日期' }}</text>
-								<text class="edit-date-arrow">▼</text>
-							</view>
-						</picker>
-					</view>
-					<view class="edit-row">
-						<text class="edit-label">派工数量:</text>
-						<input
-							v-model="editData.dispatchCount"
-							type="number"
-							class="edit-input"
-							placeholder="请输入派工数量"
-						/>
-					</view>
-					<view class="edit-row">
-						<text class="edit-label">员工姓名:</text>
-						<view class="edit-employee-tags">
-							<view v-for="(name, idx) in editData.selectedEmployeeNames" :key="idx" class="employee-tag">{{ name }}</view>
-							<view v-if="!editData.selectedEmployeeNames || editData.selectedEmployeeNames.length === 0" class="edit-value">-</view>
-						</view>
-					</view>
-					<view class="edit-row">
-						<text class="edit-label">工时:</text>
-						<text class="edit-value">{{ editData.worktime || '-' }}</text>
-					</view>
-					<view class="edit-row">
-						<text class="edit-label">工价:</text>
-						<text class="edit-value">{{ editData.wage || '-' }}</text>
-					</view>
-				</view>
-			</view>
-			<view class="edit-modal-buttons">
-				<view class="edit-btn-cancel" @click="closeEditModal">取消</view>
-				<view class="edit-btn-confirm" @click="confirmEdit">确认</view>
 			</view>
 		</view>
 	</view>
@@ -1235,14 +1166,6 @@ const SPRAY_PROCESS_FIELD_MAP = {
 
 const RECORD_BG_COLORS = ['#e8f4f8', '#f2f0e6', '#f9f0f4', '#eaf6ea', '#fff6e6']
 
-// 组装车间岗位筛选按钮（仅权限车间为组装车间时显示），数据来自岗位工序表
-// 按钮结构：{ name: 显示名, rowid: 主岗位工序rowid, positionRowids: 内部岗位rowid数组, positionNames: 内部岗位名数组 }
-const assemblyPositionButtons = ref([])
-// 当前选中的岗位按钮名称（单选），用于筛选产品列表及添加产品传参
-const activeAssemblyPosition = ref('')
-
-
-
 const showConfirmDispatchModal = ref(false)
 const confirmDispatchCount = ref(0)
 const confirmDispatchRowids = ref([])
@@ -1278,21 +1201,14 @@ const productLoadingMore = ref(false)
 const productRefresherTriggered = ref(false)
 const expandedProductKeys = ref([])
 
-const showEditModal = ref(false)
 const editData = ref({
 	rowid: '',
-	orderNo: '',
-	productNameNew: '',
 	processDisplay: '',
-	dispatchDate: '',
-	dispatchCount: '',
 	employeeName: '',
 	employeeId: '',
 	employeeNames: [],
 	selectedEmployeeIds: [],
-	selectedEmployeeNames: [],
-	worktime: '',
-	wage: ''
+	selectedEmployeeNames: []
 })
 
 // 添加产品弹窗（合并订单+产品选择）
@@ -1810,7 +1726,6 @@ const mapPreDispatchRow = (item) => ({
 	employeeName: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.employeeName]),
 	processDetail: extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.processDetail]),
 	craftPosition: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.craftPosition]),
-	positionProcessRowids: extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.positionProcess]),
 	dailyWage: extractRelationSids(item[PRE_DISPATCH_FIELD_MAP.dailyWage]),
 	productionCode: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.productionCode]),
 	orderCount: formatFieldValue(item['6a5f19556d70ffabc67f0ce9']),
@@ -2648,8 +2563,7 @@ const confirmSelectedProducts = async () => {
 	try {
 		await http.post(PRE_DISPATCH_PRODUCT_ADD_URL, {
 			dispatchDate: filterDate.value,  // 筛选日期
-			rowid: rowid,  // 选中产品的 rowid
-			positionProcessRowid: getSelectedPositionProcessRowid()  // 所选岗位工序 rowid（未选择/其他车间传空）
+			rowid: rowid  // 选中产品的 rowid
 		})
 
 		// 添加成功后轮询等待新产品数据写入完成再刷新渲染（墙钟最多 5 秒，命中即停）
@@ -2700,8 +2614,7 @@ const addProductsByRowids = async (rowids, productionCodes = []) => {
 		// 调用添加接口，传递 rowid 数组
 		await http.post(PRE_DISPATCH_PRODUCT_ADD_URL, {
 			dispatchDate: filterDate.value,
-			rowid: rowids,  // rowid 数组
-			positionProcessRowid: getSelectedPositionProcessRowid()  // 所选岗位工序 rowid（未选择/其他车间传空）
+			rowid: rowids  // rowid 数组
 		})
 
 		// 添加成功后轮询等待新产品数据写入完成再刷新渲染（墙钟最多 5 秒，命中即停）
@@ -2785,8 +2698,7 @@ const addProductsByCodes = async (products) => {
 		// 调用添加接口
 		await http.post(PRE_DISPATCH_PRODUCT_ADD_BY_CODES_URL || PRE_DISPATCH_PRODUCT_ADD_URL, {
 			dispatchDate: filterDate.value,
-			productionCodes: newCodes,
-			positionProcessRowid: getSelectedPositionProcessRowid()  // 所选岗位工序 rowid（未选择/其他车间传空）
+			productionCodes: newCodes
 		})
 
 		// 添加成功后轮询等待新产品数据写入完成再刷新渲染（墙钟最多 5 秒，命中即停）
@@ -3397,16 +3309,6 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 		if (filterGuokou.value.trim()) {
 			const keyword = filterGuokou.value.trim().toLowerCase()
 			mapped = mapped.filter(item => item.guokou.toLowerCase().includes(keyword))
-		}
-
-		// 组装车间岗位筛选：只保留岗位工序关联到选中按钮任一内部岗位的预派工
-		if (activeAssemblyPosition.value) {
-			const activeBtn = assemblyPositionButtons.value.find(b => b.name === activeAssemblyPosition.value)
-			const matchNames = activeBtn?.positionNames?.length ? activeBtn.positionNames : [activeAssemblyPosition.value]
-			mapped = mapped.filter(item => {
-				const rowids = item.positionProcessRowids || []
-				return rowids.some(sid => matchNames.includes(positionProcessDictMap.value.get(sid)))
-			})
 		}
 
 		const groupedMap = {}
@@ -5172,97 +5074,6 @@ const loadSprayProcessList = async () => {
 	}
 }
 
-// 组装岗位合并配置：主岗位记录作为按钮主记录（按钮名、添加产品 rowid 取自它），
-// 合并组内其余岗位与主岗位合并为一个按钮，点击筛选全部内部岗位的预派工数据
-const ASSEMBLY_POSITION_MERGE_GROUPS = [
-	{ btnName: '组装包装', mainName: '组装包装', memberNames: ['组装包装', '点焊', '打手柄标'] },
-	{ btnName: '喷砂', mainName: '喷砂', memberNames: ['喷砂', '喷砂叠锅'] }
-]
-
-// 加载岗位工序表中车间为组装车间的岗位名称，作为导航栏筛选按钮（仅组装车间权限时使用）
-const loadAssemblyPositionButtons = async () => {
-	if (loginWorkshop.value !== '组装车间') {
-		assemblyPositionButtons.value = []
-		return
-	}
-	try {
-		const res = await callWorkflowListAll({
-			worksheetId: ASSEMBLY_POSITION_WORKSHEET_ID,
-			filters: [{
-				controlId: '6a3124a86d70ffabc66c8515',
-				dataType: 30,
-				spliceType: 1,
-				filterType: 2,
-				values: ['组装车间']
-			}],
-			silent: true
-		}, 100)
-		const rows = Array.isArray(res?.data) ? res.data : []
-		// 岗位名称解析顺序与 loadPositionProcessDict 保持一致，确保筛选时能匹配上
-		const parseName = (item) => item[ASSEMBLY_POSITION_FIELD_ID] || item['Name'] || '-'
-
-		const buttons = []
-		// 每个合并组：记录主岗位 rowid 与内部岗位集合（主岗位记录业务上固定存在）
-		const mergeStates = ASSEMBLY_POSITION_MERGE_GROUPS.map(g => ({
-			...g,
-			rowid: '',
-			positionRowids: [],
-			positionNames: []
-		}))
-
-		rows.forEach((item) => {
-			const name = parseName(item)
-			const group = mergeStates.find(g => g.memberNames.includes(name))
-			if (group) {
-				if (name === group.mainName) {
-					group.rowid = item.rowid || ''
-				}
-				group.positionRowids.push(item.rowid || '')
-				group.positionNames.push(name)
-			} else {
-				// 其他岗位独立成按钮
-				buttons.push({
-					name,
-					rowid: item.rowid || '',
-					positionRowids: [item.rowid || ''],
-					positionNames: [name]
-				})
-			}
-		})
-
-		// 存在主岗位记录的合并组作为一个按钮放在最前面（保持配置顺序：组装包装、喷砂）
-		const mergedButtons = mergeStates
-			.filter(group => group.rowid)
-			.map(group => ({
-				name: group.btnName,
-				rowid: group.rowid,
-				positionRowids: group.positionRowids,
-				positionNames: group.positionNames
-			}))
-		assemblyPositionButtons.value = [...mergedButtons, ...buttons]
-	} catch (e) {
-		console.error('加载组装车间岗位筛选按钮失败:', e)
-		assemblyPositionButtons.value = []
-	}
-}
-
-// 获取当前选中岗位按钮对应的岗位工序 rowid（未选中返回空；其他车间无按钮同样返回空）
-const getSelectedPositionProcessRowid = () => {
-	if (!activeAssemblyPosition.value) return ''
-	const btn = assemblyPositionButtons.value.find(b => b.name === activeAssemblyPosition.value)
-	return btn?.rowid || ''
-}
-
-// 点击组装岗位筛选按钮：单选切换选中/取消，并重新加载产品列表
-const handleAssemblyPositionClick = async (position) => {
-	activeAssemblyPosition.value = activeAssemblyPosition.value === position.name ? '' : position.name
-	// 确保岗位工序字典已加载，用于将预派工的岗位工序 ID 解析为名称后匹配筛选
-	if (activeAssemblyPosition.value && positionProcessDictMap.value.size === 0) {
-		await loadPositionProcessDict()
-	}
-	await loadProducts(true)
-}
-
 const loadSprayEmployees = async () => {
 	try {
 		const wsFilter = employeeWorkshopFilter.value
@@ -5354,119 +5165,6 @@ const closeConfirmDispatchModal = () => {
 	confirmDispatchRowids.value = []
 }
 
-const handleCircleClick = async (item) => {
-	// 选择框依附于预派工调整弹窗
-	employeeSelectorMode.value = 'edit'
-	editData.value = {
-		rowid: item.rowid || '',
-		orderNo: item.orderNo || '',
-		productNameNew: item.productNameNew || '',
-		processDisplay: item.processDisplay || '',
-		dispatchDate: item.dispatchDate || '',
-		dispatchCount: item.dispatchCount || '',
-		employeeName: item.employeeName || '',
-		employeeId: item.employeeId || '',
-		employeeNames: [],
-		selectedEmployeeIds: [],
-		selectedEmployeeNames: [],
-		worktime: item.worktime || '',
-		wage: item.wage || ''
-	}
-	// 查询当日工资情况，获取员工姓名列表
-	const dailyWageSids = Array.isArray(item.dailyWage) ? item.dailyWage : []
-	if (dailyWageSids.length > 0) {
-		try {
-			const res = await callWorkflowListAPIPaged({
-				worksheetId: DAILY_WAGE_WORKSHEET_ID,
-				filters: [{
-					controlId: 'rowid',
-					dataType: 30,
-					filterType: 2,
-					values: dailyWageSids
-				}],
-				pageSize: 100,
-				pageNum: 1,
-				silent: true
-			})
-			const dataList = Array.isArray(res?.data) ? res.data : []
-			const names = dataList.map(record => formatFieldValue(record[DAILY_WAGE_EMPLOYEE_NAME_FIELD])).filter(Boolean)
-			editData.value.employeeNames = names
-		} catch (e) {
-			console.error('加载当日工资员工姓名失败:', e)
-		}
-	}
-	showEditModal.value = true
-	// 加载员工列表并匹配当日工资员工进行预选
-	await loadEmployeeOptions()
-	// 临时工按姓名末尾数字排序等，保证选择员工框顺序正确
-	sortEmployeeOptionsByPosition(editData.value.processDisplay)
-	const dailyNames = editData.value.employeeNames
-	if (dailyNames.length > 0 && allEmployeeOptions.value.length > 0) {
-		const matchedIds = []
-		const matchedNames = []
-		allEmployeeOptions.value.forEach(emp => {
-			if (dailyNames.includes(emp.name)) {
-				matchedIds.push(emp.id)
-				matchedNames.push(emp.name)
-			}
-		})
-		editData.value.selectedEmployeeIds = matchedIds
-		editData.value.selectedEmployeeNames = matchedNames
-	}
-	// 自动打开员工列表
-	showEmployeeSelector.value = true
-}
-
-const onDispatchDateChange = (e) => {
-	editData.value.dispatchDate = e.detail.value
-}
-
-const closeEditModal = () => {
-	showEditModal.value = false
-	showEmployeeSelector.value = false
-	editData.value = {
-		rowid: '',
-		orderNo: '',
-		productNameNew: '',
-		processDisplay: '',
-		dispatchDate: '',
-		dispatchCount: '',
-		employeeName: '',
-		employeeId: '',
-		employeeNames: [],
-		selectedEmployeeIds: [],
-		selectedEmployeeNames: [],
-		worktime: '',
-		wage: ''
-	}
-}
-
-const confirmEdit = async () => {
-	if (!editData.value.rowid) {
-		uni.showToast({ title: '缺少记录ID', icon: 'none' })
-		return
-	}
-	if (!editData.value.selectedEmployeeIds || editData.value.selectedEmployeeIds.length === 0) {
-		uni.showToast({ title: '请选择员工', icon: 'none' })
-		return
-	}
-	try {
-		await http.post(PRE_DISPATCH_UPDATE_URL, {
-			rowid: editData.value.rowid,
-			dispatchDate: editData.value.dispatchDate,
-			dispatchCount: editData.value.dispatchCount,
-			employees: editData.value.selectedEmployeeIds
-		})
-		uni.showToast({ title: '更新成功', icon: 'success' })
-		closeEditModal()
-		loadProducts(true)
-		loadEmployeeDispatchSummary()
-	} catch (e) {
-		console.error('更新预派工失败:', e)
-		uni.showToast({ title: '更新失败', icon: 'none' })
-	}
-}
-
 // 从工序员工栏直接打开员工选择框
 const openEmployeeSelectorFromProcess = async (processes, idx) => {
 	const process = processes[idx]
@@ -5499,18 +5197,12 @@ const openEmployeeSelectorFromProcess = async (processes, idx) => {
 	// 初始化 editData 用于选择框状态
 	editData.value = {
 		rowid: process.preDispatchRowid || '',
-		orderNo: '',
-		productNameNew: '',
 		processDisplay: processDisplay,
-		dispatchDate: '',
-		dispatchCount: '',
 		employeeName: '',
 		employeeId: '',
 		employeeNames: [],
 		selectedEmployeeIds: [],
-		selectedEmployeeNames: [],
-		worktime: '',
-		wage: ''
+		selectedEmployeeNames: []
 	}
 
 	// 立即显示选择框
@@ -5772,7 +5464,6 @@ const refreshPage = async () => {
 		loadCraftPositionList(),
 		loadPositionProcessDict(),
 		loadCraftPositionMap(),    // 获取工序归类表（用于同类别同步勾选）
-		loadAssemblyPositionButtons()  // 组装车间岗位筛选按钮
 	]))
 	const productLoad = loadProducts(true)
 	await Promise.all([dictLoad, productLoad])
@@ -5885,20 +5576,6 @@ onShow(refreshPageOnShow)
 				color: #5884f1;
 				border-color: #fff;
 				font-weight: bold;
-			}
-		}
-
-		.header-btn-position {
-			background-color: rgba(255, 255, 255, 0.12);
-			border: 1px dashed rgba(255, 255, 255, 0.65);
-			color: #fff;
-
-			&.active {
-				background-color: #2ecc71;
-				color: #fff;
-				border: 1px solid #2ecc71;
-				font-weight: bold;
-				box-shadow: 0 0 8px rgba(46, 204, 113, 0.5);
 			}
 		}
 
@@ -8081,265 +7758,6 @@ onShow(refreshPageOnShow)
 		.add-product-btn-cancel {
 			background-color: #f5f7fa;
 			color: #666;
-		}
-	}
-}
-
-.edit-modal {
-	position: fixed;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	background-color: rgba(0, 0, 0, 0.5);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	z-index: 999;
-
-	.edit-modal-content {
-		width: px2vw(1000px);
-		max-height: px2vw(900px);
-		background-color: #fff;
-		border-radius: px2vw(16px);
-		padding: px2vw(40px);
-		overflow: hidden;
-		display: flex;
-		flex-direction: column;
-	}
-
-	.edit-modal-title {
-		font-size: px2vw(32px);
-		font-weight: bold;
-		text-align: center;
-		margin-bottom: px2vw(30px);
-		flex-shrink: 0;
-	}
-
-	.edit-modal-body {
-		flex: 1;
-		display: flex;
-		gap: px2vw(30px);
-		overflow: hidden;
-	}
-
-	.edit-form {
-		flex: 1;
-		overflow-y: auto;
-	}
-
-	.edit-row {
-		display: flex;
-		align-items: center;
-		margin-bottom: px2vw(20px);
-
-		.edit-label {
-			width: px2vw(160px);
-			font-size: px2vw(26px);
-			color: #666;
-			flex-shrink: 0;
-			text-align: right;
-			padding-right: px2vw(20px);
-			box-sizing: border-box;
-		}
-
-		.edit-value {
-			flex: 1;
-			font-size: px2vw(26px);
-			color: #333;
-		}
-
-		.edit-date-picker {
-			flex: 1;
-			height: px2vw(60px);
-			border: 1px solid #ddd;
-			border-radius: px2vw(8px);
-			padding: 0 px2vw(16px);
-			box-sizing: border-box;
-			display: flex;
-			align-items: center;
-			justify-content: space-between;
-			background-color: #fafafa;
-
-			.edit-date-text {
-				font-size: px2vw(26px);
-				color: #333;
-			}
-
-			.edit-date-arrow {
-				font-size: px2vw(20px);
-				color: #999;
-			}
-		}
-
-		.edit-input {
-					flex: 1;
-					height: px2vw(60px);
-					border: 1px solid #ddd;
-					border-radius: px2vw(8px);
-					padding: 0 px2vw(16px);
-					font-size: px2vw(26px);
-					box-sizing: border-box;
-				}
-
-				.edit-employee-input {
-					flex: 1;
-					height: px2vw(60px);
-					border: 1px solid #ddd;
-					border-radius: px2vw(8px);
-					padding: 0 px2vw(16px);
-					font-size: px2vw(26px);
-					box-sizing: border-box;
-					display: flex;
-					align-items: center;
-					justify-content: space-between;
-					background-color: #fafafa;
-
-					.edit-input-text {
-						color: #333;
-					}
-
-					.edit-input-arrow {
-						font-size: px2vw(20px);
-						color: #999;
-					}
-				}
-
-				.edit-employee-tags {
-					flex: 1;
-					display: flex;
-					flex-wrap: wrap;
-					gap: px2vw(10px);
-					align-items: center;
-				}
-
-				.employee-tag {
-					display: inline-flex;
-					align-items: center;
-					height: px2vw(48px);
-					padding: 0 px2vw(18px);
-					background-color: #e8f4ff;
-					border: 1px solid #3498db;
-					border-radius: px2vw(24px);
-					font-size: px2vw(22px);
-					color: #3498db;
-					font-weight: 500;
-				}
-
-				.edit-employee-add-btn {
-					flex-shrink: 0;
-					width: px2vw(80px);
-					height: px2vw(48px);
-					margin-left: px2vw(12px);
-					background-color: #3498db;
-					border-radius: px2vw(8px);
-					display: flex;
-					align-items: center;
-					justify-content: center;
-
-					.add-btn-text {
-						font-size: px2vw(22px);
-						color: #fff;
-						font-weight: 600;
-					}
-				}
-			}
-
-			.edit-modal-buttons {
-		display: flex;
-		gap: px2vw(20px);
-		margin-top: px2vw(30px);
-		flex-shrink: 0;
-
-		.edit-btn-cancel,
-		.edit-btn-confirm {
-			flex: 1;
-			height: px2vw(80px);
-			line-height: px2vw(80px);
-			text-align: center;
-			border-radius: px2vw(8px);
-			font-size: px2vw(28px);
-		}
-
-		.edit-btn-cancel {
-			background-color: #f5f7fa;
-			color: #666;
-		}
-
-		.edit-btn-confirm {
-			background-color: #3498db;
-			color: #fff;
-		}
-	}
-
-	.edit-employee-list {
-		width: px2vw(350px);
-		flex-shrink: 0;
-		border: 1px solid #eee;
-		border-radius: px2vw(8px);
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-
-		.edit-employee-header {
-			height: px2vw(60px);
-			line-height: px2vw(60px);
-			text-align: center;
-			background-color: #f5f7fa;
-			border-bottom: 1px solid #eee;
-			flex-shrink: 0;
-
-			.edit-employee-title {
-				font-size: px2vw(26px);
-				font-weight: bold;
-				color: #333;
-			}
-		}
-
-		.edit-employee-scroll {
-			flex: 1;
-			overflow-y: auto;
-			max-height: px2vw(600px);
-
-			.edit-employee-item {
-				display: flex;
-				flex-direction: column;
-				align-items: flex-start;
-				padding: px2vw(20px);
-				border-bottom: 1px solid #f0f0f0;
-
-				&.active {
-					background-color: #e8f4ff;
-				}
-
-				.edit-employee-name {
-					font-size: px2vw(26px);
-					color: #333;
-					font-weight: 600;
-					margin-bottom: px2vw(8px);
-				}
-
-				.edit-employee-position {
-					font-size: px2vw(22px);
-					color: #666;
-					margin-bottom: px2vw(4px);
-				}
-
-				.edit-employee-hours {
-					font-size: px2vw(22px);
-					color: #999;
-				}
-			}
-
-			.edit-employee-empty {
-				padding: px2vw(60px) 0;
-				text-align: center;
-
-				text {
-					font-size: px2vw(24px);
-					color: #999;
-				}
-			}
 		}
 	}
 }
