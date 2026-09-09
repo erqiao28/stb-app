@@ -3073,8 +3073,13 @@ const handleProcessListConfirm = async (productRowid) => {
 	// 获取该产品下所有预派工rowids（包括有工序和无工序的）
 	const product = productList.value.find(item => item.uniqueKey === productRowid)
 	const allProductPreDispatchRowids = Array.isArray(product?.preDispatchRowids) ? product.preDispatchRowids : []
+	// 勾选工序上已关联的预派工rowid也要并入查询：首次派工后后端可能为工序新建预派工行，
+	// 而产品级 preDispatchRowids 是页面加载时的旧快照，不合并会漏查新行导致该工序既不进
+	// hasPreDispatchRowids 也不进 noPreDispatchRowids
+	const fromCheckedProcesses = checkedProcesses.map(p => p.preDispatchRowid).filter(Boolean)
+	const queryRowids = [...new Set([...allProductPreDispatchRowids, ...fromCheckedProcesses])]
 	let pdRows = []
-	if (allProductPreDispatchRowids.length > 0) {
+	if (queryRowids.length > 0) {
 		const pdRes = await callWorkflowListAll({
 			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
 			filters: [{
@@ -3082,7 +3087,7 @@ const handleProcessListConfirm = async (productRowid) => {
 				dataType: 30,
 				spliceType: 1,
 				filterType: 2,
-				values: allProductPreDispatchRowids
+				values: queryRowids
 			}],
 			silent: true
 		}, 100)
