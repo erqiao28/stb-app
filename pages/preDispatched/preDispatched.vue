@@ -78,20 +78,46 @@
 <view class="process-dropdown-wrapper" :class="{ open: showProcessDropdownPanel && showProcessPanel }">
 		<view class="dropdown-panel">
 			<view class="dropdown-panel-content">
-				<view class="employee-chart-scroll">
-					<view class="employee-chart">
+				<!-- 第二层抽屉控制条：工序/岗位切换 + 车间筛选（默认当前车间、工序） -->
+				<view class="process-dropdown-controls">
+					<view class="type-switch">
 						<view
-							class="employee-chart-column"
-							v-for="(proc, index) in processDropdownList"
+							class="type-switch-btn"
+							:class="{ active: processDropdownType === '工序', disabled: !canPickProcessType }"
+							@click.stop="switchProcessDropdownType('工序')"
+						>工序</view>
+						<view
+							class="type-switch-btn"
+							:class="{ active: processDropdownType === '岗位' }"
+							@click.stop="switchProcessDropdownType('岗位')"
+						>岗位</view>
+					</view>
+					<view class="ws-picker-wrap">
+						<view class="ws-picker" @click.stop="toggleProcessWorkshopDropdown">
+							<text>{{ processDropdownWorkshop || '请选择车间' }}</text>
+							<text class="picker-arrow">{{ showProcessWorkshopDropdown ? '▲' : '▼' }}</text>
+						</view>
+						<view class="ws-dropdown" v-if="showProcessWorkshopDropdown" @click.stop>
+							<view
+								v-for="ws in workshopOptions"
+								:key="ws"
+								class="ws-dropdown-item"
+								:class="{ active: ws === processDropdownWorkshop }"
+								@click="selectProcessWorkshop(ws)"
+							>{{ ws }}</view>
+						</view>
+					</view>
+				</view>
+				<view class="employee-chart-scroll">
+					<view class="process-candidate-grid">
+						<view
+							class="process-candidate-item"
+							v-for="proc in processDropdownList"
 							:key="proc.rowid"
 							@click="handleProcessDropdownItemClick(proc)"
-						>
-							<view class="employee-chart-bar process-bar" :style="{ height: '100%' }">
-								<text class="employee-chart-name">{{ proc.processName }}</text>
-							</view>
-						</view>
-						<view class="employee-chart-empty" v-if="!processDropdownList.length">
-							<text>暂无工序数据</text>
+						>{{ proc.processName }}</view>
+						<view class="process-candidate-empty" v-if="!processDropdownList.length">
+							<text>暂无数据</text>
 						</view>
 					</view>
 				</view>
@@ -1276,6 +1302,12 @@ const showProcessDropdownPanel = ref(false)
 const processDropdownList = ref([])
 const selectedProcessDropdownEmployee = ref(null)
 const selectedProcessSeq = ref(0)
+// 第二层抽屉筛选状态：候选类型（工序/岗位）与车间（打开时默认当前车间、工序）
+const processDropdownType = ref('工序')
+const processDropdownWorkshop = ref('')
+const showProcessWorkshopDropdown = ref(false)
+// 只有拉伸车间能获取工序，其它车间只能获取岗位
+const canPickProcessType = computed(() => processDropdownWorkshop.value === '拉伸车间')
 
 const showSprayPanel = ref(false)
 const sprayProcessList = ref([])
@@ -1433,7 +1465,36 @@ const openProcessDropdownPanel = async (emp, seq) => {
 	selectedProcessDropdownEmployee.value = emp
 	selectedProcessSeq.value = seq || 0
 	showProcessDropdownPanel.value = true
-	await loadProcessDropdownList(emp)
+	// 每次打开重置筛选：默认当前车间；拉伸车间默认工序，其它车间只能岗位
+	processDropdownWorkshop.value = loginWorkshop.value || ''
+	processDropdownType.value = canPickProcessType.value ? '工序' : '岗位'
+	showProcessWorkshopDropdown.value = false
+	await loadProcessDropdownList()
+}
+
+// 切换候选类型（工序/岗位）后重新拉取列表
+const switchProcessDropdownType = (type) => {
+	// 仅拉伸车间支持切到工序
+	if (type === '工序' && !canPickProcessType.value) return
+	if (processDropdownType.value === type) return
+	processDropdownType.value = type
+	loadProcessDropdownList()
+}
+
+const toggleProcessWorkshopDropdown = () => {
+	showProcessWorkshopDropdown.value = !showProcessWorkshopDropdown.value
+}
+
+// 切换车间筛选后重新拉取列表
+const selectProcessWorkshop = (ws) => {
+	showProcessWorkshopDropdown.value = false
+	if (processDropdownWorkshop.value === ws) return
+	processDropdownWorkshop.value = ws
+	// 切到非拉伸车间时工序不可选，自动回落到岗位
+	if (!canPickProcessType.value) {
+		processDropdownType.value = '岗位'
+	}
+	loadProcessDropdownList()
 }
 
 const closeProcessDropdownPanel = () => {
@@ -1441,6 +1502,7 @@ const closeProcessDropdownPanel = () => {
 	selectedProcessDropdownEmployee.value = null
 	processDropdownList.value = []
 	selectedProcessSeq.value = 0
+	showProcessWorkshopDropdown.value = false
 }
 
 const handleProcessDropdownItemClick = async (proc) => {
@@ -1460,8 +1522,8 @@ const handleProcessDropdownItemClick = async (proc) => {
 			processSeq: selectedProcessSeq.value,
 			processRowid: proc.rowid,
 			workshop: loginWorkshop.value || '',
-			// 所选数据类型：工序员工点选的是工序，岗位员工点选的是岗位
-			processType: emp.employeeType === '岗位' ? '岗位' : '工序'
+			// 所选数据类型与第二层抽屉当前的「工序/岗位」开关一致
+			processType: processDropdownType.value
 		}
 		await http.post(POSITION_PROCESS_SELECT_URL, params)
 		uni.hideLoading()
@@ -1518,62 +1580,47 @@ const handleSprayEmployeeClick = async (emp) => {
 	}
 }
 
-const loadProcessDropdownList = async (emp) => {
+// 加载第二层抽屉候选：按当前「工序/岗位」类型 + 车间筛选拉取
+const loadProcessDropdownList = async () => {
 	try {
-		const ws = loginWorkshop.value
+		const ws = processDropdownWorkshop.value
 
-		// 工序员工：从工序字典获取本车间全部三级工序
-		if (emp?.employeeType !== '岗位') {
-			const filters = [
-				{ controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
-				{ controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
-				{ controlId: '6a324e7d6d70ffabc66cbe5f', dataType: 30, spliceType: 1, filterType: 2, values: ['1'] },
-				{
-					controlId: '691e8522d50c894e2e798d03',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: [ws]
-				}
-			]
+		// 岗位：从岗位工序表按车间取
+		if (processDropdownType.value === '岗位') {
+			const filters = ws
+				? [{ controlId: '6a3124a86d70ffabc66c8515', dataType: 30, spliceType: 1, filterType: 2, values: [ws] }]
+				: []
 			const res = await callWorkflowListAll({
-				worksheetId: 'shujuzidian',
+				worksheetId: ASSEMBLY_POSITION_WORKSHEET_ID,
 				filters,
 				silent: true
 			}, 100)
 			const rows = Array.isArray(res?.data) ? res.data : []
 			processDropdownList.value = rows.map((item) => ({
 				rowid: item.rowid || '',
-				processName: item['Name'] || '-'
+				processName: item['Name'] || item[ASSEMBLY_POSITION_FIELD_ID] || '-'
 			}))
 			return
 		}
 
-		// 岗位员工：从岗位工序表获取本车间岗位（喷涂车间同时取组装车间的岗位）
-		const filters = []
-		filters.push({
-			controlId: '6a3124a86d70ffabc66c8515',
-			dataType: 30,
-			spliceType: 1,
-			filterType: 2,
-			values: [ws]
-		})
-
-		// 喷涂车间同时获取喷涂和组装车间的岗位
-		const workshopList = ws === '喷涂车间' ? ['喷涂车间', '组装车间'] : [ws]
-		const allRows = []
-		for (const w of workshopList) {
-			const res = await callWorkflowListAll({
-				worksheetId: ASSEMBLY_POSITION_WORKSHEET_ID,
-				filters: [{ controlId: '6a3124a86d70ffabc66c8515', dataType: 30, spliceType: 1, filterType: 2, values: [w] }],
-				silent: true
-			}, 100)
-			const rows = Array.isArray(res?.data) ? res.data : []
-			allRows.push(...rows)
+		// 工序：从工序字典按车间取全部三级工序
+		const filters = [
+			{ controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
+			{ controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
+			{ controlId: '6a324e7d6d70ffabc66cbe5f', dataType: 30, spliceType: 1, filterType: 2, values: ['1'] }
+		]
+		if (ws) {
+			filters.push({ controlId: '691e8522d50c894e2e798d03', dataType: 30, spliceType: 1, filterType: 2, values: [ws] })
 		}
-		processDropdownList.value = allRows.map((item) => ({
+		const res = await callWorkflowListAll({
+			worksheetId: 'shujuzidian',
+			filters,
+			silent: true
+		}, 100)
+		const rows = Array.isArray(res?.data) ? res.data : []
+		processDropdownList.value = rows.map((item) => ({
 			rowid: item.rowid || '',
-			processName: item['Name'] || item[ASSEMBLY_POSITION_FIELD_ID] || '-'
+			processName: item['Name'] || '-'
 		}))
 	} catch (e) {
 		console.error('加载工序抽屉数据失败:', e)
@@ -6112,7 +6159,8 @@ onShow(refreshPageOnShow)
 			min-height: 0;
 			background-color: #fff;
 			border-bottom: 1px solid #eee;
-			overflow: hidden;
+			/* 允许车间下拉浮层溢出面板，避免被裁切 */
+			overflow: visible;
 			display: flex;
 			flex-direction: column;
 			pointer-events: auto;
@@ -6121,76 +6169,143 @@ onShow(refreshPageOnShow)
 				width: 100%;
 				flex: 1;
 				padding: px2vw(20px);
-				overflow: hidden;
+				overflow: visible;
 				background-color: #fff;
+				display: flex;
+				flex-direction: column;
+				gap: px2vw(16px);
 			}
 
-			.employee-chart-scroll {
-				width: 100%;
-				height: 100%;
-				overflow-x: auto;
-				overflow-y: hidden;
-				white-space: nowrap;
-			}
+			/* 第二层抽屉控制条：工序/岗位切换 + 车间筛选 */
+			.process-dropdown-controls {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				flex-shrink: 0;
 
-			.employee-chart {
-				height: calc(100% - #{px2vw(30px)});
-				display: inline-flex;
-				align-items: flex-end;
-				gap: px2vw(24px);
-				padding: px2vw(30px) px2vw(10px) px2vw(10px);
-				min-width: 100%;
-				box-sizing: content-box;
+				.type-switch {
+					display: flex;
+					background-color: #f0f0f0;
+					border-radius: px2vw(8px);
+					overflow: hidden;
+					gap: px2vw(4px);
+					padding: px2vw(4px);
 
-				.employee-chart-column {
-					flex: 0 0 auto;
-					width: px2vw(52px);
-					height: 100%;
-					display: inline-flex;
-					flex-direction: column;
-					align-items: center;
-					justify-content: flex-end;
+					.type-switch-btn {
+						padding: px2vw(5px) px2vw(16px);
+						font-size: px2vw(24px);
+						color: #666;
+						background-color: transparent;
+						border-radius: px2vw(6px);
 
-					.employee-chart-bar {
-							width: 100%;
-							min-height: px2vw(40px);
-							display: flex;
-							align-items: center;
-							justify-content: center;
-							border-radius: px2vw(8px) px2vw(8px) 0 0;
-							writing-mode: vertical-rl;
-							overflow: hidden;
+						/* 非拉伸车间不可选工序 */
+						&.disabled {
+							color: #ccc;
+						}
 
-							&.process-bar {
-								background-color: #f5f5f5;
-								border: 1px solid #333;
-
-								.employee-chart-name {
-									color: #333;
-								}
-							}
-
-							.employee-chart-name {
-							font-size: px2vw(18px);
+						&.active {
 							color: #fff;
-							white-space: nowrap;
-							overflow: hidden;
-							text-overflow: ellipsis;
-							max-height: 100%;
-							padding: px2vw(8px) 0;
+							background-color: #1890ff;
 						}
 					}
 				}
 
-				.employee-chart-empty {
-					padding: px2vw(40px) 0;
-					text-align: center;
-					width: 100%;
+				.ws-picker-wrap {
+					position: relative;
+				}
 
-					text {
-						font-size: px2vw(22px);
+				.ws-picker {
+					display: flex;
+					align-items: center;
+					padding: px2vw(8px) px2vw(16px);
+					background-color: #f5f5f5;
+					border-radius: px2vw(8px);
+					font-size: px2vw(24px);
+					color: #666;
+
+					.picker-arrow {
+						margin-left: px2vw(8px);
+						font-size: px2vw(20px);
 						color: #999;
 					}
+				}
+
+				.ws-dropdown {
+					position: absolute;
+					top: 100%;
+					right: 0;
+					margin-top: px2vw(8px);
+					background-color: #fff;
+					border: 1px solid #eee;
+					border-radius: px2vw(8px);
+					box-shadow: 0 px2vw(8px) px2vw(16px) rgba(0, 0, 0, 0.1);
+					z-index: 1010;
+
+					.ws-dropdown-item {
+						padding: px2vw(16px) px2vw(24px);
+						font-size: px2vw(24px);
+						color: #666;
+						white-space: nowrap;
+
+						&.active {
+							color: #007aff;
+							background-color: #f0f8ff;
+						}
+
+						&:active {
+							background-color: #f5f5f5;
+						}
+					}
+				}
+			}
+
+			.employee-chart-scroll {
+				width: 100%;
+				flex: 1;
+				min-height: 0;
+				overflow-y: auto;
+				overflow-x: hidden;
+			}
+
+			/* 工序/岗位候选：等宽单元格网格，长名称自动换行完整显示 */
+			.process-candidate-grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fill, minmax(px2vw(200px), 1fr));
+				gap: px2vw(12px);
+				align-content: flex-start;
+			}
+
+			.process-candidate-item {
+				box-sizing: border-box;
+				min-height: px2vw(56px);
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				padding: px2vw(10px) px2vw(12px);
+				font-size: px2vw(24px);
+				line-height: px2vw(34px);
+				color: #333;
+				text-align: center;
+				background-color: #f5f5f5;
+				border: 1px solid #ddd;
+				border-radius: px2vw(8px);
+				word-break: break-all;
+
+				&:active {
+					background-color: #5884f1;
+					color: #fff;
+					border-color: #5884f1;
+				}
+			}
+
+			.process-candidate-empty {
+				width: 100%;
+				padding: px2vw(40px) 0;
+				text-align: center;
+
+				text {
+					font-size: px2vw(22px);
+					color: #999;
 				}
 			}
 		}
