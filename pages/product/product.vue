@@ -165,7 +165,7 @@
             <view class="input-section">
               <view class="input-group">
                 <view class="input-label">生产顺序</view>
-                <input type="number" class="process-input" placeholder="请输入生产顺序" v-model="modalProductionSequence" step="0.01" disabled />
+                <input type="digit" class="process-input" placeholder="请输入生产顺序" v-model="modalProductionSequence" @blur="normalizeModalSequence" />
               </view>
               <view class="input-group">
                 <view class="input-label">修改方式</view>
@@ -458,6 +458,17 @@ const openActionModal = () => {
   loadModalProcessList(1, true)
 }
 
+// 失焦规整生产顺序：空值或非法值（非数字、小于 0.01）清空，由确定时的非空校验拦截；合法值统一为两位小数
+const normalizeModalSequence = () => {
+  const value = String(modalProductionSequence.value || '').trim()
+  const num = parseFloat(value)
+  if (!value || Number.isNaN(num) || num < 0.01) {
+    modalProductionSequence.value = ''
+    return
+  }
+  modalProductionSequence.value = num.toFixed(2)
+}
+
 const closeActionModal = () => {
   showActionModal.value = false
 }
@@ -536,10 +547,17 @@ const confirmAction = async () => {
     return
   }
 
+  // 生产顺序非空校验：清空或非法值时拦截提交
+  const sequence = parseFloat(modalProductionSequence.value)
+  if (!String(modalProductionSequence.value).trim() || Number.isNaN(sequence) || sequence < 0.01) {
+    uni.showToast({ title: '请输入生产顺序', icon: 'none' })
+    return
+  }
+
   const params = {
     processName: modalSelectedProcess.value.processName || '',
     processRowid: modalSelectedProcess.value.rowid || '',
-    sequence: parseFloat(modalProductionSequence.value) || 0,
+    sequence,
     modifyMode: mode,
     // 多选时以勾选工序中生产顺序最大者为操作目标（与预派工页面口径一致）
     selectedProcessId: maxSequenceSelectedProcess.value?.rowid || '',

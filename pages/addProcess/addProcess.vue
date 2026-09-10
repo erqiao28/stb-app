@@ -50,12 +50,11 @@
 				<view class="input-group">
 					<view class="input-label">生产顺序</view>
 					<input 
-						type="number" 
+						type="digit" 
 						class="process-input" 
 						placeholder="请输入生产顺序" 
 						v-model="productionSequence"
-						step="0.01"
-						disabled />
+						@blur="normalizeProductionSequence" />
 				</view>
 				<view class="input-group">
 					<view class="input-label">修改方式</view>
@@ -147,6 +146,17 @@ const handleSearch = () => {
 	searchTimer = setTimeout(() => {
 		getProcessList(1, true)
 	}, 300)
+}
+
+// 失焦规整生产顺序：空值或非法值（非数字、小于 0.01）清空，由提交时的非空校验拦截；合法值统一为两位小数
+const normalizeProductionSequence = () => {
+	const value = String(productionSequence.value || '').trim()
+	const num = parseFloat(value)
+	if (!value || Number.isNaN(num) || num < 0.01) {
+		productionSequence.value = ''
+		return
+	}
+	productionSequence.value = num.toFixed(2)
 }
 
 onLoad((options) => {
@@ -304,6 +314,13 @@ const addProcess = async () => {
 		return
 	}
 
+	// 生产顺序非空校验：清空或非法值时拦截提交
+	const sequence = parseFloat(productionSequence.value)
+	if (!String(productionSequence.value).trim() || Number.isNaN(sequence) || sequence < 0.01) {
+		showToast('请输入生产顺序')
+		return
+	}
+
 	isSubmitting.value = true
 	try {
 		const res = await http.post(ADD_PROCESS_URL, {
@@ -312,7 +329,7 @@ const addProcess = async () => {
 			workshop: orderData.value.workshop,
 			processName: processName,
 			isNew: false,
-			sequence: parseFloat(productionSequence.value) || 0,
+			sequence,
 			modifyMode: modifyMode.value,
 			processPrice: 0,
 			plannedProductionDate: plannedProductionDate.value || '',

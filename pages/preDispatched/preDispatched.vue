@@ -771,7 +771,7 @@
 						</view>
 						<view class="process-action-form-group" v-if="processActionModeOptions[processActionModeIndex] === '添加'">
 							<text class="process-action-form-label">生产顺序</text>
-							<input type="number" class="process-action-input" placeholder="请输入顺序" v-model="processActionSequence" step="0.01" />
+							<input type="digit" class="process-action-input" placeholder="留空自动：最大勾选顺序 + 0.01" v-model="processActionSequence" @blur="normalizeProcessActionSequence" />
 						</view>
 					</view>
 				</view>
@@ -4588,6 +4588,17 @@ const closeProcessActionModal = () => {
 	processActionSequence.value = ''
 }
 
+// 失焦规整生产顺序：空值或非法值（非数字、小于 0.01）清空，由确定时的非空校验拦截；合法值统一为两位小数
+const normalizeProcessActionSequence = () => {
+	const value = String(processActionSequence.value || '').trim()
+	const num = parseFloat(value)
+	if (!value || Number.isNaN(num) || num < 0.01) {
+		processActionSequence.value = ''
+		return
+	}
+	processActionSequence.value = num.toFixed(2)
+}
+
 /**
  * 轮询等待工序数据更新
  * @param {Object} product - 产品对象
@@ -4792,10 +4803,15 @@ const confirmProcessAction = async () => {
 		const targetProcess = checkedProcesses.reduce((max, p) =>
 			(parseFloat(p.sequence) || 0) > (parseFloat(max.sequence) || 0) ? p : max
 		)
+		// 生产顺序非空校验
+		if (!String(processActionSequence.value).trim()) {
+			uni.showToast({ title: '请输入生产顺序', icon: 'none' })
+			return
+		}
 		const params = {
 			processName: selected.processName || '',
 			processRowid: selected.rowid || '',
-			sequence: parseFloat(processActionSequence.value) || 0,
+			sequence: parseFloat(processActionSequence.value),
 			modifyMode: mode,
 			selectedProcessId: targetProcess.rowid,
 			productionCode: productionCode,
