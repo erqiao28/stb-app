@@ -4285,7 +4285,9 @@ const loadEmployeeDispatchSummary = async () => {
 
 		const preDispatchMap = {}
 		if (preDispatchRowids.size > 0) {
-			const pdRes = await callWorkflowListAPIPaged({
+			// 按 rowid 批量回查预派工，必须循环取全：白天派工量大时结果会超过单页上限，
+			// 只取第一页会导致超出的记录被静默丢弃，表现为员工任务缺失
+			const pdRes = await callWorkflowListAll({
 				worksheetId: PRE_DISPATCH_WORKSHEET_ID,
 				filters: [{
 					controlId: 'rowid',
@@ -5287,6 +5289,12 @@ const openEmployeeSelectorFromProcess = async (processes, idx) => {
 
 // 加载员工选择框数据：优先使用缓存，只在缓存无效时请求接口
 const loadSelectorEmployeeData = async (groupStartProcess) => {
+	// 顶部派工日期已切换时先丢弃上一日期的员工数据：
+	// 否则新数据加载完成前，列表仍展示且可点选旧日期的员工，
+	// 保存时会绑定到错误日期的员工记录（员工表一天一条，rowid 不同）
+	if (lastEmployeeOptionsParams.value.date && lastEmployeeOptionsParams.value.date !== filterDate.value) {
+		allEmployeeOptions.value = []
+	}
 	if (allEmployeeOptions.value.length === 0) {
 		employeeListLoading.value = true
 	}
@@ -5423,6 +5431,9 @@ function getYesterdayDate() {
 	return `${year}-${month}-${day}`
 }
 
+// 员工选择框数据请求序号：仅最新一次请求可写入结果（见 loadEmployeeOptions）
+let employeeOptionsRequestSeq = 0
+
 const loadEmployeeOptions = async () => {
 	try {
 		const currentDate = filterDate.value
@@ -5433,8 +5444,15 @@ const loadEmployeeOptions = async () => {
 		) {
 			return
 		}
+		// 请求序号：只允许最新一次请求写入结果，
+		// 避免切换日期后旧日期的请求晚返回、把新日期的员工数据覆盖成旧日期的
+		const reqSeq = ++employeeOptionsRequestSeq
 		// 按当前所选日期全量拉取（不再按车间过滤，车间在展示层过滤）
 		const empList = await loadWorkshopEmployeesForSelector()
+		// 请求期间日期又变了，或已发出更新的请求 → 丢弃本次结果
+		if (reqSeq !== employeeOptionsRequestSeq || currentDate !== filterDate.value) {
+			return
+		}
 		allEmployeeOptions.value = empList.map(item => ({
 			id: item.id || '',
 			name: item.name || '-',
