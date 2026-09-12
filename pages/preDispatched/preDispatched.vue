@@ -888,6 +888,31 @@ const DAILY_WAGE_FIELD_MAP = {
 	totalWage: '6a4f304c6d70ffabc67913b9',
 	preDispatch: '6a1e47d727514927ff33cc4f',
 	wageThreshold: '6a7f1a7f533d90c2eae04627',
+	// 正式派工数据：当日工资情况分别关联「派工与报工」（单对单）与「多对多报工数据」（多对多）
+	dispatchReport: '6938dcf1da0981f67b352b57',
+	multiReport: '697b12b13b5e707f84cd9407',
+}
+
+// 正式派工数据表一：派工与报工（单对单，即派工查询页 paigongrenyuan 对应的表）
+const DISPATCH_REPORT_WORKSHEET_ID = '68f6f149c729de3f57a0a360'
+const DISPATCH_REPORT_FIELD_MAP = {
+	orderNo: '6593b04a666735003d33ba61',
+	productName: '6944facfdc7b13304885b3ad',
+	dispatchCount: '655d9cd8cc4f25a27fb3e858',
+	processName: '66cdde49fc37500ec374e1d7',
+	worktime: '693a7d580f64427fac25d070',
+	wage: '69a7e3bc3b5e707f84d2f528'
+}
+
+// 正式派工数据表二：多对多报工数据
+const MULTI_REPORT_WORKSHEET_ID = '697b121d3b5e707f84cd93cc'
+const MULTI_REPORT_FIELD_MAP = {
+	orderNo: '6a800fb1533d90c2eae074cc',
+	productName: '6a800f93533d90c2eae074bf',
+	dispatchCount: '6aa4f67a3c1a1cdddc53870f',
+	processName: '6aa50e283c1a1cdddc539142',
+	worktime: '69846c2d3b5e707f84cf7386',
+	wage: '6aa4f69e3c1a1cdddc5387ca'
 }
 
 const CRAFT_POSITION_WORKSHEET_ID = '6a276f516d70ffabc66285e7'
@@ -4159,156 +4184,191 @@ const loadEmployeeInfoMap = async () => {
 	return infoMap
 }
 
+/**
+ * 分页取回当前「派工日期 + 车间」下的「当日工资情况」原始行。
+ * 当日记录可能超过单页上限，循环取全，避免只读第一页导致遗漏。
+ * 员工任务汇总、员工柱状图、派满判断均以本函数取回的同一批行为数据源。
+ * @returns {Promise<Array>} 当日工资情况原始行
+ */
+const loadDailyWageRows = async () => {
+	const filters = []
+	const wsFilter = employeeWorkshopFilter.value
+	if (wsFilter) {
+		filters.push({
+			controlId: DAILY_WAGE_FIELD_MAP.workshop,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: [wsFilter]
+		})
+	}
+	// 派工日期在接口层过滤（DateEnum(17)，构造器见 utils/dateFilter.js），只取当日记录
+	const dateFilter = buildDateEnumFilter({
+		controlId: DAILY_WAGE_FIELD_MAP.dispatchDate,
+		date: filterDate.value
+	})
+	if (dateFilter) filters.push(dateFilter)
+
+	const rows = []
+	const pageSize = 100
+	let pageNum = 1
+	let hasMore = true
+	const MAX_PAGES = 500
+	while (hasMore && pageNum <= MAX_PAGES) {
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: DAILY_WAGE_WORKSHEET_ID,
+			filters,
+			silent: true
+		}, pageSize, pageNum)
+		const pageRows = Array.isArray(res?.data) ? res.data : []
+		if (pageRows.length === 0) break
+		rows.push(...pageRows)
+		hasMore = pageRows.length === pageSize
+		pageNum++
+	}
+	return rows
+}
+
 // 加载当日工资表扩展信息（员工姓名 -> { 是否有预派工, 工资阀值 }）
 // 依据当日工资表的 preDispatch 关联字段（6a1e47d727514927ff33cc4f）非空判断是否有预派工；
 // 工资阀值字段（6a7f1a7f533d90c2eae04627）用于判断员工是否派满
-const loadEmployeeDailyWageExtraMap = async () => {
+// @param {Array} [dailyWageRows] 已取回的当日工资情况原始行；传入时复用，避免重复请求
+const loadEmployeeDailyWageExtraMap = async (dailyWageRows) => {
 	const preDispatchMap = new Map()
 	const wageThresholdMap = new Map()
 	try {
-		const wsFilter = employeeWorkshopFilter.value
-		const filters = []
-		if (wsFilter) {
-			filters.push({
-				controlId: DAILY_WAGE_FIELD_MAP.workshop,
-				dataType: 30,
-				spliceType: 1,
-				filterType: 2,
-				values: [wsFilter]
-			})
-		}
-		// 派工日期在接口层过滤（DateEnum(17)，构造器见 utils/dateFilter.js），逐页取回当日记录即可
-		const dateFilter = buildDateEnumFilter({
-			controlId: DAILY_WAGE_FIELD_MAP.dispatchDate,
-			date: filterDate.value
-		})
-		if (dateFilter) filters.push(dateFilter)
-
-		const pageSize = 100
-		let pageNum = 1
-		let hasMore = true
-		const MAX_PAGES = 500
-		while (hasMore && pageNum <= MAX_PAGES) {
-			const res = await callWorkflowListAPIPaged({
-				worksheetId: DAILY_WAGE_WORKSHEET_ID,
-				filters,
-				silent: true
-			}, pageSize, pageNum)
-			const rows = Array.isArray(res?.data) ? res.data : []
-			if (rows.length === 0) break
-			rows.forEach((item) => {
-				const name = formatFieldValue(item[DAILY_WAGE_FIELD_MAP.employeeName])
-				if (!name) return
-				const has = extractRelationSids(item[DAILY_WAGE_FIELD_MAP.preDispatch]).length > 0
-				preDispatchMap.set(name, preDispatchMap.get(name) || has)
-				// 工资阀值：取第一个有效值即可（理论上同一员工当日只有一条记录）
-				if (!wageThresholdMap.has(name)) {
-					const threshold = Number(formatFieldValue(item[DAILY_WAGE_FIELD_MAP.wageThreshold]) || 0)
-					if (threshold > 0) {
-						wageThresholdMap.set(name, threshold)
-					}
+		const rows = dailyWageRows || await loadDailyWageRows()
+		rows.forEach((item) => {
+			const name = formatFieldValue(item[DAILY_WAGE_FIELD_MAP.employeeName])
+			if (!name) return
+			const has = extractRelationSids(item[DAILY_WAGE_FIELD_MAP.preDispatch]).length > 0
+			preDispatchMap.set(name, preDispatchMap.get(name) || has)
+			// 工资阀值：取第一个有效值即可（理论上同一员工当日只有一条记录）
+			if (!wageThresholdMap.has(name)) {
+				const threshold = Number(formatFieldValue(item[DAILY_WAGE_FIELD_MAP.wageThreshold]) || 0)
+				if (threshold > 0) {
+					wageThresholdMap.set(name, threshold)
 				}
-			})
-			hasMore = rows.length === pageSize
-			pageNum++
-		}
+			}
+		})
 	} catch (e) {
 		console.error('加载员工当日工资扩展信息失败:', e)
 	}
 	return { preDispatchMap, wageThresholdMap }
 }
 
-const buildEmployeeTaskProcessName = (pd) => {
-	// 统一显示工序归类名称；归类为「拉伸」「抛光」时显示工序名称
-	const craftPositionName = pd.craftPosition ? (craftPositionDictMap.value.get(pd.craftPosition) || '') : ''
-	if (craftPositionName && craftPositionName !== '拉伸' && craftPositionName !== '抛光') {
-		return craftPositionName
-	}
-	return pd.processName || '-'
-}
-
-const loadEmployeeDispatchSummary = async () => {
+/**
+ * 按 rowid 批量拉取正式派工记录并映射为统一任务字段。
+ * @param {string} worksheetId 正式派工表 id
+ * @param {Object} fieldMap 需提取的字段映射
+ * @param {string[]} rowids 当日工资情况关联到的正式派工记录 rowid
+ * @param {'single'|'multi'} sourceType 来源类型（单对单/多对多），供删除时选择接口
+ * @returns {Promise<Map<string, Object>>} rowid -> 任务记录
+ */
+const loadFormalDispatchRecords = async (worksheetId, fieldMap, rowids, sourceType) => {
+	const result = new Map()
+	if (!rowids || rowids.length === 0) return result
 	try {
-		const currentDate = filterDate.value
-		const wsFilter = employeeWorkshopFilter.value
-		const filters = []
-		if (wsFilter) {
-			filters.push({
-				controlId: DAILY_WAGE_FIELD_MAP.workshop,
+		// 记录数可能超过单页上限，循环取全，避免超出的任务被静默丢弃
+		const res = await callWorkflowListAll({
+			worksheetId,
+			filters: [{
+				controlId: 'rowid',
 				dataType: 30,
 				spliceType: 1,
 				filterType: 2,
-				values: [wsFilter]
+				values: [...new Set(rowids.map((id) => String(id)))]
+			}],
+			silent: true
+		}, 100)
+		const rows = Array.isArray(res?.data) ? res.data : []
+		rows.forEach((item) => {
+			const rowid = String(item.rowid || '')
+			if (!rowid) return
+			result.set(rowid, {
+				sourceType,
+				rowid,
+				orderNo: formatFieldValue(item[fieldMap.orderNo]) || '-',
+				productName: formatFieldValue(item[fieldMap.productName]) || '-',
+				processName: formatFieldValue(item[fieldMap.processName]) || '-',
+				dispatchCount: formatFieldValue(item[fieldMap.dispatchCount]) || 0,
+				worktime: Number(formatFieldValue(item[fieldMap.worktime]) || 0),
+				wage: Number(formatFieldValue(item[fieldMap.wage]) || 0)
+			})
+		})
+	} catch (e) {
+		console.error('加载正式派工记录失败:', e)
+	}
+	return result
+}
+
+/**
+ * 由「当日工资情况」行构建员工「正式派工」汇总。
+ * 每行经「派工与报工」（单对单）与「多对多报工数据」（多对多）两个关联字段取正式派工明细，
+ * 工时/工资按明细求和。是否临时工/出勤/新手由调用方结合员工表信息判断，本函数只做聚合。
+ * @param {Array} rows 当日工资情况原始行
+ * @returns {Promise<Map<string, {employeeName, totalWage, totalWorktime, records}>>} 员工姓名 -> 汇总
+ */
+const buildEmployeeFormalDispatchMap = async (rows) => {
+	const map = new Map()
+	const parsed = (rows || []).map((item) => ({
+		employeeName: formatFieldValue(item[DAILY_WAGE_FIELD_MAP.employeeName]) || '-',
+		singleSids: extractRelationSids(item[DAILY_WAGE_FIELD_MAP.dispatchReport]),
+		multiSids: extractRelationSids(item[DAILY_WAGE_FIELD_MAP.multiReport])
+	}))
+
+	// 汇总两类关联 rowid 后并发拉取正式派工记录
+	const singleRowids = []
+	const multiRowids = []
+	parsed.forEach((p) => {
+		p.singleSids.forEach((sid) => singleRowids.push(sid))
+		p.multiSids.forEach((sid) => multiRowids.push(sid))
+	})
+	const [singleMap, multiMap] = await Promise.all([
+		loadFormalDispatchRecords(DISPATCH_REPORT_WORKSHEET_ID, DISPATCH_REPORT_FIELD_MAP, singleRowids, 'single'),
+		loadFormalDispatchRecords(MULTI_REPORT_WORKSHEET_ID, MULTI_REPORT_FIELD_MAP, multiRowids, 'multi')
+	])
+
+	parsed.forEach((p) => {
+		if (!map.has(p.employeeName)) {
+			map.set(p.employeeName, {
+				employeeName: p.employeeName,
+				totalWage: 0,
+				totalWorktime: 0,
+				records: []
 			})
 		}
-		// 派工日期在接口层过滤（DateEnum(17)，构造器见 utils/dateFilter.js），只取当日记录；
-		// 当日记录可能超过单页上限，改为循环分页取全，避免此前只读第一页（100 条）导致遗漏
-		const dateFilter = buildDateEnumFilter({
-			controlId: DAILY_WAGE_FIELD_MAP.dispatchDate,
-			date: currentDate
+		const group = map.get(p.employeeName)
+		// 单对单在前、多对多在后，保持明细顺序稳定
+		const records = [
+			...p.singleSids.map((sid) => singleMap.get(String(sid))).filter(Boolean),
+			...p.multiSids.map((sid) => multiMap.get(String(sid))).filter(Boolean)
+		]
+		records.forEach((rec) => {
+			group.records.push(rec)
+			group.totalWage = Number((group.totalWage + rec.wage).toFixed(2))
+			group.totalWorktime = Number((group.totalWorktime + rec.worktime).toFixed(2))
 		})
-		if (dateFilter) filters.push(dateFilter)
+	})
+	return map
+}
 
-		let rows = []
-		const pageSize = 100
-		let pageNum = 1
-		let hasMore = true
-		const MAX_PAGES = 500
-		while (hasMore && pageNum <= MAX_PAGES) {
-			const res = await callWorkflowListAPIPaged({
-				worksheetId: DAILY_WAGE_WORKSHEET_ID,
-				filters,
-				silent: true
-			}, pageSize, pageNum)
-			const pageRows = Array.isArray(res?.data) ? res.data : []
-			if (pageRows.length === 0) break
-			rows = rows.concat(pageRows)
-			hasMore = pageRows.length === pageSize
-			pageNum++
-		}
-
-		const dailyWageList = rows.map((item) => ({
-			rowid: item.rowid,
-			employeeName: formatFieldValue(item[DAILY_WAGE_FIELD_MAP.employeeName]) || '-',
-			dispatchDate: formatFieldValue(item[DAILY_WAGE_FIELD_MAP.dispatchDate]),
-			workshop: formatFieldValue(item[DAILY_WAGE_FIELD_MAP.workshop]),
-			totalHours: Number(formatFieldValue(item[DAILY_WAGE_FIELD_MAP.totalHours]) || 0),
-			totalWage: Number(formatFieldValue(item[DAILY_WAGE_FIELD_MAP.totalWage]) || 0),
-			preDispatchSids: extractRelationSids(item[DAILY_WAGE_FIELD_MAP.preDispatch])
-		}))
-
-		// 员工信息映射（员工姓名 -> { 出勤状态, 是否新手 }），用于标记请假/新手员工
+/**
+ * 加载员工任务汇总（员工任务表 + 员工任务弹窗）。
+ * 工时/工资/任务明细全部取「正式派工」数据：当日工资情况经「派工与报工」（单对单）
+ * 与「多对多报工数据」（多对多）两个关联字段取正式派工记录并按明细求和；临时工不展示。
+ */
+const loadEmployeeDispatchSummary = async () => {
+	try {
+		const rows = await loadDailyWageRows()
+		// 正式派工汇总：员工姓名 -> { totalWage, totalWorktime, records }
+		const formalMap = await buildEmployeeFormalDispatchMap(rows)
+		// 员工信息映射（员工姓名 -> { 出勤状态, 是否新手, 是否临时工 }），用于行样式与临时工过滤
 		const employeeInfoMap = await loadEmployeeInfoMap()
 
-		const preDispatchRowids = new Set()
-		dailyWageList.forEach((dw) => dw.preDispatchSids.forEach((sid) => preDispatchRowids.add(sid)))
-
-		const preDispatchMap = {}
-		if (preDispatchRowids.size > 0) {
-			// 按 rowid 批量回查预派工，必须循环取全：白天派工量大时结果会超过单页上限，
-			// 只取第一页会导致超出的记录被静默丢弃，表现为员工任务缺失
-			const pdRes = await callWorkflowListAll({
-				worksheetId: PRE_DISPATCH_WORKSHEET_ID,
-				filters: [{
-					controlId: 'rowid',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: [...preDispatchRowids]
-				}],
-				silent: true
-			}, 100)
-			const pdRows = Array.isArray(pdRes?.data) ? pdRes.data.map(mapPreDispatchRow) : []
-			// 员工任务汇总/任务栏只显示已派工的预派工记录
-			const dispatchedPdRows = pdRows.filter(pd => pd.status === '已派工')
-			dispatchedPdRows.forEach((pd) => {
-				preDispatchMap[pd.rowid] = pd
-			})
-		}
-
 		const map = new Map()
-		dailyWageList.forEach((dw) => {
-			const employeeName = dw.employeeName
+		rows.forEach((item) => {
+			const employeeName = formatFieldValue(item[DAILY_WAGE_FIELD_MAP.employeeName]) || '-'
 			const info = employeeInfoMap.get(employeeName) || {}
 			// 临时工不显示在员工任务汇总表中
 			if (info.isTempEmployee) return
@@ -4322,24 +4382,14 @@ const loadEmployeeDispatchSummary = async () => {
 					records: []
 				})
 			}
-			const group = map.get(employeeName)
-			group.totalWage += dw.totalWage
-			group.totalWorktime = Number((group.totalWorktime + dw.totalHours).toFixed(2))
-			dw.preDispatchSids.forEach((sid) => {
-				const pd = preDispatchMap[sid]
-				if (pd) {
-					group.records.push({
-						orderNo: pd.orderNo || '-',
-						productName: pd.productNameNew || pd.productName || '-',
-						processName: buildEmployeeTaskProcessName(pd),
-						dispatchCount: pd.dispatchCount || 0,
-						worktime: pd.worktime || 0,
-						wage: pd.wage || 0,
-						preDispatchRowid: pd.rowid || '',
-						dailyWageRowid: dw.rowid || ''
-					})
-				}
-			})
+			// 同一员工当日多条工资行在 formalMap 中已合并，这里重复赋值结果一致
+			const formal = formalMap.get(employeeName)
+			if (formal) {
+				const group = map.get(employeeName)
+				group.totalWage = formal.totalWage
+				group.totalWorktime = formal.totalWorktime
+				group.records = formal.records
+			}
 		})
 		employeeDispatchSummary.value = [...map.values()]
 			.map((emp) => ({
@@ -4487,12 +4537,13 @@ const openEmployeeTaskPopover = async (emp, index) => {
 	const group = employeeDispatchSummary.value.find((g) => g.employeeName === emp.name)
 	const tasks = group
 		? group.records.map((r) => ({
+				// 任务明细来自正式派工记录：rowid + sourceType 决定删除时调用哪个接口
+				rowid: r.rowid || '',
+				sourceType: r.sourceType || '',
 				orderNo: r.orderNo,
 				productName: r.productName,
 				processName: r.processName,
-				dispatchCount: r.dispatchCount,
-				preDispatchRowid: r.preDispatchRowid || '',
-				dailyWageRowid: r.dailyWageRowid || ''
+				dispatchCount: r.dispatchCount
 		  }))
 		: []
 	selectedEmployeeForPopover.value = { ...emp, tasks }
@@ -4529,11 +4580,23 @@ const closeEmployeeTaskPopover = () => {
 	employeeTaskArrowStyle.value = {}
 }
 
+// 员工任务弹窗「删除」删除的是任务明细对应的「正式派工记录」：
+// 接口为预派工删除的同一个 webhook，额外用 type 区分数据来源（单=派工与报工 / 多=多对多报工数据），
+// rowid 为正式派工记录本身的 rowid。
 const TASK_DELETE_URL = getApiRequestBase() + '/api/workflow/hooks/NmE4MmE1NGFjYjg1NjNiMzlkMTViZDZh'
+const TASK_DELETE_TYPE_MAP = {
+	single: '单',
+	multi: '多'
+}
 
 const handleDeleteTask = (task, index) => {
-	if (!task.preDispatchRowid) {
-		uni.showToast({ title: '缺少预派工标识', icon: 'none' })
+	const deleteType = TASK_DELETE_TYPE_MAP[task.sourceType]
+	if (!deleteType) {
+		uni.showToast({ title: '缺少派工来源标识', icon: 'none' })
+		return
+	}
+	if (!task.rowid) {
+		uni.showToast({ title: '缺少派工记录标识', icon: 'none' })
 		return
 	}
 	// 先关闭任务框，确保确认框层级高于任务框
@@ -4546,23 +4609,22 @@ const handleDeleteTask = (task, index) => {
 			try {
 				uni.showLoading({ title: '删除中...', mask: true })
 				const result = await http.post(TASK_DELETE_URL, {
-					rowid: task.preDispatchRowid
+					rowid: task.rowid,
+					type: deleteType
 				})
 				uni.hideLoading()
 				console.log('删除任务接口返回:', result)
 
-				// 后端 webhook 异步处理，轮询等待任务从产品列表消失（墙钟最多 5 秒，命中即停）
-				const targetRowid = task.preDispatchRowid
+				// 后端 webhook 异步处理，轮询等待该正式派工记录从员工任务汇总中消失（墙钟最多 5 秒，命中即停）
+				const targetRowid = String(task.rowid)
 				const removed = await pollUntil({
-					query: () => loadProducts(true, true),
-					isDone: () => !productList.value.some(p => (p.preDispatchRowids || []).includes(targetRowid))
+					query: () => loadEmployeeDispatchSummary(),
+					isDone: () => !employeeDispatchSummary.value.some(g => (g.records || []).some(r => String(r.rowid) === targetRowid))
 				})
 				if (!removed) {
 					console.warn('删除任务后轮询未检测到任务移除，仍执行一次刷新兜底')
 				}
-				console.log('开始刷新产品列表和员工列表')
 				await loadWorkshopEmployees()
-				console.log('刷新完成')
 				if (result && result.status === 1) {
 					uni.showToast({ title: result.msg || '删除成功', icon: 'success' })
 				} else {
@@ -4959,11 +5021,13 @@ const loadWorkshopEmployees = async () => {
 			pageNum++
 		}
 
-		// 加载当日工资表扩展信息（预派工关联 + 工资阀值），用于未派判断、派满判断及柱子状态显示
-		const { preDispatchMap, wageThresholdMap } = await loadEmployeeDailyWageExtraMap()
+		// 取当日工资情况行：一次请求同时供「预派工关联/工资阀值」与「正式派工汇总」使用
+		const dailyWageRows = await loadDailyWageRows()
+		// 扩展信息（预派工关联 + 工资阀值），用于未派判断与派满判断
+		const { preDispatchMap, wageThresholdMap } = await loadEmployeeDailyWageExtraMap(dailyWageRows)
+		// 正式派工汇总：柱子的工资/总工时改取正式派工记录求和（员工姓名 -> { totalWage, totalWorktime }）
+		const formalMap = await buildEmployeeFormalDispatchMap(dailyWageRows)
 		const mapped = allRows.map((item) => {
-			const totalHours = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.totalHours]) || '0') || 0
-			const wage = parseFloat(formatFieldValue(item[EMPLOYEE_FIELD_MAP.wage]) || '0') || 0
 			const attendance = formatFieldValue(item[EMPLOYEE_FIELD_MAP.attendance]) || ''
 			const position = formatFieldValue(item[EMPLOYEE_FIELD_MAP.position]) || ''
 			const isNewEmployeeRaw = formatFieldValue(item[EMPLOYEE_FIELD_MAP.isNewEmployee])
@@ -4971,6 +5035,10 @@ const loadWorkshopEmployees = async () => {
 			const isTempEmployeeRaw = formatFieldValue(item[EMPLOYEE_FIELD_MAP.isTempEmployee])
 			const isTempEmployee = String(isTempEmployeeRaw).trim() === '1'
 			const name = formatFieldValue(item[EMPLOYEE_FIELD_MAP.employeeName]) || '-'
+			// 工资/工时一律取正式派工明细求和（无正式派工则为 0），与工序列表口径一致
+			const formal = formalMap.get(name)
+			const wage = formal ? formal.totalWage : 0
+			const totalHours = formal ? formal.totalWorktime : 0
 			const wageThreshold = wageThresholdMap.get(name) || 0
 			const isFull = wageThreshold > 0 && wage >= wageThreshold
 			return {
