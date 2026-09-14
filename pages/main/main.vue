@@ -53,23 +53,55 @@ const goBackToIndex = () => {
 	})
 }
 
+/** 三个传统派工入口的引导文案 */
+const PRE_DISPATCH_GUIDE_CONTENT =
+	'请优先使用预派工功能，已经可以选择日期，若有需要添加的功能或有BUG，请联系二桥'
+
+/**
+ * 派工入口统一引导弹框：订单/产品/返工派工点击时先提示优先使用预派工。
+ * 「使用预派工」跳预派工页面；「继续使用」执行传入的原跳转逻辑；
+ * 点遮罩/返回会走 cancel，同样按「继续使用」处理，保持与改造前一致的跳转行为。
+ * @param {Function} proceed 继续使用时执行的原跳转逻辑
+ */
+const showPreDispatchGuide = (proceed) => {
+	uni.showModal({
+		title: '温馨提示',
+		content: PRE_DISPATCH_GUIDE_CONTENT,
+		confirmText: '使用预派工',
+		cancelText: '继续使用',
+		success: (res) => {
+			if (res.confirm) {
+				goPreDispatched()
+			} else if (res.cancel) {
+				proceed()
+			}
+		}
+	})
+}
+
 const goSelectBills = () => {
-	uni.navigateTo({
-		url: `/pages/selectBills/selectBills?billTypeIndex=0&billType=${encodeURIComponent('正常排产')}&billTypeReadonly=1`
+	showPreDispatchGuide(() => {
+		uni.navigateTo({
+			url: `/pages/selectBills/selectBills?billTypeIndex=0&billType=${encodeURIComponent('正常排产')}&billTypeReadonly=1`
+		})
 	})
 }
 
 const goSelectProductDispatch = () => {
-	const raw = (userStore.loginLimits && userStore.loginLimits.trim()) || ''
-	const workshop = defaultWorkshopFromLoginLimits(raw) || raw || '拉伸车间'
-	uni.navigateTo({
-		url: `/pages/selectProduct/selectProduct?workshop=${encodeURIComponent(workshop)}&billTypeIndex=0&billType=${encodeURIComponent('正常排产')}&billTypeReadonly=1&dispatchMode=product`
+	showPreDispatchGuide(() => {
+		const raw = (userStore.loginLimits && userStore.loginLimits.trim()) || ''
+		const workshop = defaultWorkshopFromLoginLimits(raw) || raw || '拉伸车间'
+		uni.navigateTo({
+			url: `/pages/selectProduct/selectProduct?workshop=${encodeURIComponent(workshop)}&billTypeIndex=0&billType=${encodeURIComponent('正常排产')}&billTypeReadonly=1&dispatchMode=product`
+		})
 	})
 }
 
 const goReworkDispatch = () => {
-	uni.navigateTo({
-		url: `/pages/selectBills/selectBills?billTypeIndex=1&billType=${encodeURIComponent('返工排产')}&billTypeReadonly=1`
+	showPreDispatchGuide(() => {
+		uni.navigateTo({
+			url: `/pages/selectBills/selectBills?billTypeIndex=1&billType=${encodeURIComponent('返工排产')}&billTypeReadonly=1`
+		})
 	})
 }
 
