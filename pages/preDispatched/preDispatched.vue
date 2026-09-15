@@ -6722,7 +6722,7 @@ onShow(refreshPageOnShow)
 						}
 
 						.order-no {
-							font-size: px2vw(22px);
+						font-size: px2vw(26px);
 							color: #333;
 							font-weight: bold;
 							min-width: 0;
