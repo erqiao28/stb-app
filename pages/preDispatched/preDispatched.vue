@@ -234,16 +234,19 @@
 						<view
 							v-for="group in groupedProcessList"
 							:key="group.productRowid"
-							class="process-table-grid"
-							:style="{ gridTemplateColumns: 'calc(50 / 1920 * 100vw) min-content repeat(' + group.processes.length + ', min-content)' }"
+							class="process-table-wrap"
 						>
-							<!-- 顶部订单编号 + 产品名称：同一行，勾选框等行标签整体下移一行 -->
-							<view class="grid-order-bar" style="grid-row: 1; grid-column: 1 / -1">
+							<!-- 顶部订单编号 + 产品名称：独立于下方网格，宽度随内容自适应，不撑开列轨道 -->
+							<view class="grid-order-bar">
 								<text class="grid-order-bar-no">{{ group.orderNo }}</text>
 								<text class="grid-order-bar-product">{{ group.productName }}</text>
 							</view>
-							<!-- 按钮栏：从第 2 行开始，不覆盖订单编号栏 -->
-							<view class="grid-product-name" style="grid-row: 2 / span 10; grid-column: 1">
+							<view
+								class="process-table-grid"
+								:style="{ gridTemplateColumns: 'calc(70 / 1920 * 100vw) calc(90 / 1920 * 100vw) repeat(' + group.processes.length + ', minmax(calc(80 / 1920 * 100vw), min-content))' }"
+							>
+								<!-- 按钮栏：第 1 列，跨全部 10 行 -->
+								<view class="grid-product-name" style="grid-row: 1 / span 10; grid-column: 1">
 								<view class="grid-product-refresh" @click.stop="refreshProcessList(group.productRowid)">刷新</view>
 								<view
 									class="grid-product-action"
@@ -261,31 +264,31 @@
 									@click.stop="handleProcessListConfirm(group.productRowid)"
 								>确定</view>
 							</view>
-							<view class="grid-label-cell" style="grid-row: 2; grid-column: 2">选中</view>
-							<view class="grid-label-cell" style="grid-row: 3; grid-column: 2">顺序</view>
-							<view class="grid-label-cell" style="grid-row: 4; grid-column: 2">工序</view>
-							<view class="grid-label-cell" style="grid-row: 5; grid-column: 2">日产量</view>
-							<view class="grid-label-cell" style="grid-row: 6; grid-column: 2">订单数</view>
-							<view class="grid-label-cell" style="grid-row: 7; grid-column: 2">生产数</view>
-							<view class="grid-label-cell" style="grid-row: 8; grid-column: 2">待派数</view>
-							<view class="grid-label-cell" style="grid-row: 9; grid-column: 2">已完成</view>
-							<view class="grid-label-cell" style="grid-row: 10; grid-column: 2">派工数量</view>
-							<view class="grid-label-cell" style="grid-row: 11; grid-column: 2">员工</view>
+							<view class="grid-label-cell" style="grid-row: 1; grid-column: 2 / 3">选中</view>
+							<view class="grid-label-cell" style="grid-row: 2; grid-column: 2 / 3">顺序</view>
+							<view class="grid-label-cell" style="grid-row: 3; grid-column: 2 / 3">工序</view>
+							<view class="grid-label-cell" style="grid-row: 4; grid-column: 2 / 3">日产量</view>
+							<view class="grid-label-cell" style="grid-row: 5; grid-column: 2 / 3">订单数</view>
+							<view class="grid-label-cell" style="grid-row: 6; grid-column: 2 / 3">生产数</view>
+							<view class="grid-label-cell" style="grid-row: 7; grid-column: 2 / 3">待派数</view>
+							<view class="grid-label-cell" style="grid-row: 8; grid-column: 2 / 3">已完成</view>
+							<view class="grid-label-cell" style="grid-row: 9; grid-column: 2 / 3">派工数量</view>
+							<view class="grid-label-cell" style="grid-row: 10; grid-column: 2 / 3">员工</view>
 							<template v-for="(p, idx) in group.processes" :key="p.rowid">
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 2, gridColumn: 3 + idx }">
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 1, gridColumn: 3 + idx }">
 								<!-- 自定义勾选框：完全受 selectedProcessIds 控制，避免 checkbox 组件内部状态不同步问题 -->
 								<view class="grid-checkbox" :class="{ checked: selectedProcessIds.includes(p.rowid) }" @click.stop="toggleProcessSelection(p)">
 									<text v-if="selectedProcessIds.includes(p.rowid)" class="grid-checkbox-icon">✓</text>
 								</view>
 							</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 3, gridColumn: 3 + idx }">{{ p.sequence || '-' }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 4, gridColumn: 3 + idx }">{{ p.processName || '-' }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.dailyOutput || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ p.orderCount || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 7, gridColumn: 3 + idx }">{{ p.allcount || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 8, gridColumn: 3 + idx }">{{ p.needCount || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 9, gridColumn: 3 + idx }">{{ p.finishCount || 0 }}</view>
-							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 10, gridColumn: 3 + idx }">{{ p.dispatchCount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 2, gridColumn: 3 + idx }">{{ p.sequence || '-' }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 3, gridColumn: 3 + idx }">{{ p.processName || '-' }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 4, gridColumn: 3 + idx }">{{ p.dailyOutput || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 5, gridColumn: 3 + idx }">{{ p.orderCount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 6, gridColumn: 3 + idx }">{{ p.allcount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 7, gridColumn: 3 + idx }">{{ p.needCount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 8, gridColumn: 3 + idx }">{{ p.finishCount || 0 }}</view>
+							<view class="grid-cell" :class="{ 'selected-column': selectedProcessIds.includes(p.rowid), 'associated-column': p.isAssociated && !selectedProcessIds.includes(p.rowid), 'disabled-column': !selectedProcessIds.includes(p.rowid) && !p.isAssociated }" :style="{ gridRow: 9, gridColumn: 3 + idx }">{{ p.dispatchCount || 0 }}</view>
 							<view
 							v-if="isEmployeeGroupStart(group.processes, idx)"
 							class="grid-cell employee-cell"
@@ -294,6 +297,7 @@
 							@click="openEmployeeSelectorFromProcess(group.processes, idx)"
 						>{{ getEmployeeCellText(group.processes, idx) }}</view>
 						</template>
+</view>
 						</view>
 						<view class="empty-wrap" v-if="!processList.length && !loadingProducts">
 							<text class="empty-text">暂无工序</text>
@@ -4495,8 +4499,8 @@ const getEmployeeGroupSpan = (processes, idx) => {
 
 const getEmployeeCellStyle = (processes, idx) => {
 	const span = getEmployeeGroupSpan(processes, idx)
-	if (span <= 1) return { gridRow: 11, gridColumn: 3 + idx }
-	return { gridRow: 11, gridColumn: (3 + idx) + ' / span ' + span }
+	if (span <= 1) return { gridRow: 10, gridColumn: 3 + idx }
+	return { gridRow: 10, gridColumn: (3 + idx) + ' / span ' + span }
 }
 
 const getEmployeeCellText = (processes, idx) => {
@@ -4565,7 +4569,8 @@ const groupedProcessList = computed(() => {
 		// 使用 uniqueKey 判断是否选中
 		if (!selectedProductIds.value.includes(product.uniqueKey)) return
 		const processes = processList.value.filter(p => p.productRowid === product.uniqueKey)
-		if (processes.length === 0) return
+		// 无工序的产品也保留分组（processes 为空），让订单产品栏/按钮栏/字段标题栏照常渲染，
+		// 只是右侧没有工序列，避免用户误以为该产品没选上
 		groups.push({
 			productRowid: product.uniqueKey,
 			productName: product.productNameNew || product.productName || '-',
@@ -7013,15 +7018,14 @@ onShow(refreshPageOnShow)
 			.process-list {
 				height: 100%;
 
-				.process-table-grid {
-					display: grid;
+				// 单个产品的整块：顶栏（订单编号+产品名称）独立一行，下方才是网格
+				.process-table-wrap {
 					width: fit-content;
-					grid-template-rows: repeat(11, auto);
 					margin: px2vw(10px);
 					border: 1px solid #999;
 
-					// 顶部订单编号 + 产品名称栏：行高固定与其它数据行一致（与 grid-cell 相同的上下内边距），
-					// 字体变大时通过减小内边距保持行高不变；背景浅灰，订单编号与产品名称加粗、水平居中
+					// 顶部订单编号 + 产品名称栏：独立块级元素，宽度随内容自适应，
+					// 不再横跨网格、不撑开列轨道，无工序时按钮列与标签列依旧并列靠左
 					.grid-order-bar {
 						background-color: #e9e9e9;
 						color: #333;
@@ -7030,9 +7034,6 @@ onShow(refreshPageOnShow)
 						padding: 0 px2vw(5px);
 						height: px2vw(40px);
 						border-bottom: 1px solid #999;
-						position: sticky;
-						left: 0;
-						z-index: 12;
 						display: flex;
 						align-items: center;
 						justify-content: center;
@@ -7044,10 +7045,22 @@ onShow(refreshPageOnShow)
 							color: #333;
 						}
 					}
+				}
 
-					// 按钮栏：从第 2 行开始，避免覆盖订单编号栏
-					.grid-product-name {
-						grid-row: 2 / span 10;
+				.process-table-grid {
+					display: grid;
+					// 宽度=各列模板之和，按钮栏等超宽内容靠 min-width:0 约束不撑开轨道，
+					// 无工序时也不会把多余宽度堆到列与列之间
+					width: fit-content;
+					grid-template-rows: repeat(10, auto);
+
+					// 按钮栏：第 1 列，跨全部 10 行
+				.grid-product-name {
+					grid-row: 1 / span 10;
+					// 不撑开第一列轨道：列宽由列模板决定，内部竖排文字超宽时收缩
+					min-width: 0;
+					overflow: hidden;
+					box-sizing: border-box;
 						display: flex;
 						flex-direction: column;
 						justify-content: space-between;
@@ -7060,8 +7073,10 @@ onShow(refreshPageOnShow)
 						z-index: 10;
 
 						.grid-product-action {
-							padding: px2vw(8px) px2vw(4px);
-							background-color: #999;
+						padding: px2vw(8px) px2vw(4px);
+						max-width: 100%;
+						box-sizing: border-box;
+						background-color: #999;
 							color: #fff;
 							border-radius: px2vw(6px);
 							font-size: px2vw(24px);
@@ -7074,8 +7089,10 @@ onShow(refreshPageOnShow)
 						}
 
 						.grid-product-refresh {
-							padding: px2vw(8px) px2vw(4px);
-							background-color: #f39c12;
+						padding: px2vw(8px) px2vw(4px);
+						max-width: 100%;
+						box-sizing: border-box;
+						background-color: #f39c12;
 							color: #fff;
 							border-radius: px2vw(6px);
 							font-size: px2vw(24px);
@@ -7088,8 +7105,10 @@ onShow(refreshPageOnShow)
 						}
 
 						.grid-product-confirm {
-							padding: px2vw(8px) px2vw(4px);
-							background-color: #27ae60;
+						padding: px2vw(8px) px2vw(4px);
+						max-width: 100%;
+						box-sizing: border-box;
+						background-color: #27ae60;
 							color: #fff;
 							border-radius: px2vw(6px);
 							font-size: px2vw(24px);
@@ -7102,8 +7121,10 @@ onShow(refreshPageOnShow)
 						}
 
 						.grid-product-dispatch {
-							padding: px2vw(8px) px2vw(4px);
-							background-color: #5884f1;
+						padding: px2vw(8px) px2vw(4px);
+						max-width: 100%;
+						box-sizing: border-box;
+						background-color: #5884f1;
 							color: #fff;
 							border-radius: px2vw(6px);
 							font-size: px2vw(24px);
@@ -7117,7 +7138,10 @@ onShow(refreshPageOnShow)
 					}
 
 				.grid-label-cell {
+					grid-column: 2 / 3;
 					background-color: #f0f0f0;
+						box-sizing: border-box;
+						overflow: hidden;
 						padding: px2vw(9px) px2vw(5px);
 						text-align: center;
 						font-size: px2vw(22px);
@@ -7125,6 +7149,11 @@ onShow(refreshPageOnShow)
 						border-bottom: 1px solid #999;
 						border-right: 1px solid #999;
 						white-space: nowrap;
+						display: flex;
+						align-items: center;
+						justify-content: center;
+						width: calc(90 / 1920 * 100vw);
+						max-width: calc(90 / 1920 * 100vw);
 
 						&:nth-last-child(-n+10) {
 							border-right: none;
@@ -7141,6 +7170,7 @@ onShow(refreshPageOnShow)
 						display: flex;
 						align-items: center;
 						justify-content: center;
+						box-sizing: border-box;
 						white-space: nowrap;
 
 						&.selected-column {
