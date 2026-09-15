@@ -609,6 +609,18 @@
 				</view>
 				<view class="employee-modal-close" @click="closeEmployeeSelector">×</view>
 			</view>
+			<!-- 员工姓名搜索：跨车间检索，命中其它车间员工时自动切换车间 -->
+			<view class="employee-modal-search" @click="showWorkshopDropdown = false">
+				<input
+					class="employee-search-input"
+					type="text"
+					v-model="employeeSearchKeyword"
+					placeholder="搜索员工姓名"
+					placeholder-class="employee-search-placeholder"
+					confirm-type="search"
+				/>
+				<text v-if="employeeSearchKeyword" class="employee-search-clear" @click="clearEmployeeSearch">×</text>
+			</view>
 			<scroll-view scroll-y class="employee-modal-list">
 				<view
 					v-for="emp in filteredEmployees"
@@ -1290,11 +1302,23 @@ const lastEmployeeOptionsParams = ref({
 // 员工类型切换：normal-正常员工，temp-临时工
 const employeeTypeFilter = ref('normal')
 
-// 员工列表展示过滤（车间 + 员工类型）：
+// 员工姓名搜索关键字（员工选择框顶部搜索栏）
+const employeeSearchKeyword = ref('')
+
+/** 按姓名关键字匹配员工（忽略大小写与车间），供搜索过滤与自动跳转复用 */
+const matchEmployeesByName = (keyword) => {
+	const kw = String(keyword || '').trim().toLowerCase()
+	if (!kw) return []
+	return allEmployeeOptions.value.filter(emp => String(emp.name || '').toLowerCase().includes(kw))
+}
+
+// 员工列表展示过滤（车间 + 员工类型 + 姓名搜索）：
 // 全量数据按 selectedSelectorWorkshop 前端过滤出当前车间员工展示；
-// 员工类型 normal/temp 过滤 isTempEmployee；勾选状态保存在 editData.selectedEmployeeIds 与列表无关
+// 员工类型 normal/temp 过滤 isTempEmployee；勾选状态保存在 editData.selectedEmployeeIds 与列表无关；
+// 搜索先取跨车间命中集合再叠加车间/类型过滤，命中其它车间时由 watch 自动切过去
 const filteredEmployees = computed(() => {
-	let list = allEmployeeOptions.value
+	const keyword = employeeSearchKeyword.value.trim()
+	let list = keyword ? matchEmployeesByName(keyword) : allEmployeeOptions.value
 	const ws = selectedSelectorWorkshop.value
 	if (ws) list = list.filter(emp => emp.workshop === ws)
 	if (employeeTypeFilter.value === 'normal') {
@@ -1304,6 +1328,28 @@ const filteredEmployees = computed(() => {
 	}
 	return list
 })
+
+/**
+ * 搜索命中其它车间/其它员工类型时自动跳转：
+ * 否则命中结果会被当前车间或「正/临」筛选挡住，看起来像搜不到人。取首个命中员工的车间与类型。
+ * 同时监听员工数据：数据是异步加载的，若用户在加载完成前就输入了关键字，数据到位后需再跳一次。
+ */
+watch([employeeSearchKeyword, allEmployeeOptions], ([val]) => {
+	const first = matchEmployeesByName(val)[0]
+	if (!first) return
+	if (first.workshop && first.workshop !== selectedSelectorWorkshop.value) {
+		selectedSelectorWorkshop.value = first.workshop
+	}
+	const targetType = first.isTempEmployee ? 'temp' : 'normal'
+	if (employeeTypeFilter.value !== targetType) {
+		employeeTypeFilter.value = targetType
+	}
+})
+
+// 清空员工姓名搜索：恢复按当前车间 + 员工类型展示
+const clearEmployeeSearch = () => {
+	employeeSearchKeyword.value = ''
+}
 
 const showProcessActionModal = ref(false)
 const processActionProduct = ref(null)
@@ -5581,6 +5627,8 @@ const sortEmployeeOptionsByPosition = (target = '') => {
 
 const closeEmployeeSelector = () => {
 	showEmployeeSelector.value = false
+	// 关闭时清空搜索：下次打开按当前车间 + 员工类型完整展示
+	clearEmployeeSearch()
 }
 
 const toggleEmployee = (emp) => {
@@ -8105,6 +8153,36 @@ onShow(refreshPageOnShow)
 					background-color: #f5f5f5;
 				}
 			}
+		}
+	}
+
+	// 员工姓名搜索栏（顶部栏下方）：跨车间检索
+	.employee-modal-search {
+		display: flex;
+		align-items: center;
+		margin: px2vw(16px);
+		padding: px2vw(10px) px2vw(16px);
+		background-color: #f5f5f5;
+		border-radius: px2vw(8px);
+		flex-shrink: 0;
+
+		.employee-search-input {
+			flex: 1;
+			min-width: 0;
+			font-size: px2vw(24px);
+			color: #333;
+			background-color: transparent;
+		}
+
+		.employee-search-placeholder {
+			color: #999;
+		}
+
+		.employee-search-clear {
+			margin-left: px2vw(8px);
+			font-size: px2vw(32px);
+			color: #999;
+			line-height: 1;
 		}
 	}
 
