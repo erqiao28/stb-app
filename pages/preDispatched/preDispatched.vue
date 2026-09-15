@@ -243,7 +243,7 @@
 							</view>
 							<view
 								class="process-table-grid"
-								:style="{ gridTemplateColumns: 'calc(70 / 1920 * 100vw) calc(90 / 1920 * 100vw) repeat(' + group.processes.length + ', minmax(calc(80 / 1920 * 100vw), min-content))' }"
+								:style="{ gridTemplateColumns: 'calc(70 / 1920 * 100vw) calc(90 / 1920 * 100vw) repeat(' + group.processes.length + ', minmax(calc(80 / 1920 * 100vw), max-content))' }"
 							>
 								<!-- 按钮栏：第 1 列，跨全部 10 行 -->
 								<view class="grid-product-name" style="grid-row: 1 / span 10; grid-column: 1">
@@ -7049,9 +7049,8 @@ onShow(refreshPageOnShow)
 
 				.process-table-grid {
 					display: grid;
-					// 宽度=各列模板之和，按钮栏等超宽内容靠 min-width:0 约束不撑开轨道，
-					// 无工序时也不会把多余宽度堆到列与列之间
-					width: fit-content;
+					// 宽度=各列内容之和，超出部分由 scroll-view 横向滚动，工序名长不会被压缩截断
+					width: max-content;
 					grid-template-rows: repeat(10, auto);
 
 					// 按钮栏：第 1 列，跨全部 10 行
