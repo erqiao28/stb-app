@@ -7377,6 +7377,9 @@ onShow(refreshPageOnShow)
 		position: absolute;
 		width: 320px;
 		min-height: 120px;
+		max-height: 60vh;
+		display: flex;
+		flex-direction: column;
 		background-color: #fff;
 		border-radius: px2vw(12px);
 		padding: px2vw(20px);
@@ -7394,6 +7397,9 @@ onShow(refreshPageOnShow)
 		}
 
 		.employee-task-list {
+			overflow-y: auto;
+			-webkit-overflow-scrolling: touch;
+
 			.employee-task-header {
 				display: flex;
 				flex-direction: row;
