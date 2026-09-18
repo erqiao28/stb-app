@@ -183,7 +183,12 @@
 						<text class="order-index">{{ chineseNumberMap[gIdx + 1] || (gIdx + 1) }}</text>
 						<view class="order-header-main">
 							<text class="order-no">{{ group.orderNo || '-' }}</text>
-							<text class="order-delivery-date" v-if="group.productDeliveryDate">{{ group.productDeliveryDate }}</text>
+							<!-- 右侧信息列：上客户名称、下交货日期，中间横线隔断 -->
+							<view class="order-header-side" v-if="group.customerName || group.productDeliveryDate">
+								<text class="order-customer" v-if="group.customerName">{{ group.customerName }}</text>
+								<view class="order-side-divider" v-if="group.customerName && group.productDeliveryDate"></view>
+								<text class="order-delivery-date" v-if="group.productDeliveryDate">{{ group.productDeliveryDate }}</text>
+							</view>
 						</view>
 						<text class="order-count">({{ group.products.length }})</text>
 					</view>
@@ -867,6 +872,7 @@ const PRE_DISPATCH_WORKSHEET_ID = '6a1e468d27514927ff33cbae'
 const PRE_DISPATCH_FIELD_MAP = {
 	orderNo: '6a1e47d727514927ff33cc45',
 	pureOrderNo: '6a1fff8738176d619e00e008',
+	customerName: '6aacce643c1a1cdddc5732f4',
 	productName: '6a1e47d727514927ff33cc47',
 	productNameNew: '6a3a4b306d70ffabc66ec686',
 	workshop: '6a1e4c1427514927ff33cda4',
@@ -1068,28 +1074,21 @@ const loadSyncSelectEnabled = () => {
 
 const expandedIds = ref([])
 const collapsedOrderIds = ref([])
-const chineseNumberMap = {
-	1: '一',
-	2: '二',
-	3: '三',
-	4: '四',
-	5: '五',
-	6: '六',
-	7: '七',
-	8: '八',
-	9: '九',
-	10: '十',
-	11: '十一',
-	12: '十二',
-	13: '十三',
-	14: '十四',
-	15: '十五',
-	16: '十六',
-	17: '十七',
-	18: '十八',
-	19: '十九',
-	20: '二十'
-}
+// 中文数字映射：1-99 程序化生成（二十一、三十……九十九），避免手写映射遗漏导致 20 之后回退成阿拉伯数字
+const chineseNumberMap = (() => {
+	const digits = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九']
+	const map = {}
+	for (let n = 1; n <= 99; n++) {
+		if (n <= 10) {
+			map[n] = n === 10 ? '十' : digits[n]
+		} else if (n < 20) {
+			map[n] = '十' + digits[n % 10]
+		} else {
+			map[n] = digits[Math.floor(n / 10)] + '十' + (n % 10 ? digits[n % 10] : '')
+		}
+	}
+	return map
+})()
 const processList = ref([])
 const loadedProductIds = ref([])
 const selectedProcessIds = ref([])
@@ -1840,6 +1839,7 @@ const formatSpecification = (v) => {
 const mapPreDispatchRow = (item) => ({
 	rowid: item.rowid,
 	orderNo: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.pureOrderNo]) || formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.orderNo]),
+	customerName: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.customerName]) || '',
 	productName: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.productName]),
 	productNameNew: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.productNameNew]),
 	workshop: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.workshop]),
@@ -4533,7 +4533,7 @@ const groupedProductList = computed(() => {
 	productList.value.forEach((product) => {
 		const key = product.orderNo || '未分类'
 		if (!groups[key]) {
-			groups[key] = { orderNo: key, productDeliveryDate: product.productDeliveryDate || '', products: [] }
+			groups[key] = { orderNo: key, customerName: product.customerName || '', productDeliveryDate: product.productDeliveryDate || '', products: [] }
 		}
 		groups[key].products.push(product)
 	})
@@ -6563,7 +6563,7 @@ onShow(refreshPageOnShow)
 		height: 0;
 
 		.left-panel {
-			width: px2vw(460px);
+			width: px2vw(540px);
 			background-color: #fff;
 			border-right: 1px solid #eee;
 			display: flex;
@@ -6693,7 +6693,8 @@ onShow(refreshPageOnShow)
 						display: flex;
 						flex-direction: row;
 						align-items: center;
-						padding: px2vw(10px) px2vw(16px);
+						// 上下内边距收紧：右侧客户/日期改为上下两行，贴紧排布保持原行高不变
+						padding: px2vw(2px) px2vw(16px);
 						background-color: #fff;
 						cursor: pointer;
 
@@ -6731,15 +6732,41 @@ onShow(refreshPageOnShow)
 							text-overflow: ellipsis;
 						}
 
-						.order-delivery-date {
-							font-size: px2vw(20px);
-							color: #888;
-							margin-left: px2vw(12px);
-							white-space: nowrap;
-							overflow: hidden;
-							text-overflow: ellipsis;
-							flex-shrink: 0;
-						}
+						// 右侧信息列：客户名称与交货日期上下两行贴紧排布（无外边距，不增加行高）
+					.order-header-side {
+						display: flex;
+						flex-direction: column;
+						// 客户名称与交货日期头部（左侧）对齐
+						align-items: flex-start;
+						margin-left: px2vw(12px);
+						flex-shrink: 0;
+						min-width: 0;
+					}
+
+					// 客户名称：蓝色小字，超长省略
+					.order-customer {
+						font-size: px2vw(20px);
+						color: #5884f1;
+						max-width: px2vw(180px);
+						white-space: nowrap;
+						overflow: hidden;
+						text-overflow: ellipsis;
+					}
+
+					// 客户名称与交货日期之间的横线隔断（贴紧无外边距）
+					.order-side-divider {
+						width: 100%;
+						height: 1px;
+						background-color: #e5e5e5;
+					}
+
+					.order-delivery-date {
+						font-size: px2vw(20px);
+						color: #888;
+						white-space: nowrap;
+						overflow: hidden;
+						text-overflow: ellipsis;
+					}
 
 						.order-count {
 							margin-left: px2vw(8px);
