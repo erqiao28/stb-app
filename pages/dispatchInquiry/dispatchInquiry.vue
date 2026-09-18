@@ -131,10 +131,11 @@
 
 		<!-- 选择转派员工模态框 -->
 		<AddWorkerRadiobox 
-			v-model="selectedTransferEmployees" 
-			:options="allEmployeesOptions" 
-			title="选择转派员工" 
-			:visible="showSelectEmployeeModal" 
+			v-model="selectedTransferEmployees"
+			:options="displayEmployeeOptions"
+			title="选择转派员工"
+			:max-selection="1"
+			:visible="showSelectEmployeeModal"
 			@update:visible="handleSelectEmployeeModalClose" 
 			@confirm="handleSelectEmployeeConfirm" 
 			:workshopOptions="workshopOptions"
@@ -248,7 +249,7 @@
 
 <script setup>
 import { useUserStore } from '../../store/user.store'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { onLoad, onReachBottom } from '@dcloudio/uni-app'
 import { callWorkflowListAPIPaged } from '../../utils/workflow'
 import { buildDateEnumFilter } from '../../utils/dateFilter'
@@ -297,10 +298,10 @@ onReachBottom(() => {
 // 选择员工模态框中的车间选择（用于 AddWorkerRadiobox）
 const modalWorkshop = ref('')
 
-// 与 AddWorkerRadiobox 的 @update:workshop 对应，切换车间时刷新员工列表
+// 与 AddWorkerRadiobox 的 @update:workshop 对应；切换车间仅前端过滤，
+// 员工数据在打开弹窗时已一次拉全，无需重新请求
 const onModalWorkshopChange = (value) => {
 	modalWorkshop.value = value || ''
-	loadEmployees()
 }
 
 // 需检验单选框
@@ -471,6 +472,13 @@ const showSelectEmployeeModal = ref(false)
 const selectedTransferEmployees = ref([])
 const allEmployeesOptions = ref([])
 const allEmployeesMap = ref({})
+
+// 弹窗展示用的员工选项：modalWorkshop 为空展示全部车间员工，
+// 否则仅展示所选车间（纯前端过滤，员工数据打开弹窗时已一次拉全）
+const displayEmployeeOptions = computed(() => {
+	if (!modalWorkshop.value) return allEmployeesOptions.value
+	return allEmployeesOptions.value.filter(o => o.workshop === modalWorkshop.value)
+})
 const currentTransferItem = ref(null)
 
 // 转派表单数据
@@ -606,12 +614,11 @@ const getCurrentDate = () => {
 	return `${year}-${month}-${day}`
 }
 
-// 获取员工列表
+// 一次遍历全部车间拉取当日员工（每车间一个查询，记录带 workshop 车间标签），
+// 弹窗内切换车间仅做前端过滤不再请求后端（见 displayEmployeeOptions）
 const loadEmployees = async () => {
-	// 选择员工用的车间：优先模态框中的车间，否则为当前页面车间
-	const selectedWorkshop = modalWorkshop.value || workshop.value
-
-	if (!selectedWorkshop) {
+	// 车间列表来自页面配置，为空说明配置缺失，无法拉取
+	if (!workshopOptions.value || workshopOptions.value.length === 0) {
 		uni.showToast({
 			title: '缺少车间信息',
 			icon: 'none'
@@ -621,11 +628,9 @@ const loadEmployees = async () => {
 
 	try {
 		const currentDate = getCurrentDate()
-		// 只查询所选车间员工，不再扩展喷涂+组装
-		const workshopList = [selectedWorkshop]
 		const allRows = []
 
-		for (const ws of workshopList) {
+		for (const ws of workshopOptions.value) {
 			const filters = [{
 				"controlId": "696075d19223cfe3a0c169dc",
 				"dataType": 30,
@@ -646,11 +651,13 @@ const loadEmployees = async () => {
 				pageSize: 100,
 				pageNum: 1
 			})
-			if (res.data && res.data.length > 0) allRows.push(...res.data)
+			if (res.data && res.data.length > 0) {
+				allRows.push(...res.data.map(item => ({ item, workshop: ws })))
+			}
 		}
 
 		if (allRows.length > 0) {
-			const mappedEmployees = allRows.map(item => {
+			const mappedEmployees = allRows.map(({ item, workshop }) => {
 				const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
 				const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
 
@@ -658,6 +665,7 @@ const loadEmployees = async () => {
 					id: item['6943bd902161a0fc58bad5ab'] || '',
 					name: item['6938db8bda0981f67b352af3'] || '',
 					position: item['6943bf332161a0fc58bad7a4'] || '',
+					workshop,
 					totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
 					unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
 					dispatchWorkDate: item['69524e7b7a59e0522d855df6'] || ''
@@ -669,6 +677,7 @@ const loadEmployees = async () => {
 				label: emp.name,
 				value: emp.id,
 				position: emp.position || '',
+				workshop: emp.workshop || '',
 				totalHours: emp.totalHours || 0,
 				unrecordedHours: emp.unrecordedHours || 0
 			}))
@@ -727,6 +736,8 @@ const handleTransfer = (item) => {
 		loginCode: userStore.loginCode || ''
 	}
 	selectedTransferEmployees.value = []
+	// 重置弹窗车间为页面当前车间，防止残留上次选择导致弹窗列表被过滤为空
+	modalWorkshop.value = workshop.value
 	showTransferModal.value = true
 }
 
@@ -821,8 +832,11 @@ const handleSelectEmployeeConfirm = (selectedIds) => {
 			transferData.value.employee = emp.name
 			transferData.value.employeeId = selectedId
 		} else {
-			transferData.value.employee = ''
-			transferData.value.employeeId = ''
+			// 映射不到员工信息时仅提示，保持原值不清空，避免误删用户已选数据
+			uni.showToast({
+				title: '未找到该员工信息',
+				icon: 'none'
+			})
 		}
 	} else {
 		transferData.value.employee = ''

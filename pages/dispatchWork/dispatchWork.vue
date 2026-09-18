@@ -11,7 +11,7 @@
       @confirm="handleMachineConfirm" />
     
     <!-- 添加员工模态框 -->
-    <AddWorkerRadiobox v-model="selectedEmployeesForAdd" :options="allEmployeesOptions" title="添加员工"
+    <AddWorkerRadiobox v-model="selectedEmployeesForAdd" :options="displayEmployeeOptions" title="添加员工"
       :visible="showAddEmployeeModal" @update:visible="handleAddEmployeeModalClose" @confirm="handleAddEmployeeConfirm"
       :workshopOptions="workshopOptions" :workshop="modalWorkshop" @update:workshop="onModalWorkshopChange"
       :maxSelection="addEmployeeMaxSelection"
@@ -1669,10 +1669,48 @@ const employeeList = ref([])
 const selectedEmployee = ref([])
 const showAddEmployeeModal = ref(false)
 const selectedEmployeesForAdd = ref([])
-const allEmployeesOptions = ref([])
-const allEmployeesMap = ref({})
+// 全量员工缓存（跨车间，元素含 id/name/position/totalHours/unrecordedHours/dispatchWorkDate/isTemp/workshop）
+const allEmployeesCache = ref([])
 // 员工类型筛选：normal-正常员工，temp-临时工
 const employeeTypeFilter = ref('normal')
+// 按员工类型（普/临）过滤后的员工列表（类型过滤已由 computed 完成，不再随请求重载）
+const filteredEmployeesByType = computed(() => {
+  return allEmployeesCache.value.filter(emp => {
+    // 用宽松比较，与原逻辑一致，兼容字符串 '1' 和数字 1
+    const isTemp = emp.isTemp == 1
+    if (employeeTypeFilter.value === 'normal') {
+      return !isTemp  // 普：排除临时工
+    } else if (employeeTypeFilter.value === 'temp') {
+      return isTemp  // 临：只选临时工
+    }
+    return true
+  })
+})
+// 按类型过滤后的选项列表（供组件勾选与兜底查找）
+const allEmployeesOptions = computed(() => {
+  return filteredEmployeesByType.value.map(emp => ({
+    label: emp.name,
+    value: emp.id,
+    position: emp.position || '',
+    totalHours: emp.totalHours || 0,
+    unrecordedHours: emp.unrecordedHours || 0,
+    workshop: emp.workshop,
+    isTemp: emp.isTemp
+  }))
+})
+// 按类型过滤后的员工映射表（key 为员工 id，value 为完整员工对象，跨车间全量）
+const allEmployeesMap = computed(() => {
+  const map = {}
+  filteredEmployeesByType.value.forEach(emp => {
+    map[emp.id] = emp
+  })
+  return map
+})
+// 添加员工弹窗实际展示选项：在类型过滤基础上再按弹窗所选车间过滤（modalWorkshop 为空则展示全部车间）
+const displayEmployeeOptions = computed(() => {
+  if (!modalWorkshop.value) return allEmployeesOptions.value
+  return allEmployeesOptions.value.filter(opt => opt.workshop === modalWorkshop.value)
+})
 
 // ---------- 多对多派工相关 ----------
 const showMultiDispatchModal = ref(false)
@@ -2777,8 +2815,8 @@ const extractNamesFromRelation = (v) => {
 const loadMultiEmployeesForPreDispatch = async (dailyWageSids, orderedProcessNames = []) => {
   if (!Array.isArray(dailyWageSids) || dailyWageSids.length === 0) return
   const plainSids = JSON.parse(JSON.stringify(dailyWageSids))
-  // 加载员工列表（预派工模式跳过车间过滤）
-  await loadEmployees(true)
+  // 加载员工列表（全量跨车间加载，供预派工跨车间匹配）
+  await loadEmployees()
   // dailyWageSids 是当日工资表的 rowid，需要查表获取员工的真实ID
   const wageRes = await callWorkflowListAPIPaged({
     worksheetId: '692112b021066a9f124f5c9f',
@@ -3761,7 +3799,7 @@ const onOneToManyEmployeeRadioChange = (e) => {
 }
 
 const addOneToManyEmployee = async () => {
-  await loadMultiEmployeesForAdd()
+  await loadEmployees()
   selectedEmployeesForAdd.value = []
   showAddEmployeeModal.value = true
 }
@@ -3865,104 +3903,10 @@ const confirmOneToManyDispatch = async () => {
 // 多对多派工添加员工
 const addMultiEmployee = async () => {
   // 加载所有可选的员工列表（用于添加员工模态框）
-  await loadMultiEmployeesForAdd()
+  await loadEmployees()
   
   selectedEmployeesForAdd.value = []
   showAddEmployeeModal.value = true
-}
-
-// 加载多对多派工可选员工列表（用于添加员工模态框）
-const loadMultiEmployeesForAdd = async () => {
-  try {
-    const currentDate = getCurrentDate()
-    const selectedWorkshop = modalWorkshop.value || workshop.value
-
-    // 只查所选车间员工，不再扩展喷涂+组装
-    const workshopList = [selectedWorkshop]
-    const allRows = []
-
-    for (const ws of workshopList) {
-      const filters = [{
-        "controlId": "696075d19223cfe3a0c169dc",
-        "dataType": 30,
-        "spliceType": 1,
-        "filterType": 2,
-        "values": [ws]
-      }, {
-        "controlId": "6943bd902161a0fc58bad5ab",
-        "dataType": 30,
-        "spliceType": 1,
-        "filterType": 8
-      }]
-      // 派工日期在接口层过滤（DateEnum(17)，构造器见 utils/dateFilter.js），只取当日员工记录
-      const dateFilter = buildDateEnumFilter({
-        controlId: '69524e7b7a59e0522d855df6',
-        date: currentDate
-      })
-      if (dateFilter) filters.push(dateFilter)
-
-      const res = await callWorkflowListAPIPaged({
-        worksheetId: 'yggs',
-        filters,
-        pageSize: 100,
-        pageNum: 1
-      })
-      if (res.data && res.data.length > 0) {
-        allRows.push(...res.data)
-      }
-    }
-
-    if (allRows.length > 0) {
-      const mappedEmployees = allRows.map(item => {
-        const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
-        const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
-        const dispatchWorkDate = item['69524e7b7a59e0522d855df6'] || ''
-        // 临时工字段（与 loadEmployees 一致）
-        const isTemp = item['6a744cdb4239d5290f2f6e4a'] == 1
-
-        return {
-          id: item['6943bd902161a0fc58bad5ab'] || '',
-          name: item['6938db8bda0981f67b352af3'] || '',
-          position: item['6943bf332161a0fc58bad7a4'] || '',
-          totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
-          unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
-          dispatchWorkDate: dispatchWorkDate,
-          isTemp
-        }
-      })
-      // 日期已在接口层过滤，此处仅按员工类型（普/临）过滤，与 loadEmployees 保持一致
-      const filteredEmployees = mappedEmployees
-        .filter(emp => {
-          if (employeeTypeFilter.value === 'normal') {
-            return !emp.isTemp  // 普：排除临时工
-          } else if (employeeTypeFilter.value === 'temp') {
-            return emp.isTemp  // 临：只选临时工
-          }
-          return true
-        })
-
-      // 更新allEmployeesOptions和allEmployeesMap，供添加员工模态框使用
-      allEmployeesOptions.value = filteredEmployees.map(emp => ({
-        label: emp.name,
-        value: emp.id,
-        position: emp.position || '',
-        totalHours: emp.totalHours || 0,
-        unrecordedHours: emp.unrecordedHours || 0
-      }))
-
-      allEmployeesMap.value = {}
-      filteredEmployees.forEach(emp => {
-        allEmployeesMap.value[emp.id] = emp
-      })
-    } else {
-      allEmployeesOptions.value = []
-      allEmployeesMap.value = {}
-    }
-  } catch (error) {
-    console.error('加载员工失败:', error)
-    allEmployeesOptions.value = []
-    allEmployeesMap.value = {}
-  }
 }
 
 // 多对多派工：员工 id 统一成字符串；派工列表顺序以 multiEmployeeList 为准（与添加员工弹窗点选顺序一致），接口按该列表自上而下
@@ -4397,16 +4341,15 @@ const onMultiSalaryMethodChange = (e) => {
 
 // 模态框车间选择变化处理
 const onModalWorkshopChange = (value) => {
+  // 切换车间仅前端过滤（displayEmployeeOptions），数据在打开弹窗时已全量加载，无需重新请求
   modalWorkshop.value = value
-  // 车间改变时，重新加载员工列表
-  loadEmployees()
 }
 
 // 切换员工类型（普/临）
 const switchEmployeeType = async (type) => {
   if (employeeTypeFilter.value === type) return
+  // 类型过滤已由 computed（filteredEmployeesByType）完成，无需重新请求
   employeeTypeFilter.value = type
-  await loadEmployees()
 }
 
 // 计薪方式选择变化处理
@@ -4730,13 +4673,12 @@ const handleDispatchConfirm = async () => {
 }
 
 // ---------- 员工相关方法 ----------
-const loadEmployees = async (skipWorkshopFilter = false) => {
+// 全量加载员工：逐车间查询全部车间，结果整体写入 allEmployeesCache；
+// 弹窗内的车间/类型筛选均为前端过滤（见 displayEmployeeOptions / filteredEmployeesByType），不再随筛选重载
+const loadEmployees = async () => {
   try {
     // 每次请求时获取当前日期
     const currentDate = getCurrentDate()
-
-    // 使用模态框中的车间值，如果没有则使用页面车间值
-    const selectedWorkshop = modalWorkshop.value || workshop.value
 
     const baseFilters = [{
       "controlId": "6943bd902161a0fc58bad5ab",
@@ -4745,89 +4687,52 @@ const loadEmployees = async (skipWorkshopFilter = false) => {
       "filterType": 8
     }]
     // 派工日期在接口层过滤（DateEnum(17)，构造器见 utils/dateFilter.js），只取当日员工记录；
-    // 挂到 baseFilters 上，两个查询分支（跨车间/按车间）均自动携带
+    // 挂到 baseFilters 上，各车间查询均自动携带
     const dateFilter = buildDateEnumFilter({
       controlId: '69524e7b7a59e0522d855df6',
       date: currentDate
     })
     if (dateFilter) baseFilters.push(dateFilter)
 
-    // 非预派工模式时，添加车间过滤（仅查所选车间，不再扩展喷涂+组装）
-    const workshopList = [selectedWorkshop]
-
-    const allRows = []
-    for (const ws of workshopList) {
-      if (skipWorkshopFilter && !ws) {
-        const res = await callWorkflowListAPIPaged({
-          worksheetId: 'yggs',
-          filters: baseFilters,
-          pageSize: 100,
-          pageNum: 1
-        })
-        if (res.data && res.data.length > 0) allRows.push(...res.data)
-        break
-      }
+    // 临时工字段
+    const isTempField = '6a744cdb4239d5290f2f6e4a'
+    const mappedEmployees = []
+    // 跨车间全量查询，每个车间一个请求
+    for (const ws of workshopOptions.value) {
       const res = await callWorkflowListAPIPaged({
         worksheetId: 'yggs',
         filters: [{ "controlId": "696075d19223cfe3a0c169dc", "dataType": 30, "spliceType": 1, "filterType": 2, "values": [ws] }, ...baseFilters],
         pageSize: 100,
         pageNum: 1
       })
-      if (res.data && res.data.length > 0) allRows.push(...res.data)
-    }
+      if (res.data && res.data.length > 0) {
+        res.data.forEach(item => {
+          const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
+          const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
+          const dispatchWorkDate = item['69524e7b7a59e0522d855df6'] || ''
+          // 用宽松比较，同时兼容字符串 '1' 和数字 1
+          const isTemp = item[isTempField] == 1
 
-    if (allRows.length > 0) {
-      // 临时工字段
-      const isTempField = '6a744cdb4239d5290f2f6e4a'
-      const mappedEmployees = allRows.map(item => {
-        const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
-        const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
-        const dispatchWorkDate = item['69524e7b7a59e0522d855df6'] || ''
-        // 用宽松比较，同时兼容字符串 '1' 和数字 1
-        const isTemp = item[isTempField] == 1
-
-        return {
-          id: item['6943bd902161a0fc58bad5ab'] || '',
-          name: item['6938db8bda0981f67b352af3'] || '',
-          position: item['6943bf332161a0fc58bad7a4'] || '',
-          totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
-          unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
-          dispatchWorkDate: dispatchWorkDate,
-          isTemp
-        }
-      })
-      // 日期已在接口层过滤，此处仅按员工类型（普/临）过滤
-      const filteredEmployees = mappedEmployees
-        .filter(emp => {
-          // 根据员工类型筛选
-          if (employeeTypeFilter.value === 'normal') {
-            return !emp.isTemp  // 普：排除临时工
-          } else if (employeeTypeFilter.value === 'temp') {
-            return emp.isTemp  // 临：只选临时工
-          }
-          return true
+          mappedEmployees.push({
+            id: item['6943bd902161a0fc58bad5ab'] || '',
+            name: item['6938db8bda0981f67b352af3'] || '',
+            position: item['6943bf332161a0fc58bad7a4'] || '',
+            totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
+            unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
+            dispatchWorkDate: dispatchWorkDate,
+            isTemp,
+            // 所属车间取循环变量，不用记录字段
+            workshop: ws
+          })
         })
-
-      allEmployeesOptions.value = filteredEmployees.map(emp => ({
-        label: emp.name,
-        value: emp.id,
-        position: emp.position || '',
-        totalHours: emp.totalHours || 0,
-        unrecordedHours: emp.unrecordedHours || 0
-      }))
-
-      allEmployeesMap.value = {}
-      filteredEmployees.forEach(emp => {
-        allEmployeesMap.value[emp.id] = emp
-      })
-    } else {
-      allEmployeesOptions.value = []
-      allEmployeesMap.value = {}
+      }
     }
+
+    // 整体写入全量缓存，类型/车间筛选交由 computed 完成
+    allEmployeesCache.value = mappedEmployees
   } catch (error) {
     console.error('加载员工失败:', error)
-    allEmployeesOptions.value = []
-    allEmployeesMap.value = {}
+    allEmployeesCache.value = []
   }
 }
 
@@ -4855,7 +4760,8 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
   
   if (isOneToMany) {
     if (Object.keys(allEmployeesMap.value).length === 0) {
-      await loadMultiEmployeesForAdd()
+      // map 为空则全量重载（重载后 computed 会自动更新）
+      await loadEmployees()
     }
     // 一对多：仅保留一名员工（添加员工弹窗已 maxSelection=1）
     const rawId = selectedIds[0]
@@ -4871,13 +4777,14 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
           unrecordedHours: fullEmployee.unrecordedHours || 0
         }
       } else {
-        const option = allEmployeesOptions.value.find(opt => String(opt.value) === id)
-        if (option) {
+        // allEmployeesOptions 已按弹窗车间过滤，兜底改为从全量缓存查找
+        const employee = allEmployeesCache.value.find(emp => String(emp.id) === id)
+        if (employee) {
           empRow = {
-            id: option.value,
-            name: option.label,
-            totalHours: option.totalHours || 0,
-            unrecordedHours: option.unrecordedHours || 0
+            id: employee.id,
+            name: employee.name,
+            totalHours: employee.totalHours || 0,
+            unrecordedHours: employee.unrecordedHours || 0
           }
         }
       }
@@ -4893,7 +4800,8 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
   } else if (isMultiDispatch) {
     // 多对多派工模态框
     if (Object.keys(allEmployeesMap.value).length === 0) {
-      await loadMultiEmployeesForAdd()
+      // map 为空则全量重载（重载后 computed 会自动更新）
+      await loadEmployees()
     }
     
     let addedCount = 0
@@ -4912,14 +4820,15 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
           })
           addedCount++
         } else {
-          const option = allEmployeesOptions.value.find(opt => opt.value === id)
-          if (option) {
+          // allEmployeesOptions 已按弹窗车间过滤，兜底改为从全量缓存查找
+          const employee = allEmployeesCache.value.find(emp => String(emp.id) === String(id))
+          if (employee) {
             multiEmployeeList.value.push({
-              id: option.value,
-              name: option.label,
-              position: option.position || '',
-              totalHours: option.totalHours || 0,
-              unrecordedHours: option.unrecordedHours || 0
+              id: employee.id,
+              name: employee.name,
+              position: employee.position || '',
+              totalHours: employee.totalHours || 0,
+              unrecordedHours: employee.unrecordedHours || 0
             })
             addedCount++
           }
@@ -4947,6 +4856,7 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
   } else {
     // 普通派工模态框
     if (Object.keys(allEmployeesMap.value).length === 0) {
+      // map 为空则全量重载（重载后 computed 会自动更新）
       await loadEmployees()
     }
     
@@ -4966,12 +4876,13 @@ const handleAddEmployeeConfirm = async (selectedIds) => {
           })
           addedCount++
         } else {
-          const option = allEmployeesOptions.value.find(opt => opt.value === id)
-          if (option) {
+          // allEmployeesOptions 已按弹窗车间过滤，兜底改为从全量缓存查找
+          const employee = allEmployeesCache.value.find(emp => String(emp.id) === String(id))
+          if (employee) {
             employeeList.value.push({
-              id: option.value,
-              name: option.label,
-              position: option.position || '',
+              id: employee.id,
+              name: employee.name,
+              position: employee.position || '',
               totalHours: 0,
               unrecordedHours: 0
             })

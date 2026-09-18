@@ -217,9 +217,18 @@ const onCheckboxChange = (e) => {
   const newValues = (e.detail.value || []).map(normalizeId)
   const prevOrder = internalModel.value.map(normalizeId)
   const prevSet = new Set(prevOrder)
-  const kept = prevOrder.filter((id) => newValues.includes(id))
+  // 当前渲染列表（含姓名筛选）内的员工 id 集合
+  const renderedIds = new Set(filteredEmployeeOptions.value.map((o) => normalizeId(o.value)))
+
+  // 历史选中里不在当前渲染列表的部分（如其它车间的员工）始终保留：
+  // 小程序端切换车间/筛选导致列表重渲染时，checkbox-group 的 detail.value
+  // 只包含当前渲染出的勾选项，直接覆盖会误清空跨车间选中
+  const keptHidden = prevOrder.filter((id) => !renderedIds.has(id))
+  // 当前列表范围内：保留仍勾选的，新勾选的按事件顺序追加
+  const keptVisible = prevOrder.filter((id) => renderedIds.has(id) && newValues.includes(id))
   const newlyAdded = newValues.filter((id) => !prevSet.has(id))
-  let next = [...kept, ...newlyAdded]
+
+  let next = [...keptHidden, ...keptVisible, ...newlyAdded]
 
   if (props.maxSelection === 1 && next.length > 1) {
     next = [next[next.length - 1]]

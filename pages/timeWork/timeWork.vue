@@ -169,7 +169,7 @@
 		<!-- 添加员工模态框（与派工页面一致；可多选） -->
 		<AddWorkerRadiobox
 			v-model="selectedEmployeesForAdd"
-			:options="allEmployeesOptions"
+			:options="displayEmployeeOptions"
 			title="添加员工"
 			:visible="showAddEmployeeModal"
 			@update:visible="handleAddEmployeeModalClose"
@@ -261,17 +261,16 @@ const getCurrentDate = () => {
 	return `${y}-${m}-${d}`
 }
 
-// 加载可选员工（按车间 + 当前日期，与派工页面一致）
+// 加载可选员工（当天全量 + 前端车间筛选，避免跨车间已选员工丢失）：
+// 一次遍历全部车间拉取当日员工（每车间一个查询，记录带 workshop 车间标签），
+// 弹窗内切换车间仅做前端过滤不再请求后端；已勾选的其它车间员工始终保留在内部选中，
+// 切换回对应车间即恢复勾选，确认时全量匹配不会丢人
 const loadEmployeesForAdd = async () => {
 	try {
 		const currentDate = getCurrentDate()
-		const workshop = modalWorkshop.value || workshopForFilter(timeWorkForm.value.workshop)
-		// 只查所选车间员工，不再扩展喷涂+组装
-		const workshopList = [workshop]
 		const allRows = []
 
-		for (const ws of workshopList) {
-			if (!ws) continue
+		for (const ws of workshopOptions.value) {
 			const filters = [{
 				controlId: '696075d19223cfe3a0c169dc',
 				dataType: 30,
@@ -292,11 +291,13 @@ const loadEmployeesForAdd = async () => {
 				pageSize: 100,
 				pageNum: 1
 			})
-			if (res.data && res.data.length > 0) allRows.push(...res.data)
+			if (res.data && res.data.length > 0) {
+				allRows.push(...res.data.map(item => ({ item, workshop: ws })))
+			}
 		}
 
 		if (allRows.length > 0) {
-			const mapped = allRows.map(item => {
+			const mapped = allRows.map(({ item, workshop }) => {
 				const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
 				const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
 				const dispatchWorkDate = item['69524e7b7a59e0522d855df6'] || ''
@@ -304,6 +305,7 @@ const loadEmployeesForAdd = async () => {
 					id: item['6943bd902161a0fc58bad5ab'] || '',
 					name: item['6938db8bda0981f67b352af3'] || '',
 					position: item['6943bf332161a0fc58bad7a4'] || '',
+					workshop,
 					totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
 					unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
 					dispatchWorkDate
@@ -313,6 +315,7 @@ const loadEmployeesForAdd = async () => {
 				label: emp.name,
 				value: emp.id,
 				position: emp.position || '',
+				workshop: emp.workshop || '',
 				totalHours: emp.totalHours || 0,
 				unrecordedHours: emp.unrecordedHours || 0
 			}))
@@ -328,6 +331,14 @@ const loadEmployeesForAdd = async () => {
 		allEmployeesMap.value = {}
 	}
 }
+
+// 添加员工弹窗展示列表：从当天全量员工中按弹窗当前车间前端过滤；
+// 已勾选的其它车间员工不在列表中（不可见），但始终保留在内部选中，切换回对应车间即恢复勾选
+const displayEmployeeOptions = computed(() => {
+	const ws = modalWorkshop.value || workshopForFilter(timeWorkForm.value.workshop)
+	if (!ws) return []
+	return allEmployeesOptions.value.filter(o => o.workshop === ws)
+})
 
 // 加载记时派工记录（数据表 jspg），按车间筛选，过滤掉已完成
 const loadTimeWorkBills = async () => {
@@ -407,9 +418,10 @@ const handleAddEmployeeModalClose = (value) => {
 	showAddEmployeeModal.value = value
 }
 
+// 弹窗内切换车间仅做前端过滤（displayEmployeeOptions 按 modalWorkshop 过滤），
+// 员工数据在打开弹窗时已一次拉全，此处不再重复请求
 const onModalWorkshopChange = (value) => {
 	modalWorkshop.value = workshopForFilter(value)
-	loadEmployeesForAdd()
 }
 
 const handleAddEmployeeConfirm = async (selectedIds) => {

@@ -130,16 +130,17 @@
 		</view>
 		
 		<!-- 选择转派员工模态框 -->
-		<AddWorkerRadiobox 
-			v-model="selectedTransferEmployees" 
-			:options="allEmployeesOptions" 
-			title="选择转派员工" 
-			:visible="showSelectEmployeeModal" 
-			@update:visible="handleSelectEmployeeModalClose" 
+		<AddWorkerRadiobox
+			v-model="selectedTransferEmployees"
+			:options="modalEmployeeOptions"
+			title="选择转派员工"
+			:visible="showSelectEmployeeModal"
+			@update:visible="handleSelectEmployeeModalClose"
 			@confirm="handleSelectEmployeeConfirm"
 			:workshopOptions="workshopTabOptions"
 			:workshop="modalWorkshop"
 			@update:workshop="onModalWorkshopChange"
+			:max-selection="1"
 		/>
 
 		<!-- 更改员工弹窗（同款预派工员工选择框，右侧滑出） -->
@@ -372,8 +373,14 @@ const modalWorkshop = ref('')
 
 const onModalWorkshopChange = (value) => {
 	modalWorkshop.value = value || ''
-	loadEmployees()
+	// 切换车间仅前端过滤（员工数据已全量加载），不再重新请求
 }
+
+// 转派弹窗员工选项：按弹窗所选车间过滤；未选车间时回退页面当前车间（与原加载兜底语义一致）
+const modalEmployeeOptions = computed(() => {
+	const target = modalWorkshop.value || workshop.value
+	return allEmployeesOptions.value.filter(emp => workshopMatchesRow(emp.workshop, target))
+})
 
 const selectWorkshop = (name) => {
 	if (workshop.value === name) return
@@ -672,12 +679,16 @@ const isTempEmployeeName = (name) => {
 	return /^临时工\d+$/.test(String(name || '').trim())
 }
 
-// 筛选后的员工列表（前端根据员工类型过滤显示）
+// 筛选后的员工列表（前端根据员工类型 + 所选车间过滤显示；员工数据已全量加载，切换车间不重载）
 const changeWorkerFiltered = computed(() => {
-	if (changeWorkerTypeFilter.value === 'temp') {
-		return allEmployeesOptions.value.filter(emp => isTempEmployeeName(emp.label))
-	}
-	return allEmployeesOptions.value.filter(emp => !isTempEmployeeName(emp.label))
+	return allEmployeesOptions.value.filter(emp => {
+		// 先按车间过滤（兼容"拉伸"vs"拉伸车间"文案差异）
+		if (!workshopMatchesRow(emp.workshop, changeWorkerWorkshop.value)) return false
+		if (changeWorkerTypeFilter.value === 'temp') {
+			return isTempEmployeeName(emp.label)
+		}
+		return !isTempEmployeeName(emp.label)
+	})
 })
 
 // 打开更改员工弹窗
@@ -738,17 +749,11 @@ const toggleChangeWorkshopDropdown = () => {
 	showChangeWorkshopDropdown.value = !showChangeWorkshopDropdown.value
 }
 
-// 选择车间后重新加载员工
-const changeWorkerSelectWorkshop = async (ws) => {
+// 选择车间后仅前端过滤（员工数据已全量加载），不再重新请求
+const changeWorkerSelectWorkshop = (ws) => {
 	changeWorkerWorkshop.value = ws
 	modalWorkshop.value = ws
 	showChangeWorkshopDropdown.value = false
-	changeWorkerLoading.value = true
-	try {
-		await loadEmployees()
-	} finally {
-		changeWorkerLoading.value = false
-	}
 }
 
 // 勾选/取消员工（选中项存员工工时数据 rowid）
@@ -923,10 +928,11 @@ const getCurrentDate = () => {
 	return `${year}-${month}-${day}`
 }
 
-// 获取员工列表
+// 获取员工列表：一次遍历全部车间拉取当日员工（每车间一个查询，记录带 workshop 车间标签），
+// 弹窗内切换车间仅做前端过滤不再请求后端
 const loadEmployees = async () => {
-	const selectedWorkshop = modalWorkshop.value || workshop.value
-	if (!selectedWorkshop) {
+	// 全量加载依赖车间列表，车间为空时无数据可拉
+	if (!workshopTabOptions.value || workshopTabOptions.value.length === 0) {
 		uni.showToast({
 			title: '缺少车间信息',
 			icon: 'none'
@@ -936,8 +942,8 @@ const loadEmployees = async () => {
 
 	try {
 		const currentDate = getCurrentDate()
-		// 只查询所选车间员工
-		const workshopList = [selectedWorkshop]
+		// 逐车间查询并保留车间标签，供前端按车间过滤
+		const workshopList = workshopTabOptions.value
 		const allRows = []
 
 		for (const ws of workshopList) {
@@ -961,11 +967,13 @@ const loadEmployees = async () => {
 				pageSize: 100,
 				pageNum: 1
 			})
-			if (res.data && res.data.length > 0) allRows.push(...res.data)
+			if (res.data && res.data.length > 0) {
+				allRows.push(...res.data.map(item => ({ item, workshop: ws })))
+			}
 		}
 
 		if (allRows.length > 0) {
-			const mappedEmployees = allRows.map(item => {
+			const mappedEmployees = allRows.map(({ item, workshop }) => {
 				const totalHoursStr = item['693bcaa5f15635c61ac3507a'] || '0'
 				const unrecordedHoursStr = item['693bcaa5f15635c61ac3507c'] || '0'
 
@@ -974,6 +982,7 @@ const loadEmployees = async () => {
 					id: item['6943bd902161a0fc58bad5ab'] || '',
 					name: item['6938db8bda0981f67b352af3'] || '',
 					position: item['6943bf332161a0fc58bad7a4'] || '',
+					workshop,
 					totalHours: totalHoursStr === '' ? 0 : parseFloat(totalHoursStr) || 0,
 					unrecordedHours: unrecordedHoursStr === '' ? 0 : parseFloat(unrecordedHoursStr) || 0,
 					dispatchWorkDate: item['69524e7b7a59e0522d855df6'] || ''
@@ -986,6 +995,7 @@ const loadEmployees = async () => {
 				label: emp.name,
 				value: emp.id,
 				position: emp.position || '',
+				workshop: emp.workshop || '',
 				totalHours: emp.totalHours || 0,
 				unrecordedHours: emp.unrecordedHours || 0
 			}))
@@ -1116,7 +1126,10 @@ const closeTransferModal = () => {
 
 // 打开选择转派员工模态框
 const openSelectEmployeeModal = async () => {
-	await loadEmployees()
+	// 员工数据已全量缓存，仅首次打开时加载，避免每次打开多次请求
+	if (allEmployeesOptions.value.length === 0) {
+		await loadEmployees()
+	}
 	selectedTransferEmployees.value = []
 	showSelectEmployeeModal.value = true
 }
@@ -1137,8 +1150,8 @@ const handleSelectEmployeeConfirm = (selectedIds) => {
 			transferData.value.employee = emp.name
 			transferData.value.employeeId = selectedId
 		} else {
-			transferData.value.employee = ''
-			transferData.value.employeeId = ''
+			// 映射不到时保留原值不清空，仅提示（仍关闭弹窗）
+			uni.showToast({ title: '未找到该员工信息', icon: 'none' })
 		}
 	} else {
 		transferData.value.employee = ''
