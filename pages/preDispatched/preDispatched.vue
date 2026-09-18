@@ -2,6 +2,13 @@
 	<view class="pre-dispatched-container" :style="{ paddingTop: statusBarHeight + 'px' }">
 		<view class="header">
 			<image src="/static/left-arrow.svg" @click="goBack"></image>
+			<!-- 派工类型筛选（正常/返工）：作用于预派工、工序排产明细、添加产品（排产计划）三个数据源的接口筛选 -->
+			<picker class="header-type-picker" mode="selector" :range="DISPATCH_TYPE_OPTIONS" :value="dispatchTypeIndex" @change="onDispatchTypeChange">
+				<view class="header-type-display">
+					<text class="header-type-text">{{ dispatchTypeFilter }}</text>
+					<text class="header-type-icon">▼</text>
+				</view>
+			</picker>
 			<picker class="header-date-picker" mode="date" :value="filterDate" :end="tomorrowDate" @change="onDateChange">
 				<view class="header-date-display">
 					<text class="header-date-text">{{ filterDate }}</text>
@@ -896,7 +903,9 @@ const PRE_DISPATCH_FIELD_MAP = {
 	polishSpec: '6a3deb356d70ffabc6702d02',
 	materialSizeSpec: '6a3debe76d70ffabc6702dbb',
 	productDeliveryDate: '6a1e7d2c27514927ff33e56b',
-	status: '6a1e49c427514927ff33ccf5'
+	status: '6a1e49c427514927ff33ccf5',
+	// 派工类型：正常派工/返工派工（仅随数据获取，不参与渲染）
+	dispatchType: '6aacce023c1a1cdddc57324d'
 }
 
 const DAILY_WAGE_WORKSHEET_ID = '692112b021066a9f124f5c9f'
@@ -968,6 +977,14 @@ const filterInnerPaint = ref('')
 const filterPolish = ref('')
 const filterGuokou = ref('')
 const filterDate = ref(getTomorrowDate())
+// 派工类型筛选（正常/返工）：作用于预派工、工序排产明细、添加产品（排产计划）三个数据源的接口筛选
+const DISPATCH_TYPE_OPTIONS = ['正常', '返工']
+const dispatchTypeFilter = ref('正常')
+// 预派工/工序排产明细的选项值
+const dispatchTypeFilterValue = computed(() => (dispatchTypeFilter.value === '返工' ? '返工派工' : '正常派工'))
+// 排产计划的选项值
+const scheduleTypeFilterValue = computed(() => (dispatchTypeFilter.value === '返工' ? '返工排产' : '正常排产'))
+const dispatchTypeIndex = computed(() => DISPATCH_TYPE_OPTIONS.indexOf(dispatchTypeFilter.value))
 // 顶部派工日期与派工设置日期选择器：最大可选明天、过去日期不限（即只能选过去日期、今天或明天；
 // picker 的 start/end 在部分端仅提示不真正拦截，因此变更回调里再做硬性校验）
 const tomorrowDate = ref(getTomorrowDate())
@@ -1199,6 +1216,8 @@ const PROCESS_DETAIL_FIELD_MAP = {
 	// 前道流转/流转剩余字段：派工设置弹窗展示与派工默认值以流转剩余为准
 	preFlow: '6a961d33a7343a33805f4ae3',
 	flowRemain: '6a9bc8de3c1a1cdddc4ae539',
+	// 派工类型：正常派工/返工派工（仅随数据获取，不参与渲染）
+	dispatchType: '6954ad997a59e0522d85df35',
 }
 
 const EMPLOYEE_WORKSHEET_ID = 'yggs'
@@ -1864,7 +1883,8 @@ const mapPreDispatchRow = (item) => ({
 	polishSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.polishSpec]),
 	materialSizeSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.materialSizeSpec]),
 	productDeliveryDate: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.productDeliveryDate]) || '',
-	status: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.status]) || ''
+	status: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.status]) || '',
+	dispatchType: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.dispatchType]) || ''
 })
 
 const DICTIONARY_WORKSHEET_ID = 'shujuzidian'
@@ -2072,6 +2092,15 @@ const handleReset = () => {
 	handleSearch()
 }
 
+// 切换正常/返工：三个数据源（预派工、工序排产明细、添加产品）的接口筛选联动，整页刷新
+const onDispatchTypeChange = (e) => {
+	const newType = DISPATCH_TYPE_OPTIONS[e.detail.value]
+	if (!newType || newType === dispatchTypeFilter.value) return
+	dispatchTypeFilter.value = newType
+	// 切换类型视同整页刷新：清空工序缓存并重拉产品列表，选中产品的工序由 refreshProductsAndProcesses 重载
+	refreshProductsAndProcesses(false)
+}
+
 const onDateChange = async (e) => {
 	const newDate = e.detail.value
 	// 硬性限制：顶部派工日期不允许晚于明天（过去日期/今天/明天可选），拦截超限选择并保持原日期不变
@@ -2130,7 +2159,8 @@ const loadAddProductList = async () => {
 				dataType: 30,
 				spliceType: 1,
 				filterType: 2,
-				values: ['正常排产']
+				// 排产类型与顶部正常/返工下拉联动
+				values: [scheduleTypeFilterValue.value]
 			},
 			{
 				controlId: '655b875ffc44a9469a3aa225',
@@ -2139,12 +2169,12 @@ const loadAddProductList = async () => {
 				filterType: 2,
 				values: ['已排产', '部分排产']
 			},
-			{
-				controlId: '69db0017665ab27f3913c455',
-				dataType: 30,
-				spliceType: 1,
-				filterType: 6,
-				values: ['准时交货']
+		{
+			controlId: '69db0017665ab27f3913c455',
+			dataType: 30,
+			spliceType: 1,
+			filterType: 6,
+			values: ['准时交货']
 			},
 			{
 				controlId: '66974cda2503723eec1af600',
@@ -2162,7 +2192,9 @@ const loadAddProductList = async () => {
 				worksheetId: 'paichanjihua',
 				filters,
 				pageSize,
-				pageNum
+				pageNum,
+				// 生产类型（正常派工/返工派工）：随顶部单选传递，后端按此口径返回
+				productionType: dispatchTypeFilterValue.value
 			})
 			const rows = Array.isArray(res?.data) ? res.data : []
 			if (rows.length === 0) break
@@ -2184,6 +2216,8 @@ const loadAddProductList = async () => {
 			rowid: item.rowid || '',
 			orderCode: item['655e1cbbbd2094b316347f92'] || '',
 			customerName: item['69a8ed3c3b5e707f84d33f8b'] || '',
+			// 排产类型随数据获取，不参与渲染
+			scheduleType: formatFieldValue(item['694a3954687045435008a7c3']) || '',
 			name: item['6937d255ff2b019b3cb34be3'] || '',
 			models: item['6937d255ff2b019b3cb34be4'] || '',
 			orderCount: item['69e33354665ab27f3916f758'] || '',
@@ -2370,7 +2404,8 @@ const loadOrderList = async (append = false) => {
 					dataType: 30,
 					spliceType: 1,
 					filterType: 2,
-					values: ['正常排产']
+					// 排产类型与顶部正常/返工下拉联动
+					values: [scheduleTypeFilterValue.value]
 				},
 				{
 					controlId: '655b875ffc44a9469a3aa225',
@@ -2394,7 +2429,9 @@ const loadOrderList = async (append = false) => {
 				}
 			],
 			pageSize: 100,
-			pageNum
+			pageNum,
+			// 生产类型（正常派工/返工派工）：随顶部单选传递，后端按此口径返回
+			productionType: dispatchTypeFilterValue.value
 		})
 		uni.hideLoading()
 
@@ -2517,36 +2554,39 @@ const loadProductList = async (append = false) => {
 					values: [loginWorkshop.value || '拉伸车间']
 				},
 				{
-					controlId: '694a3954687045435008a7c3',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: ['正常排产']
-				},
-				{
-					controlId: '655b875ffc44a9469a3aa225',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: ['已排产', '部分排产']
-				},
-				{
-					controlId: '69db0017665ab27f3913c455',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 6,
-					values: ['准时交货']
-				},
-				{
-					controlId: '66974cda2503723eec1af600',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 8
-				}
-			],
-			pageSize: 100,
-			pageNum
-		})
+				controlId: '694a3954687045435008a7c3',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				// 排产类型与顶部正常/返工下拉联动
+				values: [scheduleTypeFilterValue.value]
+			},
+			{
+				controlId: '655b875ffc44a9469a3aa225',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: ['已排产', '部分排产']
+			},
+			{
+				controlId: '69db0017665ab27f3913c455',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 6,
+				values: ['准时交货']
+			},
+			{
+				controlId: '66974cda2503723eec1af600',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 8
+			}
+		],
+		pageSize: 100,
+		pageNum,
+		// 生产类型（正常派工/返工派工）：随顶部单选传递，后端按此口径返回
+		productionType: dispatchTypeFilterValue.value
+	})
 
 		const rows = res?.data || []
 		// 前端过滤：正常排产时，未完成工序数量 > 0
@@ -2563,6 +2603,8 @@ const loadProductList = async (append = false) => {
 				rowid: item.rowid || '',
 				orderCode: item['655e1cbbbd2094b316347f92'] || '',
 				customerName: item['69a8ed3c3b5e707f84d33f8b'] || '',
+				// 排产类型随数据获取，不参与渲染
+				scheduleType: formatFieldValue(item['694a3954687045435008a7c3']) || '',
 				name: item['6937d255ff2b019b3cb34be3'] || '',
 				models: item['6937d255ff2b019b3cb34be4'] || '',
 				orderCount: item['69e33354665ab27f3916f758'] || '',
@@ -2689,7 +2731,9 @@ const confirmSelectedProducts = async () => {
 	try {
 		await http.post(PRE_DISPATCH_PRODUCT_ADD_URL, {
 			dispatchDate: filterDate.value,  // 筛选日期
-			rowid: rowid  // 选中产品的 rowid
+			rowid: rowid,  // 选中产品的 rowid
+			// 生产类型（正常派工/返工派工）：随顶部单选传递
+			productionType: dispatchTypeFilterValue.value
 		})
 
 		// 添加成功后轮询等待新产品数据写入完成再刷新渲染（墙钟最多 5 秒，命中即停）
@@ -2740,7 +2784,9 @@ const addProductsByRowids = async (rowids, productionCodes = []) => {
 		// 调用添加接口，传递 rowid 数组
 		await http.post(PRE_DISPATCH_PRODUCT_ADD_URL, {
 			dispatchDate: filterDate.value,
-			rowid: rowids  // rowid 数组
+			rowid: rowids,  // rowid 数组
+			// 生产类型（正常派工/返工派工）：随顶部单选传递
+			productionType: dispatchTypeFilterValue.value
 		})
 
 		// 添加成功后轮询等待新产品数据写入完成再刷新渲染（墙钟最多 5 秒，命中即停）
@@ -2824,7 +2870,9 @@ const addProductsByCodes = async (products) => {
 		// 调用添加接口
 		await http.post(PRE_DISPATCH_PRODUCT_ADD_BY_CODES_URL || PRE_DISPATCH_PRODUCT_ADD_URL, {
 			dispatchDate: filterDate.value,
-			productionCodes: newCodes
+			productionCodes: newCodes,
+			// 生产类型（正常派工/返工派工）：随顶部单选传递
+			productionType: dispatchTypeFilterValue.value
 		})
 
 		// 添加成功后轮询等待新产品数据写入完成再刷新渲染（墙钟最多 5 秒，命中即停）
@@ -3371,6 +3419,14 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 				values: [loginWorkshop.value]
 			})
 		}
+		// 派工类型筛选（正常派工/返工派工），与顶部正常/返工下拉联动
+		filters.push({
+			controlId: PRE_DISPATCH_FIELD_MAP.dispatchType,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: [dispatchTypeFilterValue.value]
+		})
 		if (filterOrderCode.value.trim()) {
 			filters.push({
 				controlId: PRE_DISPATCH_FIELD_MAP.pureOrderNo,
@@ -3672,6 +3728,15 @@ const loadAssociatedProcessDetails = async (product, statusFilter = '未派工')
 			date: filterDate.value
 		})
 		if (dateFilter) filters.push(dateFilter)
+		// 派工类型与顶部正常/返工下拉联动：关联的员工信息只取当前类型下的预派工行，
+		// 避免正常/返工的预派工互相串员工
+		filters.push({
+			controlId: PRE_DISPATCH_FIELD_MAP.dispatchType,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: [dispatchTypeFilterValue.value]
+		})
 
 		const res = await callWorkflowListAll({
 			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
@@ -3961,6 +4026,14 @@ const loadProductProcesses = async (product) => {
 				values: [loginWorkshop.value]
 			})
 		}
+		// 派工类型筛选（正常派工/返工派工），与顶部正常/返工下拉联动
+		filters.push({
+			controlId: PROCESS_DETAIL_FIELD_MAP.dispatchType,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: [dispatchTypeFilterValue.value]
+		})
 		const res = await callWorkflowListAll({
 			worksheetId: PROCESS_DETAIL_WORKSHEET_ID,
 			filters,
@@ -4004,7 +4077,8 @@ const loadProductProcesses = async (product) => {
 				craftPosition: associatedInfo.craftPosition,
 				positionProcess: associatedInfo.positionProcess,
 				isNewProcess,
-				dispatchCount: associatedInfo.dispatchCount
+				dispatchCount: associatedInfo.dispatchCount,
+				dispatchType: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.dispatchType]) || ''
 			}
 		}).sort((a, b) => (parseFloat(a.sequence) || 0) - (parseFloat(b.sequence) || 0))
 		// 先清除该产品已有的工序数据，避免重复点击或网络抖动导致同一工序重复渲染
@@ -5730,6 +5804,32 @@ onShow(refreshPageOnShow)
 			height: px2vw(40px);
 			width: px2vw(40px);
 			flex-shrink: 0;
+		}
+
+		.header-type-picker {
+			margin-right: px2vw(16px);
+			flex-shrink: 0;
+
+			.header-type-display {
+				display: flex;
+				align-items: center;
+				gap: px2vw(8px);
+				padding: px2vw(8px) px2vw(16px);
+				background-color: rgba(255, 255, 255, 0.2);
+				border: 1px solid rgba(255, 255, 255, 0.3);
+				border-radius: px2vw(8px);
+			}
+
+			.header-type-text {
+				font-size: px2vw(26px);
+				color: #fff;
+				font-weight: 500;
+			}
+
+			.header-type-icon {
+				font-size: px2vw(20px);
+				color: #fff;
+			}
 		}
 
 		.header-date-picker {
