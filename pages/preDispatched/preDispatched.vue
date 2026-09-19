@@ -4776,13 +4776,12 @@ const openProcessActionModal = (product) => {
 	loadProcessActionList()
 }
 
-// 判断当前产品下是否选中了工序：勾选一道或多道均可使用工艺调整
+// 判断当前产品是否可使用工艺调整：
+// 工序列表为空时无需勾选（用于给无工序产品新增首道工序）；工序列表不为空时必须至少勾选一道工序
 const isProcessActionEnabled = (productRowid) => {
-	const currentProcessIds = processList.value
-		.filter(p => p.productRowid === productRowid)
-		.map(p => p.rowid)
-	const selectedCount = selectedProcessIds.value.filter(rowid => currentProcessIds.includes(rowid)).length
-	return selectedCount > 0
+	const productProcesses = processList.value.filter(p => p.productRowid === productRowid)
+	if (productProcesses.length === 0) return true
+	return productProcesses.some(p => selectedProcessIds.value.includes(p.rowid))
 }
 
 // 判断当前产品下是否至少选中了一道工序
@@ -4801,15 +4800,21 @@ const isDispatchConfirmEnabled = (productRowid) => {
 }
 
 const openProcessActionModalByRowid = (productRowid) => {
+	const productProcesses = processList.value.filter(p => p.productRowid === productRowid)
 	// 当前产品下勾选的工序（可多选）
-	const checkedProcesses = processList.value.filter(p => p.productRowid === productRowid && selectedProcessIds.value.includes(p.rowid))
-	if (checkedProcesses.length === 0) {
-		uni.showToast({ title: '请先勾选工序', icon: 'none' })
-		return
+	const checkedProcesses = productProcesses.filter(p => selectedProcessIds.value.includes(p.rowid))
+	if (productProcesses.length === 0) {
+		// 工序列表为空：无需勾选工序，生产顺序固定为 1
+		processActionSequence.value = '1.00'
+	} else {
+		if (checkedProcesses.length === 0) {
+			uni.showToast({ title: '请先勾选工序', icon: 'none' })
+			return
+		}
+		// 生产顺序默认取勾选工序中最大顺序 + 0.01
+		const maxSeq = Math.max(...checkedProcesses.map(p => parseFloat(p.sequence) || 0))
+		processActionSequence.value = (maxSeq + 0.01).toFixed(2)
 	}
-	// 生产顺序默认取勾选工序中最大顺序 + 0.01
-	const maxSeq = Math.max(...checkedProcesses.map(p => parseFloat(p.sequence) || 0))
-	processActionSequence.value = (maxSeq + 0.01).toFixed(2)
 	const product = productList.value.find((p) => p.uniqueKey === productRowid)
 	openProcessActionModal(product || { uniqueKey: productRowid, productName: '' })
 }
@@ -5030,15 +5035,20 @@ const confirmProcessAction = async () => {
 			return
 		}
 		const productRowid = product?.uniqueKey || ''
-		// 多选时以勾选工序中生产顺序最大的那道作为操作目标（与生产顺序默认值口径一致）
-		const checkedProcesses = processList.value.filter(p => p.productRowid === productRowid && selectedProcessIds.value.includes(p.rowid))
-		if (checkedProcesses.length === 0) {
+		const productProcesses = processList.value.filter(p => p.productRowid === productRowid)
+		const checkedProcesses = productProcesses.filter(p => selectedProcessIds.value.includes(p.rowid))
+		// 删除、替换必须有勾选工序；添加模式下产品本身没有工序时无需勾选（此时为新增首道工序）
+		const allowWithoutChecked = mode === '添加' && productProcesses.length === 0
+		if (checkedProcesses.length === 0 && !allowWithoutChecked) {
 			uni.showToast({ title: '请先勾选工序', icon: 'none' })
 			return
 		}
-		const targetProcess = checkedProcesses.reduce((max, p) =>
-			(parseFloat(p.sequence) || 0) > (parseFloat(max.sequence) || 0) ? p : max
-		)
+		// 多选时以勾选工序中生产顺序最大的那道作为操作目标（与生产顺序默认值口径一致）；无勾选工序时无操作目标
+		const targetProcess = checkedProcesses.length > 0
+			? checkedProcesses.reduce((max, p) =>
+				(parseFloat(p.sequence) || 0) > (parseFloat(max.sequence) || 0) ? p : max
+			)
+			: null
 		// 生产顺序非空校验
 		if (!String(processActionSequence.value).trim()) {
 			uni.showToast({ title: '请输入生产顺序', icon: 'none' })
@@ -5049,7 +5059,10 @@ const confirmProcessAction = async () => {
 			processRowid: selected.rowid || '',
 			sequence: parseFloat(processActionSequence.value),
 			modifyMode: mode,
-			selectedProcessId: targetProcess.rowid,
+			// 无工序产品新增首道工序时没有目标工序，此时传空字符串（后端要求该字段必须存在）
+			selectedProcessId: targetProcess ? targetProcess.rowid : '',
+			// 生产类型：随顶部单选传递（正常 / 返工）
+			productionType: dispatchTypeFilter.value,
 			productionCode: productionCode,
 			workshop: loginWorkshop.value || ''
 		}
