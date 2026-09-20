@@ -561,7 +561,9 @@ const confirmAction = async () => {
     modifyMode: mode,
     // 多选时以勾选工序中生产顺序最大者为操作目标（与预派工页面口径一致）
     selectedProcessId: maxSequenceSelectedProcess.value?.rowid || '',
-    productionCode: productionCode.value || ''
+    productionCode: productionCode.value || '',
+    // 生产类型：产品详情页的工艺调整固定为正常
+    productionType: '正常'
   }
 
   console.log('【操作工序】请求参数:', JSON.stringify(params))
