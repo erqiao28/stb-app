@@ -940,7 +940,7 @@ const DISPATCH_REPORT_FIELD_MAP = {
 	wage: '69a7e3bc3b5e707f84d2f528'
 }
 
-// 正式派工数据表二：多对多报工数据
+// 正式派工数据表二：多对多报工数据（员工级明细，含本人工时/工资）
 const MULTI_REPORT_WORKSHEET_ID = '697b121d3b5e707f84cd93cc'
 const MULTI_REPORT_FIELD_MAP = {
 	orderNo: '6a800fb1533d90c2eae074cc',
@@ -948,7 +948,10 @@ const MULTI_REPORT_FIELD_MAP = {
 	dispatchCount: '6aa4f67a3c1a1cdddc53870f',
 	processName: '6aa50e283c1a1cdddc539142',
 	worktime: '69846c2d3b5e707f84cf7386',
-	wage: '6aa4f69e3c1a1cdddc5387ca'
+	wage: '6aa4f69e3c1a1cdddc5387ca',
+	// 关联的「多对多派工与报工」单据（697747cc3b5e707f84cca1d5）：多对一，多条报工数据对应一张派工单据。
+	// 删除接口 type='多' 查的是派工单据表的 rowid，故删除时取本字段，展示仍用报工数据自身 rowid。
+	dispatchBill: '697b12b13b5e707f84cd940b'
 }
 
 const CRAFT_POSITION_WORKSHEET_ID = '6a276f516d70ffabc66285e7'
@@ -3880,9 +3883,11 @@ const loadEmployeeDailyWageExtraMap = async (dailyWageRows) => {
  * @param {Object} fieldMap 需提取的字段映射
  * @param {string[]} rowids 当日工资情况关联到的正式派工记录 rowid
  * @param {'single'|'multi'} sourceType 来源类型（单对单/多对多），供删除时选择接口
+ * @param {string} [deleteRowidField] 记录上指向「派工单据」的关联字段 id；多对多分支传入后，
+ *        删除用 rowid 取该字段（派工单据），展示与刷新仍用记录自身 rowid
  * @returns {Promise<Map<string, Object>>} rowid -> 任务记录
  */
-const loadFormalDispatchRecords = async (worksheetId, fieldMap, rowids, sourceType) => {
+const loadFormalDispatchRecords = async (worksheetId, fieldMap, rowids, sourceType, deleteRowidField) => {
 	const result = new Map()
 	if (!rowids || rowids.length === 0) return result
 	try {
@@ -3902,9 +3907,13 @@ const loadFormalDispatchRecords = async (worksheetId, fieldMap, rowids, sourceTy
 		rows.forEach((item) => {
 			const rowid = String(item.rowid || '')
 			if (!rowid) return
+			const deleteRowid = deleteRowidField
+				? String(extractRelationSids(item[deleteRowidField])[0] || rowid)
+				: rowid
 			result.set(rowid, {
 				sourceType,
 				rowid,
+				deleteRowid,
 				orderNo: formatFieldValue(item[fieldMap.orderNo]) || '-',
 				productName: formatFieldValue(item[fieldMap.productName]) || '-',
 				processName: formatFieldValue(item[fieldMap.processName]) || '-',
@@ -3922,7 +3931,8 @@ const loadFormalDispatchRecords = async (worksheetId, fieldMap, rowids, sourceTy
 /**
  * 由「当日工资情况」行构建员工「正式派工」汇总。
  * 每行经「派工与报工」（单对单）与「多对多报工数据」（多对多）两个关联字段取正式派工明细，
- * 工时/工资按明细求和。是否临时工/出勤/新手由调用方结合员工表信息判断，本函数只做聚合。
+ * 工时/工资按明细求和。多对多明细的删除目标为其关联的「多对多派工与报工」单据。
+ * 是否临时工/出勤/新手由调用方结合员工表信息判断，本函数只做聚合。
  * @param {Array} rows 当日工资情况原始行
  * @returns {Promise<Map<string, {employeeName, totalWage, totalWorktime, records}>>} 员工姓名 -> 汇总
  */
@@ -3943,7 +3953,7 @@ const buildEmployeeFormalDispatchMap = async (rows) => {
 	})
 	const [singleMap, multiMap] = await Promise.all([
 		loadFormalDispatchRecords(DISPATCH_REPORT_WORKSHEET_ID, DISPATCH_REPORT_FIELD_MAP, singleRowids, 'single'),
-		loadFormalDispatchRecords(MULTI_REPORT_WORKSHEET_ID, MULTI_REPORT_FIELD_MAP, multiRowids, 'multi')
+		loadFormalDispatchRecords(MULTI_REPORT_WORKSHEET_ID, MULTI_REPORT_FIELD_MAP, multiRowids, 'multi', MULTI_REPORT_FIELD_MAP.dispatchBill)
 	])
 
 	parsed.forEach((p) => {
@@ -4153,8 +4163,10 @@ const openEmployeeTaskPopover = async (emp, index) => {
 	const group = employeeDispatchSummary.value.find((g) => g.employeeName === emp.name)
 	const tasks = group
 		? group.records.map((r) => ({
-				// 任务明细来自正式派工记录：rowid + sourceType 决定删除时调用哪个接口
+				// 任务明细来自正式派工记录：rowid 为记录自身（展示/刷新用），
+				// deleteRowid 为删除接口要传的 rowid（多对多时为关联的派工单据）
 				rowid: r.rowid || '',
+				deleteRowid: r.deleteRowid || r.rowid || '',
 				sourceType: r.sourceType || '',
 				orderNo: r.orderNo,
 				productName: r.productName,
@@ -4196,9 +4208,9 @@ const closeEmployeeTaskPopover = () => {
 	employeeTaskArrowStyle.value = {}
 }
 
-// 员工任务弹窗「删除」删除的是任务明细对应的「正式派工记录」：
-// 接口为预派工删除的同一个 webhook，额外用 type 区分数据来源（单=派工与报工 / 多=多对多报工数据），
-// rowid 为正式派工记录本身的 rowid。
+// 员工任务弹窗「删除」删除的是任务明细对应的「派工数据」：
+// 接口为预派工删除的同一个 webhook，用 type 区分数据来源（单=派工与报工，取记录自身 rowid；
+// 多=多对多派工与报工，取报工数据关联的派工单据 rowid，即 task.deleteRowid）。
 const TASK_DELETE_URL = getApiRequestBase() + '/api/workflow/hooks/NmE4MmE1NGFjYjg1NjNiMzlkMTViZDZh'
 const TASK_DELETE_TYPE_MAP = {
 	single: '单',
@@ -4211,7 +4223,8 @@ const handleDeleteTask = (task, index) => {
 		uni.showToast({ title: '缺少派工来源标识', icon: 'none' })
 		return
 	}
-	if (!task.rowid) {
+	const deleteRowid = String(task.deleteRowid || task.rowid || '')
+	if (!deleteRowid) {
 		uni.showToast({ title: '缺少派工记录标识', icon: 'none' })
 		return
 	}
@@ -4225,13 +4238,13 @@ const handleDeleteTask = (task, index) => {
 			try {
 				uni.showLoading({ title: '删除中...', mask: true })
 				const result = await http.post(TASK_DELETE_URL, {
-					rowid: task.rowid,
+					rowid: deleteRowid,
 					type: deleteType
 				})
 				uni.hideLoading()
 				console.log('删除任务接口返回:', result)
 
-				// 后端 webhook 异步处理，轮询等待该正式派工记录从员工任务汇总中消失（墙钟最多 5 秒，命中即停）
+				// 后端 webhook 异步处理，轮询等待该任务记录（记录自身 rowid）从员工任务汇总中消失（墙钟最多 5 秒，命中即停）
 				const targetRowid = String(task.rowid)
 				const removed = await pollUntil({
 					query: () => loadEmployeeDispatchSummary(),
