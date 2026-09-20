@@ -248,10 +248,15 @@
 							:key="group.productRowid"
 							class="process-table-wrap"
 						>
-							<!-- 顶部订单编号 + 产品名称：独立于下方网格，宽度随内容自适应，不撑开列轨道 -->
+							<!-- 顶部订单编号 + 产品名称 + 问题描述：独立于下方网格，宽度随内容自适应，不撑开列轨道 -->
 							<view class="grid-order-bar">
 								<text class="grid-order-bar-no">{{ group.orderNo }}</text>
 								<text class="grid-order-bar-product">{{ group.productName }}</text>
+								<!-- 问题描述：仅返工排产的产品有值，无值时不占位 -->
+								<text
+									v-if="group.problemDescription"
+									class="grid-order-bar-problem"
+								>问题描述：{{ group.problemDescription }}</text>
 							</view>
 							<view
 								class="process-table-grid"
@@ -1218,6 +1223,10 @@ const PROCESS_DETAIL_FIELD_MAP = {
 	flowRemain: '6a9bc8de3c1a1cdddc4ae539',
 	// 派工类型：正常派工/返工派工（仅随数据获取，不参与渲染）
 	dispatchType: '6954ad997a59e0522d85df35',
+	// 问题描述：HAP 侧在「工序排产明细」上建的「他表字段」，
+	// 源为已有的一对多关联 688c366082289045da815f96（→ 排产计划），取其「问题描述」字段。
+	// 仅返工排产的关联行有值（全表约 574 行有值）；同一产品的各工序行取值一致，标题行只取一条。
+	problemDescription: '6aaf4ebf3c1a1cdddc5894fb',
 }
 
 const EMPLOYEE_WORKSHEET_ID = 'yggs'
@@ -1262,29 +1271,6 @@ const initialPreDispatchCountForConfirm = ref(0)
 const confirmListAffectedCount = ref(0)
 // 确认派工收集过程（含静默重拉/服务端兜底查询）进行中标记，防止重复点击触发多次收集
 const collectingConfirm = ref(false)
-
-// 订单选择相关
-const showSelectOrderModal = ref(false)
-const orderList = ref([])
-const filteredOrderList = ref([])
-const orderSearchKeyword = ref('')
-const selectedOrder = ref(null)
-const orderPageNum = ref(1)
-const orderHasMore = ref(true)
-const orderLoadingMore = ref(false)
-const orderRefresherTriggered = ref(false)
-
-// 产品选择相关
-const showSelectProductModal = ref(false)
-const selectProductList = ref([])
-const filteredSelectProductList = ref([])
-const productSearchKeyword = ref('')
-const selectedProductKeys = ref([])
-const productPageNum = ref(1)
-const productHasMore = ref(true)
-const productLoadingMore = ref(false)
-const productRefresherTriggered = ref(false)
-const expandedProductKeys = ref([])
 
 const editData = ref({
 	rowid: '',
@@ -2140,13 +2126,44 @@ const handleAddProduct = () => {
 	loadAddProductList()
 }
 
+/**
+ * 按筛选条件循环分页拉取「排产计划」全量数据。
+ * 抽成独立函数：未完成工序数量的口径需要拆成两支各查一次（原因见 loadAddProductList）。
+ * @param {Array} filters 扁平筛选条件数组（组内逻辑由首项 spliceType 决定）
+ * @returns {Promise<Array>} 全部命中的原始行
+ */
+const fetchProductionPlanRows = async (filters) => {
+	const pageSize = 100
+	const MAX_PAGES = 500
+	const rows = []
+	for (let pageNum = 1; pageNum <= MAX_PAGES; pageNum++) {
+		const res = await callWorkflowListAPIPaged({
+			worksheetId: 'paichanjihua',
+			filters,
+			pageSize,
+			pageNum,
+			// 生产类型（正常派工/返工派工）：随顶部单选传递，后端按此口径返回
+			productionType: dispatchTypeFilterValue.value
+		})
+		const pageRows = Array.isArray(res?.data) ? res.data : []
+		if (pageRows.length === 0) break
+		rows.push(...pageRows)
+		if (pageRows.length < pageSize) break
+	}
+	return rows
+}
+
 // 加载订单产品列表（使用原产品接口，按订单分组）
 const loadAddProductList = async () => {
 	addProductLoading.value = true
 	try {
 		uni.showLoading({ title: '加载中...' })
-		// 使用原来的产品接口，循环拉取直到没有更多数据
-		const filters = [
+		// 未完成工序数量：他表字段，由「工序排产明细」汇总而来
+		const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
+		// 工序排产明细：关联字段
+		const FIELD_PROCESS_DETAIL = '688c366082289045da815f97'
+		// 两支分支共用的基础筛选
+		const baseFilters = [
 			{
 				controlId: '67de26c9c5377d50a523c735',
 				dataType: 30,
@@ -2169,12 +2186,12 @@ const loadAddProductList = async () => {
 				filterType: 2,
 				values: ['已排产', '部分排产']
 			},
-		{
-			controlId: '69db0017665ab27f3913c455',
-			dataType: 30,
-			spliceType: 1,
-			filterType: 6,
-			values: ['准时交货']
+			{
+				controlId: '69db0017665ab27f3913c455',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 6,
+				values: ['准时交货']
 			},
 			{
 				controlId: '66974cda2503723eec1af600',
@@ -2183,36 +2200,39 @@ const loadAddProductList = async () => {
 				filterType: 8
 			}
 		]
-		const pageSize = 100
-		let pageNum = 1
-		const allRows = []
-		const MAX_PAGES = 500
-		while (pageNum <= MAX_PAGES) {
-			const res = await callWorkflowListAPIPaged({
-				worksheetId: 'paichanjihua',
-				filters,
-				pageSize,
-				pageNum,
-				// 生产类型（正常派工/返工派工）：随顶部单选传递，后端按此口径返回
-				productionType: dispatchTypeFilterValue.value
-			})
-			const rows = Array.isArray(res?.data) ? res.data : []
-			if (rows.length === 0) break
-			allRows.push(...rows)
-			if (rows.length < pageSize) break
-			pageNum++
-		}
-
-		const rows = allRows
-		// 前端过滤：正常排产时，未完成工序数量 > 0
-		const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
-		const filteredRows = rows.filter(item => {
-			const num = Number(item[FIELD_INCOMPLETE_PROCESS_QTY])
-			return !Number.isNaN(num) && num > 0
+		// 未完成工序数量的判断口径：
+		//   工序排产明细不为空 → 要求 未完成工序数量 > 0（只取还有未完成工序的产品）
+		//   工序排产明细为空   → 不做数量判断（这类明细为空的行数量恒为 0）
+		// 本接口的扁平 filters 只支持「整组 AND」或「整组 OR」（由首项 spliceType 决定），
+		// 无法表达 base AND (A OR B)，因此拆成两支各自 AND 的查询并行执行，再按 rowid 合并去重。
+		const [rowsWithQty, rowsWithEmptyDetail] = await Promise.all([
+			fetchProductionPlanRows(baseFilters.concat({
+				// 数值比较：filterType 13 = Gt（大于），比较值必须写在 minValue 上（写 values 会被忽略）
+				controlId: FIELD_INCOMPLETE_PROCESS_QTY,
+				dataType: 30,
+				spliceType: 1,
+				filterType: 13,
+				minValue: '0',
+				values: []
+			})),
+			fetchProductionPlanRows(baseFilters.concat({
+				// filterType 7 = IsNull（为空）
+				controlId: FIELD_PROCESS_DETAIL,
+				dataType: 30,
+				spliceType: 1,
+				filterType: 7,
+				values: []
+			}))
+		])
+		// 两支结果按 rowid 去重合并
+		const rowMap = new Map()
+		rowsWithQty.concat(rowsWithEmptyDetail).forEach(item => {
+			rowMap.set(item.rowid, item)
 		})
+		const rows = [...rowMap.values()]
 
 		// 映射产品数据
-		const products = filteredRows.map(item => ({
+		const products = rows.map(item => ({
 			rowid: item.rowid || '',
 			orderCode: item['655e1cbbbd2094b316347f92'] || '',
 			customerName: item['69a8ed3c3b5e707f84d33f8b'] || '',
@@ -2380,394 +2400,6 @@ const confirmMultiSelectedProducts = async () => {
 // 关闭添加产品弹窗
 const closeAddProductModal = () => {
 	showAddProductModal.value = false
-}
-
-// 获取订单列表
-const loadOrderList = async (append = false) => {
-	try {
-		const pageNum = append ? orderPageNum.value : 1
-		if (!append) {
-			uni.showLoading({ title: '加载中...' })
-		}
-		const res = await callWorkflowListAPIPaged({
-			worksheetId: 'paichanjihua',
-			filters: [
-				{
-					controlId: '67de26c9c5377d50a523c735',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: [loginWorkshop.value || '拉伸车间']
-				},
-				{
-					controlId: '694a3954687045435008a7c3',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					// 排产类型与顶部正常/返工下拉联动
-					values: [scheduleTypeFilterValue.value]
-				},
-				{
-					controlId: '655b875ffc44a9469a3aa225',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: ['已排产', '部分排产']
-				},
-				{
-					controlId: '69db0017665ab27f3913c455',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 6,
-					values: ['准时交货']
-				},
-				{
-					controlId: '66974cda2503723eec1af600',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 8
-				}
-			],
-			pageSize: 100,
-			pageNum,
-			// 生产类型（正常派工/返工派工）：随顶部单选传递，后端按此口径返回
-			productionType: dispatchTypeFilterValue.value
-		})
-		uni.hideLoading()
-
-		const rows = res?.data || []
-		// 前端过滤：正常排产时，未完成工序数量 > 0
-		const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
-		const filteredRows = rows.filter(item => {
-			const num = Number(item[FIELD_INCOMPLETE_PROCESS_QTY])
-			return !Number.isNaN(num) && num > 0
-		})
-		// 按订单编号汇总
-		const orderMap = {}
-		filteredRows.forEach(item => {
-			const orderCode = item['655e1cbbbd2094b316347f92'] || ''
-			if (!orderCode) return
-			if (!orderMap[orderCode]) {
-				orderMap[orderCode] = {
-					orderCode,
-					customerName: item['69a8ed3c3b5e707f84d33f8b'] || '',
-					deliveryTime: item['69ad33ee3b5e707f84d43b09'] || '',
-					productCount: 0
-				}
-			}
-			orderMap[orderCode].productCount += 1
-		})
-		
-		const newOrders = Object.values(orderMap).sort((a, b) => {
-			const ta = (a.deliveryTime || '').toString().trim()
-			const tb = (b.deliveryTime || '').toString().trim()
-			if (!ta && !tb) return 0
-			if (!ta) return 1
-			if (!tb) return -1
-			return ta.localeCompare(tb)
-		})
-		
-		if (append) {
-			orderList.value = [...orderList.value, ...newOrders]
-		} else {
-			orderList.value = newOrders
-		}
-		
-		filteredOrderList.value = [...orderList.value]
-		orderPageNum.value = pageNum + 1
-		orderHasMore.value = rows.length >= 100
-		showSelectOrderModal.value = true
-	} catch (e) {
-		uni.hideLoading()
-		console.error('获取订单列表失败:', e)
-		uni.showToast({ title: '获取订单列表失败', icon: 'none' })
-	}
-}
-
-// 下拉刷新订单列表
-const onOrderRefresh = async () => {
-	orderRefresherTriggered.value = true
-	orderPageNum.value = 1
-	orderHasMore.value = true
-	await loadOrderList(false)
-	orderRefresherTriggered.value = false
-}
-
-// 上拉加载更多订单
-const onOrderLoadMore = async () => {
-	if (orderLoadingMore.value || !orderHasMore.value) return
-	orderLoadingMore.value = true
-	await loadOrderList(true)
-	orderLoadingMore.value = false
-}
-
-// 搜索过滤订单
-const filterOrderList = () => {
-	const keyword = (orderSearchKeyword.value || '').trim().toLowerCase()
-	if (!keyword) {
-		filteredOrderList.value = [...orderList.value]
-	} else {
-		filteredOrderList.value = orderList.value.filter(order =>
-			(order.orderCode || '').toLowerCase().includes(keyword) ||
-			(order.customerName || '').toLowerCase().includes(keyword)
-		)
-	}
-}
-
-// 选择订单
-const selectOrder = (order) => {
-	selectedOrder.value = order
-}
-
-// 关闭订单选择弹窗
-const closeSelectOrderModal = () => {
-	showSelectOrderModal.value = false
-}
-
-// 进入选择产品
-const goToSelectProduct = () => {
-	if (!selectedOrder.value) {
-		uni.showToast({ title: '请先选择订单', icon: 'none' })
-		return
-	}
-	productSearchKeyword.value = ''
-	selectedProductKeys.value = []
-	loadProductList()
-}
-
-// 获取产品列表
-const loadProductList = async (append = false) => {
-	const showedLoading = !append
-	try {
-		const pageNum = append ? productPageNum.value : 1
-		if (showedLoading) {
-			uni.showLoading({ title: '加载中...' })
-		}
-		const res = await callWorkflowListAPIPaged({
-			worksheetId: 'paichanjihua',
-			filters: [
-				{
-					controlId: '67de26c9c5377d50a523c735',
-					dataType: 30,
-					spliceType: 1,
-					filterType: 2,
-					values: [loginWorkshop.value || '拉伸车间']
-				},
-				{
-				controlId: '694a3954687045435008a7c3',
-				dataType: 30,
-				spliceType: 1,
-				filterType: 2,
-				// 排产类型与顶部正常/返工下拉联动
-				values: [scheduleTypeFilterValue.value]
-			},
-			{
-				controlId: '655b875ffc44a9469a3aa225',
-				dataType: 30,
-				spliceType: 1,
-				filterType: 2,
-				values: ['已排产', '部分排产']
-			},
-			{
-				controlId: '69db0017665ab27f3913c455',
-				dataType: 30,
-				spliceType: 1,
-				filterType: 6,
-				values: ['准时交货']
-			},
-			{
-				controlId: '66974cda2503723eec1af600',
-				dataType: 30,
-				spliceType: 1,
-				filterType: 8
-			}
-		],
-		pageSize: 100,
-		pageNum,
-		// 生产类型（正常派工/返工派工）：随顶部单选传递，后端按此口径返回
-		productionType: dispatchTypeFilterValue.value
-	})
-
-		const rows = res?.data || []
-		// 前端过滤：正常排产时，未完成工序数量 > 0
-		const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
-		const filteredRows = rows.filter(item => {
-			const num = Number(item[FIELD_INCOMPLETE_PROCESS_QTY])
-			return !Number.isNaN(num) && num > 0
-		})
-		// 映射 + 按订单编号前端筛选
-		const targetOrderCode = selectedOrder.value?.orderCode || ''
-		const newProducts = filteredRows
-			.filter(item => item['655e1cbbbd2094b316347f92'] === targetOrderCode)
-			.map(item => ({
-				rowid: item.rowid || '',
-				orderCode: item['655e1cbbbd2094b316347f92'] || '',
-				customerName: item['69a8ed3c3b5e707f84d33f8b'] || '',
-				// 排产类型随数据获取，不参与渲染
-				scheduleType: formatFieldValue(item['694a3954687045435008a7c3']) || '',
-				name: item['6937d255ff2b019b3cb34be3'] || '',
-				models: item['6937d255ff2b019b3cb34be4'] || '',
-				orderCount: item['69e33354665ab27f3916f758'] || '',
-				productionCode: item['698438933b5e707f84cf51fd'] || '',
-				productCode: item['691d6336535b29cbd5c6c0ca'] || '',
-				orderCount: item['6a5f19556d70ffabc67f0ce9'] || ''
-			}))
-
-		if (append) {
-			selectProductList.value = [...selectProductList.value, ...newProducts]
-		} else {
-			selectProductList.value = newProducts
-		}
-
-		// 后端已按订单编号筛选，前端仅需按搜索关键字过滤
-		filterProductList()
-
-		productPageNum.value = pageNum + 1
-		productHasMore.value = rows.length >= 100
-		showSelectOrderModal.value = false
-		showSelectProductModal.value = true
-	} catch (e) {
-		console.error('获取产品列表失败:', e)
-		uni.showToast({ title: '获取产品列表失败', icon: 'none' })
-	} finally {
-		// 统一在 finally 中收口 loading（仅对真正 show 过的情况 hide，避免配对错误）
-		if (showedLoading) {
-			uni.hideLoading()
-		}
-	}
-}
-
-// 下拉刷新产品列表
-const onProductRefresh = async () => {
-	productRefresherTriggered.value = true
-	productPageNum.value = 1
-	productHasMore.value = true
-	await loadProductList(false)
-	productRefresherTriggered.value = false
-}
-
-// 上拉加载更多产品
-const onProductLoadMore = async () => {
-	if (productLoadingMore.value || !productHasMore.value) return
-	productLoadingMore.value = true
-	await loadProductList(true)
-	productLoadingMore.value = false
-}
-
-// 搜索过滤产品
-const filterProductList = () => {
-	const keyword = (productSearchKeyword.value || '').trim().toLowerCase()
-	if (!keyword) {
-		filteredSelectProductList.value = [...selectProductList.value]
-	} else {
-		filteredSelectProductList.value = selectProductList.value.filter(product =>
-			(product.name || '').toLowerCase().includes(keyword) ||
-			(product.productionCode || '').toLowerCase().includes(keyword) ||
-			(product.models || '').toLowerCase().includes(keyword)
-		)
-	}
-}
-
-// 获取产品唯一标识
-const getProductKey = (product) => {
-	return product.productionCode || product.productCode || `${product.orderCode}-${product.name}`
-}
-
-// 切换产品选中状态（产品选择框为单选）
-const toggleProductSelection = (product) => {
-	const key = getProductKey(product)
-	if (selectedProductKeys.value.includes(key)) {
-		selectedProductKeys.value = []
-	} else {
-		selectedProductKeys.value = [key]
-	}
-}
-
-// 展开/收起产品规格
-const toggleProductExpand = (product) => {
-	const key = getProductKey(product)
-	const idx = expandedProductKeys.value.indexOf(key)
-	if (idx >= 0) {
-		expandedProductKeys.value.splice(idx, 1)
-	} else {
-		expandedProductKeys.value.push(key)
-	}
-}
-
-// 关闭产品选择弹窗
-const closeSelectProductModal = () => {
-	showSelectProductModal.value = false
-}
-
-// 返回选择订单
-const backToSelectOrder = () => {
-	showSelectProductModal.value = false
-	showSelectOrderModal.value = true
-}
-
-// 确认选择产品
-const confirmSelectedProducts = async () => {
-	if (selectedProductKeys.value.length === 0) {
-		uni.showToast({ title: '请至少选择一个产品', icon: 'none' })
-		return
-	}
-	
-	// 获取选中的产品详情
-	const selectedProducts = selectProductList.value.filter(product =>
-		selectedProductKeys.value.includes(getProductKey(product))
-	)
-	
-	// 产品选择框只支持选择一个产品，传单个 rowid
-	const rowid = selectedProducts[0]?.rowid
-	const selectedProductionCode = selectedProducts[0]?.productionCode || selectedProducts[0]?.productCode
-	
-	if (!rowid) {
-		uni.showToast({ title: '数据异常，无法获取产品ID', icon: 'none' })
-		return
-	}
-	
-	uni.showLoading({ title: '添加中...', mask: true })
-	
-	try {
-		await http.post(PRE_DISPATCH_PRODUCT_ADD_URL, {
-			dispatchDate: filterDate.value,  // 筛选日期
-			rowid: rowid,  // 选中产品的 rowid
-			// 生产类型（正常派工/返工派工）：随顶部单选传递
-			productionType: dispatchTypeFilterValue.value
-		})
-
-		// 添加成功后轮询等待新产品数据写入完成再刷新渲染（墙钟最多 5 秒，命中即停）
-		// 复用上方"添加中..."的 loading，不再重复 showLoading（App 端 show/hide 计数式配对，多 show 一次会导致转圈无法关闭）
-		// 记录添加前列表条数，供“无生产编号”场景退化为条数增加判断，避免列表非空时第一轮就误判成功
-		const initialProductCount = productList.value.length
-		const found = await pollUntil({
-			query: () => loadProducts(true, true),
-			isDone: () => {
-				if (selectedProductionCode) {
-					return productList.value.some(p => p.productionCode === selectedProductionCode)
-				}
-				return productList.value.length > initialProductCount
-			}
-		})
-
-		uni.hideLoading()
-		showSelectProductModal.value = false
-		selectedProductKeys.value = []
-
-		if (found) {
-			uni.showToast({ title: '添加成功', icon: 'success' })
-		} else {
-			uni.showToast({ title: '添加成功，数据刷新略有延迟', icon: 'none' })
-		}
-
-		// 同步刷新员工相关数据
-		loadEmployeeDispatchSummary()
-		loadWorkshopEmployees()
-	} catch (e) {
-		uni.hideLoading()
-		console.error('添加预派工失败:', e)
-		uni.showToast({ title: '添加失败', icon: 'none' })
-	}
 }
 
 // 根据 rowid 数组添加产品到预派工
@@ -4078,7 +3710,9 @@ const loadProductProcesses = async (product) => {
 				positionProcess: associatedInfo.positionProcess,
 				isNewProcess,
 				dispatchCount: associatedInfo.dispatchCount,
-				dispatchType: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.dispatchType]) || ''
+				dispatchType: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.dispatchType]) || '',
+				// 问题描述：他表字段由排产计划带出，仅返工排产的行有值
+				problemDescription: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.problemDescription]) || ''
 			}
 		}).sort((a, b) => (parseFloat(a.sequence) || 0) - (parseFloat(b.sequence) || 0))
 		// 先清除该产品已有的工序数据，避免重复点击或网络抖动导致同一工序重复渲染
@@ -4645,10 +4279,13 @@ const groupedProcessList = computed(() => {
 		const processes = processList.value.filter(p => p.productRowid === product.uniqueKey)
 		// 无工序的产品也保留分组（processes 为空），让订单产品栏/按钮栏/字段标题栏照常渲染，
 		// 只是右侧没有工序列，避免用户误以为该产品没选上
+		// 问题描述取自工序行（他表字段）：各工序行取值一致，取第一条有值的即可
+		const problemDescProcess = processes.find(p => p.problemDescription)
 		groups.push({
 			productRowid: product.uniqueKey,
 			productName: product.productNameNew || product.productName || '-',
 			orderNo: product.orderNo || '-',
+			problemDescription: problemDescProcess?.problemDescription || '',
 			processes
 		})
 	})
@@ -7183,6 +6820,18 @@ onShow(refreshPageOnShow)
 						.grid-order-bar-product {
 							font-weight: bold;
 							color: #333;
+						}
+
+						// 问题描述：多选返工问题会拼接成较长文本，限宽截断避免把标题行撑得过宽
+						.grid-order-bar-problem {
+							display: inline-block;
+							font-weight: normal;
+							color: #d4380d;
+							max-width: px2vw(700px);
+							overflow: hidden;
+							text-overflow: ellipsis;
+							white-space: nowrap;
+							vertical-align: bottom;
 						}
 					}
 				}
