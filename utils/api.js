@@ -36,11 +36,6 @@ export function getApiRequestBase() {
   return API_BASE
 }
 
-/** 是否为 H5（与 getApiRequestBase() === '' 一致，便于模板或调试） */
-export function isH5ApiRelativeMode() {
-  return getApiRequestBase() === ''
-}
-
 /** 构建阶段随产物固定，模块内只算一次 */
 const _requestBase = getApiRequestBase()
 
@@ -54,11 +49,11 @@ function apiUrl(path) {
 
 /**
  * 工作流通用入口（与历史 utils/config 中 WORKFLOW_API 字段一致）
- * - TRIGGER_URL：单条触发 / 详情类（callWorkflowAPI）
+ * - TRIGGER_URL：单条触发 / 详情类
  * - LIST_URL：列表分页查询 hooks2（callWorkflowListAPIPaged 等）
  */
 export const WORKFLOW_API = {
-  /** 单条数据详情、通用工作流触发（utils/workflow.callWorkflowAPI） */
+  /** 单条数据详情、通用工作流触发 */
   TRIGGER_URL: apiUrl('/api/workflow/hooks/NjkxNTc3NDc4YTVhMDAzMjI2M2I1ZGJi'),
   /** 工作表列表分页查询（hooks2） */
   LIST_URL: apiUrl('/api/workflow/hooks2/NjkxMmQzOTI3NDM1ZTE5MjVmMDkyMjM1'),

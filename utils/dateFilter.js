@@ -36,29 +36,3 @@ export const buildDateEnumFilter = ({ controlId, date, dataType = DATE_FIELD_DAT
 		values: []
 	}
 }
-
-/**
- * 生成 DateBetween(31) 整天区间筛选条件（备用写法，效果同 DateEnum 整日匹配）
- * @param {Object} opts 同 buildDateEnumFilter
- * @returns {Object|null}
- */
-export const buildDateBetweenFilter = ({ controlId, date, dataType = DATE_FIELD_DATA_TYPE } = {}) => {
-	if (!controlId || !date) return null
-	return {
-		controlId,
-		dataType,
-		spliceType: 1, // AND 拼接
-		filterType: 31, // DateBetween「在范围内（日期）」
-		dateRange: 18, // 自定义日期
-		dateRangeType: 1,
-		minValue: `${date} 00:00:00`,
-		maxValue: `${date} 23:59:59`,
-		values: []
-	}
-}
-
-export default {
-	DATE_FIELD_DATA_TYPE,
-	buildDateEnumFilter,
-	buildDateBetweenFilter
-}

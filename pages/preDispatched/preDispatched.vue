@@ -953,7 +953,6 @@ const MULTI_REPORT_FIELD_MAP = {
 
 const CRAFT_POSITION_WORKSHEET_ID = '6a276f516d70ffabc66285e7'
 const CRAFT_POSITION_FIELD_ID = '6a276ffc6d70ffabc66285f8'
-const CRAFT_POSITION_NAME_FIELD = '6a276ffc6d70ffabc66285f8'  // 工序归类名称
 const CRAFT_POSITION_RELATED_PROCESS_FIELD = '6a276ffc6d70ffabc66285f9'  // 关联工序字段
 
 // 工艺岗位字典（用于 craftPosition ID 转名称）
@@ -972,7 +971,6 @@ const PROCESS_DICT_TYPE_FIELD = '6614d7ed1f7f1264f3a332c3'
 const processDictMap = ref(new Map())  // 工序字典 rowid -> 工序名称
 
 // 工序归类表数据
-const craftPositionList = ref([])
 const craftPositionMap = ref(new Map())  // 工序归类名称 -> 关联工序名称列表
 
 const filterOrderCode = ref('')
@@ -1531,15 +1529,6 @@ const handleProcessItemClick = (emp, seq) => {
 	openProcessDropdownPanel(emp, seq)
 }
 
-const toggleProcessDropdownPanel = () => {
-	showProcessDropdownPanel.value = !showProcessDropdownPanel.value
-	if (!showProcessDropdownPanel.value) {
-		selectedProcessDropdownEmployee.value = null
-		processDropdownList.value = []
-		expandedEmployeeId.value = ''
-	}
-}
-
 const openProcessDropdownPanel = async (emp, seq) => {
 	selectedProcessDropdownEmployee.value = emp
 	selectedProcessSeq.value = seq || 0
@@ -1873,38 +1862,6 @@ const mapPreDispatchRow = (item) => ({
 	dispatchType: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.dispatchType]) || ''
 })
 
-const DICTIONARY_WORKSHEET_ID = 'shujuzidian'
-const DICTIONARY_PROCESS_TYPE_FIELD = '6614d7ed1f7f1264f3a332c3'
-const DICTIONARY_PROCESS_LEVEL_FIELD = '66b07c4a965ba588586ec783'
-const DICTIONARY_PROCESS_STATUS_FIELD = '6a324e7d6d70ffabc66cbe5f'
-const DICTIONARY_WORKSHOP_FIELD = '691e8522d50c894e2e798d03'
-const DICTIONARY_NAME_FIELD = 'Name'
-
-const loadProcessDictionaryMap = async () => {
-	try {
-		const res = await callWorkflowListAll({
-			worksheetId: DICTIONARY_WORKSHEET_ID,
-			filters: [
-				{ controlId: DICTIONARY_PROCESS_TYPE_FIELD, dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
-				{ controlId: DICTIONARY_PROCESS_LEVEL_FIELD, dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
-				{ controlId: DICTIONARY_PROCESS_STATUS_FIELD, dataType: 30, spliceType: 1, filterType: 2, values: ['1'] }
-			],
-			silent: true
-		}, 100)
-		const rows = Array.isArray(res?.data) ? res.data : []
-		const map = new Map()
-		rows.forEach(item => {
-			if (item.rowid) {
-				map.set(item.rowid, item[DICTIONARY_NAME_FIELD] || '-')
-			}
-		})
-		return map
-	} catch (e) {
-		console.error('获取工序字典失败:', e)
-		return new Map()
-	}
-}
-
 /** 加载工艺岗位字典（用于 craftPosition ID 转名称） */
 const loadCraftPositionList = async () => {
 	try {
@@ -2064,20 +2021,6 @@ const handleSearch = async () => {
 	loadWorkshopEmployees()
 }
 
-const handleReset = () => {
-	filterOrderCode.value = ''
-	filterProductName.value = ''
-	filterCraft.value = ''
-	filterInnerPaint.value = ''
-	filterPolish.value = ''
-	filterGuokou.value = ''
-	filterDate.value = getTomorrowDate()
-	selectedProductIds.value = []
-	processList.value = []
-	loadedProductIds.value = []
-	handleSearch()
-}
-
 // 切换正常/返工：三个数据源（预派工、工序排产明细、添加产品）的接口筛选联动，整页刷新
 const onDispatchTypeChange = (e) => {
 	const newType = DISPATCH_TYPE_OPTIONS[e.detail.value]
@@ -2106,13 +2049,6 @@ const onDateChange = async (e) => {
 		return
 	}
 	handleSearch()
-}
-
-const handleAddPreDispatch = () => {
-	const workshop = loginWorkshop.value || '拉伸车间'
-	uni.navigateTo({
-		url: `/pages/selectBills/selectBills?workshop=${encodeURIComponent(workshop)}&fromPreDispatch=1`
-	})
 }
 
 // 添加产品：打开选择产品弹窗（合并订单+产品选择）
@@ -2444,83 +2380,6 @@ const addProductsByRowids = async (rowids, productionCodes = []) => {
 			// 轮询未达到期望数量，但接口已成功调用，直接刷新一次
 			await withTimeout(loadProducts(true, true), POLL_QUERY_TIMEOUT).catch(() => {})
 			uni.showToast({ title: '添加成功', icon: 'success' })
-		}
-
-		// 同步刷新员工相关数据
-		loadEmployeeDispatchSummary()
-		loadWorkshopEmployees()
-	} catch (e) {
-		uni.hideLoading()
-		console.error('添加预派工失败:', e)
-		uni.showToast({ title: '添加失败', icon: 'none' })
-	}
-}
-
-// 根据生产单号添加产品到预派工
-const addProductsByCodes = async (products) => {
-	if (products.length === 0) return
-
-	uni.showLoading({ title: '添加中...', mask: true })
-
-	try {
-		// 遍历选中的产品，根据生产单号查询预派工记录
-		const productionCodes = products.map(p => p.productionCode).filter(Boolean)
-
-		// 查询预派工记录
-		const res = await callWorkflowListAll({
-			worksheetId: PRE_DISPATCH_WORKSHEET_ID,
-			filters: [{
-				controlId: PRE_DISPATCH_FIELD_MAP.productionCode,
-				dataType: 30,
-				spliceType: 1,
-				filterType: 2,
-				values: productionCodes
-			}],
-			silent: true
-		}, 100)
-
-		const rows = Array.isArray(res?.data) ? res.data : []
-		if (rows.length === 0) {
-			uni.hideLoading()
-			uni.showToast({ title: '未找到相关预派工记录', icon: 'none' })
-			return
-		}
-
-		// 记录初始产品数量
-		const initialProductCount = productList.value.length
-
-		// 批量添加产品到预派工（只添加不在列表中的）
-		const existingCodes = new Set(productList.value.map(p => p.productionCode))
-		const newCodes = productionCodes.filter(code => !existingCodes.has(code))
-
-		if (newCodes.length === 0) {
-			uni.hideLoading()
-			uni.showToast({ title: '产品已在列表中', icon: 'none' })
-			return
-		}
-
-		// 调用添加接口
-		await http.post(PRE_DISPATCH_PRODUCT_ADD_BY_CODES_URL || PRE_DISPATCH_PRODUCT_ADD_URL, {
-			dispatchDate: filterDate.value,
-			productionCodes: newCodes,
-			// 生产类型（正常派工/返工派工）：随顶部单选传递
-			productionType: dispatchTypeFilterValue.value
-		})
-
-		// 添加成功后轮询等待新产品数据写入完成再刷新渲染（墙钟最多 5 秒，命中即停）
-		// 复用上方"添加中..."的 loading，不再重复 showLoading（App 端 show/hide 计数式配对，多 show 一次会导致转圈无法关闭）
-		// 记录添加前列表条数，轮询期间每轮重拉列表后按条数增长判断是否写入完成
-		const found = await pollUntil({
-			query: () => loadProducts(true, true),
-			isDone: () => productList.value.length > initialProductCount
-		})
-
-		uni.hideLoading()
-
-		if (found) {
-			uni.showToast({ title: '添加成功', icon: 'success' })
-		} else {
-			uni.showToast({ title: '添加成功，数据刷新略有延迟', icon: 'none' })
 		}
 
 		// 同步刷新员工相关数据
@@ -4230,11 +4089,6 @@ const getEmployeeCellText = (processes, idx) => {
 	return names.join('、')
 }
 
-const getEmployeeGroupPreDispatchRowid = (processes, idx) => {
-	const startIdx = getEmployeeGroupStart(processes, idx)
-	return processes[startIdx]?.preDispatchRowid || ''
-}
-
 // 按订单编号分组，并按订单交货日期升序排列
 const groupedProductList = computed(() => {
 	const groups = {}
@@ -5029,54 +4883,6 @@ const loadSprayEmployees = async () => {
 	}
 }
 
-const handleItemClick = (item) => {
-	const processDetailSids = Array.isArray(item.processDetail) ? item.processDetail : []
-	const dailyWageSids = Array.isArray(item.dailyWage) ? item.dailyWage : []
-	const params = {
-		orderCode: item.orderNo || '',
-		productionCode: item.productionCode || '',
-		workshop: item.workshop || '',
-		productName: item.productName || '',
-		processDetailSids: processDetailSids.length > 0 ? JSON.stringify(processDetailSids) : '',
-		dailyWageSids: dailyWageSids.length > 0 ? JSON.stringify(dailyWageSids) : '',
-		dispatchDate: item.dispatchDate || '',
-		dispatchCount: item.dispatchCount || '',
-		fromPreDispatch: '1',
-		prerowid: item.rowid || '',
-	}
-	const query = Object.entries(params)
-		.filter(([_, v]) => v !== '')
-		.map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
-		.join('&')
-	uni.navigateTo({
-		url: `/pages/dispatchWork/dispatchWork?${query}`
-	})
-}
-
-const handleVoidClick = async (item) => {
-	uni.showModal({
-		title: '作废确认',
-		placeholderText: '请输入作废原因',
-		editable: true,
-		success: async (res) => {
-			if (res.confirm && res.content) {
-				try {
-					await http.post(PRE_DISPATCH_VOID_URL, {
-						rowid: item.rowid,
-						reason: res.content
-					})
-					uni.showToast({ title: '作废成功', icon: 'success' })
-					loadProducts(true)
-					loadEmployeeDispatchSummary()
-				} catch (e) {
-					console.error('作废失败:', e)
-					uni.showToast({ title: '作废失败', icon: 'none' })
-				}
-			}
-		}
-	})
-}
-
 const closeConfirmDispatchModal = () => {
 	showConfirmDispatchModal.value = false
 	confirmDispatchCount.value = 0
@@ -5240,37 +5046,12 @@ const confirmEmployeeEdit = async () => {
 	}
 }
 
-function getCurrentDate() {
-	const now = new Date()
-	const year = now.getFullYear()
-	const month = String(now.getMonth() + 1).padStart(2, '0')
-	const day = String(now.getDate()).padStart(2, '0')
-	return `${year}-${month}-${day}`
-}
-
-function getTodayDate() {
-	const today = new Date()
-	const year = today.getFullYear()
-	const month = String(today.getMonth() + 1).padStart(2, '0')
-	const day = String(today.getDate()).padStart(2, '0')
-	return `${year}-${month}-${day}`
-}
-
 function getTomorrowDate() {
 	const tomorrow = new Date()
 	tomorrow.setDate(tomorrow.getDate() + 1)
 	const year = tomorrow.getFullYear()
 	const month = String(tomorrow.getMonth() + 1).padStart(2, '0')
 	const day = String(tomorrow.getDate()).padStart(2, '0')
-	return `${year}-${month}-${day}`
-}
-
-function getYesterdayDate() {
-	const yesterday = new Date()
-	yesterday.setDate(yesterday.getDate() - 1)
-	const year = yesterday.getFullYear()
-	const month = String(yesterday.getMonth() + 1).padStart(2, '0')
-	const day = String(yesterday.getDate()).padStart(2, '0')
 	return `${year}-${month}-${day}`
 }
 
@@ -5379,15 +5160,6 @@ const toggleEmployee = (emp) => {
 		editData.value.employeeId = ''
 		editData.value.employeeName = ''
 	}
-}
-
-// 从已选员工ID中筛选出新员工ID
-const getSelectedNewEmployeeIds = (selectedIds) => {
-	return (selectedIds || [])
-		.filter(id => {
-			const emp = allEmployeeOptions.value.find(e => e.id === id)
-			return emp && emp.isNewEmployee
-		})
 }
 
 // 页面首次挂载时加载全部数据（含字典）
