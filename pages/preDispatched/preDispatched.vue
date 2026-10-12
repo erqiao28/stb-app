@@ -250,13 +250,22 @@
 						>
 							<!-- 顶部订单编号 + 产品名称 + 问题描述：独立于下方网格，宽度随内容自适应，不撑开列轨道 -->
 							<view class="grid-order-bar">
-								<text class="grid-order-bar-no">{{ group.orderNo }}</text>
-								<text class="grid-order-bar-product">{{ group.productName }}</text>
-								<!-- 问题描述：仅返工排产的产品有值，无值时不占位 -->
-								<text
-									v-if="group.problemDescription"
-									class="grid-order-bar-problem"
-								>问题描述：{{ group.problemDescription }}</text>
+								<view class="grid-order-bar-info">
+									<text class="grid-order-bar-no">{{ group.orderNo }}</text>
+									<text class="grid-order-bar-product">{{ group.productName }}</text>
+									<!-- 问题描述：仅返工排产的产品有值，无值时不占位 -->
+									<text
+										v-if="group.problemDescription"
+										class="grid-order-bar-problem"
+									>问题描述：{{ group.problemDescription }}</text>
+								</view>
+								<!-- 返工产品可恢复为正常工序；接口需要排产计划 rowid，点击后先由排产编号反查 -->
+								<view
+									v-if="dispatchTypeFilter === '返工'"
+									class="grid-order-bar-normal-btn"
+									:class="{ disabled: isUsingNormalProcess }"
+									@click.stop="useNormalProcess(group)"
+								>正常工序</view>
 							</view>
 							<view
 								class="process-table-grid"
@@ -852,7 +861,7 @@ import { buildDateEnumFilter } from '../../utils/dateFilter'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
-import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, PRE_DISPATCH_PROCESS_CONFIRM_URL, PRE_DISPATCH_PRODUCT_ADD_URL, ATTENDANCE_SUBMIT_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, OPERATE_PROCESS_SYNC_URL, POSITION_PROCESS_SELECT_URL, POSITION_PROCESS_DELETE_URL, SPRAY_PROCESS_EMPLOYEE_URL, getApiRequestBase } from '../../utils/api'
+import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, PRE_DISPATCH_PROCESS_CONFIRM_URL, PRE_DISPATCH_PRODUCT_ADD_URL, ATTENDANCE_SUBMIT_URL, USE_NORMAL_PROCESS_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, OPERATE_PROCESS_SYNC_URL, POSITION_PROCESS_SELECT_URL, POSITION_PROCESS_DELETE_URL, SPRAY_PROCESS_EMPLOYEE_URL, getApiRequestBase } from '../../utils/api'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -1113,6 +1122,8 @@ const chineseNumberMap = (() => {
 	return map
 })()
 const processList = ref([])
+// 使用正常工序请求锁：查询排产计划与提交接口期间禁止重复点击
+const isUsingNormalProcess = ref(false)
 const loadedProductIds = ref([])
 const selectedProcessIds = ref([])
 // 记录产品列表的排列顺序（首次加载产品列表时记录），用于工序列表按此顺序排列
@@ -1228,6 +1239,17 @@ const PROCESS_DETAIL_FIELD_MAP = {
 	// 源为已有的一对多关联 688c366082289045da815f96（→ 排产计划），取其「问题描述」字段。
 	// 仅返工排产的关联行有值（全表约 574 行有值）；同一产品的各工序行取值一致，标题行只取一条。
 	problemDescription: '6aaf4ebf3c1a1cdddc5894fb',
+	// 排产编号：用于反查排产计划 rowid（使用正常工序接口需要 billRowid）
+	scheduleCode: '69cb73ee3b5e707f84de06f6',
+}
+
+// 排产计划表：使用正常工序接口的 billRowid 即该表记录 rowid
+const SCHEDULE_PLAN_WORKSHEET_ID = 'paichanjihua'
+const SCHEDULE_PLAN_FIELD_MAP = {
+	workshop: '67de26c9c5377d50a523c735',
+	scheduleType: '694a3954687045435008a7c3',
+	scheduleCode: '69cb5ea03b5e707f84ddefa0',
+	productionCode: '698438933b5e707f84cf51fd'
 }
 
 const EMPLOYEE_WORKSHEET_ID = 'yggs'
@@ -2624,6 +2646,104 @@ const refreshProcessList = async (productRowid) => {
 	uni.showToast({ title: '刷新成功', icon: 'success' })
 }
 
+// 由工序明细上的排产编号精确反查返工排产计划，返回接口需要的排产计划 rowid
+const getReworkSchedulePlanRowid = async (product, scheduleCode) => {
+	if (!product?.productionCode) throw new Error('缺少生产编号，无法确定排产计划')
+	if (!loginWorkshop.value) throw new Error('登录车间不存在，无法确定排产计划')
+
+	const filters = [
+		{
+			controlId: SCHEDULE_PLAN_FIELD_MAP.scheduleCode,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: [scheduleCode]
+		},
+		{
+			controlId: SCHEDULE_PLAN_FIELD_MAP.scheduleType,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: ['返工排产']
+		},
+		{
+			controlId: SCHEDULE_PLAN_FIELD_MAP.productionCode,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: [product.productionCode]
+		},
+		{
+			controlId: SCHEDULE_PLAN_FIELD_MAP.workshop,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: [loginWorkshop.value]
+		}
+	]
+
+	const res = await callWorkflowListAll({
+		worksheetId: SCHEDULE_PLAN_WORKSHEET_ID,
+		filters,
+		silent: true
+	}, 100)
+	const rows = Array.isArray(res?.data) ? res.data : []
+
+	if (rows.length === 0) throw new Error('未找到排产计划')
+	if (rows.length > 1) throw new Error('排产计划不唯一，禁止使用正常工序')
+
+	const billRowid = rows[0]?.rowid || ''
+	if (!billRowid) throw new Error('排产计划缺少rowid')
+	return billRowid
+}
+
+// 返工产品恢复正常工序：先锁定排产计划 rowid，再调用正式派工页同一个后端 hook
+const useNormalProcess = async (group) => {
+	if (dispatchTypeFilter.value !== '返工' || isUsingNormalProcess.value) return
+
+	isUsingNormalProcess.value = true
+	let loadingVisible = true
+	const closeLoading = () => {
+		if (loadingVisible) {
+			uni.hideLoading()
+			loadingVisible = false
+		}
+	}
+
+	try {
+		const product = productList.value.find(item => item.uniqueKey === group.productRowid)
+		if (!product) throw new Error('未找到产品')
+
+		const scheduleCodes = [...new Set(
+			processList.value
+				.filter(item => item.productRowid === group.productRowid)
+				.map(item => String(item.scheduleCode || '').trim())
+				.filter(Boolean)
+		)]
+
+		if (scheduleCodes.length === 0) throw new Error('缺少排产编号，无法使用正常工序')
+		if (scheduleCodes.length > 1) throw new Error('当前产品存在多个排产编号，无法确定排产计划')
+
+		uni.showLoading({ title: '处理中...', mask: true })
+		const billRowid = await getReworkSchedulePlanRowid(product, scheduleCodes[0])
+		// 明道云 hook 成功失败均返回 status:1，不能据此判断；HTTP 非 2xx 会进入 catch
+		await http.post(USE_NORMAL_PROCESS_URL, { billRowid })
+		closeLoading()
+
+		uni.showToast({ title: '操作成功', icon: 'success' })
+		// 与正式派工页保持同样的缓冲时间，等待后端工序数据落定后刷新当前页
+		await new Promise(resolve => setTimeout(resolve, 1000))
+		await refreshProductsAndProcesses(false)
+	} catch (error) {
+		closeLoading()
+		console.error('使用正常工序失败:', error)
+		uni.showToast({ title: error.message || '操作失败：未知错误', icon: 'none' })
+	} finally {
+		closeLoading()
+		isUsingNormalProcess.value = false
+	}
+}
+
 const handleProcessListConfirm = async (productRowid) => {
 	// 获取该产品下勾选的工序
 	const checkedProcesses = processList.value.filter(p => p.productRowid === productRowid && selectedProcessIds.value.includes(p.rowid))
@@ -3573,6 +3693,7 @@ const loadProductProcesses = async (product) => {
 				isNewProcess,
 				dispatchCount: associatedInfo.dispatchCount,
 				dispatchType: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.dispatchType]) || '',
+				scheduleCode: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.scheduleCode]) || '',
 				// 问题描述：他表字段由排产计划带出，仅返工排产的行有值
 				problemDescription: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.problemDescription]) || ''
 			}
@@ -6598,9 +6719,16 @@ onShow(refreshPageOnShow)
 						border-bottom: 1px solid #999;
 						display: flex;
 						align-items: center;
-						justify-content: center;
-						gap: px2vw(24px);
 						white-space: nowrap;
+
+						.grid-order-bar-info {
+							flex: 1;
+							min-width: 0;
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							gap: px2vw(24px);
+						}
 
 						.grid-order-bar-product {
 							font-weight: bold;
@@ -6617,6 +6745,26 @@ onShow(refreshPageOnShow)
 							text-overflow: ellipsis;
 							white-space: nowrap;
 							vertical-align: bottom;
+						}
+
+						// 固定在标题栏右侧，避免挤占左侧竖排操作按钮区
+						.grid-order-bar-normal-btn {
+							flex-shrink: 0;
+							margin-left: px2vw(12px);
+							padding: 0 px2vw(12px);
+							height: px2vw(30px);
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							border-radius: px2vw(6px);
+							background-color: #5884f1;
+							color: #fff;
+							font-size: px2vw(22px);
+							font-weight: normal;
+
+							&.disabled {
+								background-color: #999;
+							}
 						}
 					}
 				}
