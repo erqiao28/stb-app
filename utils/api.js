@@ -97,8 +97,6 @@ export const DISPATCH_ONE_TO_MANY_URL = apiUrl('/api/workflow/hooks/NjljMGRhMjAw
 /** 订单派工 / 产品派工：主派工提交（含合并并发请求） */
 export const DISPATCH_PROCESS_URL = apiUrl('/api/workflow/hooks/NjkyMTJlNzdhOWE4ZGM2YmMxZjczYzlk')
 
-/** 返工完成回调 */
-export const REWORK_COMPLETE_URL = apiUrl('/api/workflow/hooks/NjljY2I3ZTEzMzBiMjAyNjg5ODQ1YTYx')
 
 /** 合并工序 / 返工开始 */
 export const REWORK_START_URL = apiUrl('/api/workflow/hooks/NjljY2MzYjEzMzBiMjAyNjg5ODY0NDg4')

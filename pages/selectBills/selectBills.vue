@@ -215,7 +215,17 @@ const buildQueryPayload = (extra = {}) => ({
 			dataType: 30,
 			spliceType: 1,
 			filterType: 8
-		}
+		},
+		// 返工排产：排除返工进度=已完成（已移到接口层过滤）
+		...(billTypeOptions[billTypeIndex.value] === '返工排产'
+			? [{
+				controlId: '69ccb3e7665ab27f39105da2',
+				dataType: 30,
+				spliceType: 1,
+				filterType: 6,
+				values: ['已完成']
+			}]
+			: [])
 	],
 	...extra
 })
@@ -253,17 +263,11 @@ const buildDisplayListFromRawRows = (rawRows) => {
 	}
 
 	// 正常排产：69a8e4563b5e707f84d33c0c（未完成工序数量）需大于 0
-	// 返工排产：不用数量>0；按 69ccb3e7665ab27f39105da2 返工进度，排除「已完成」
-	const FIELD_REWORK_PROGRESS = '69ccb3e7665ab27f39105da2'
+	// 返工排产：已在接口层按 69ccb3e7665ab27f39105da2 返工进度排除「已完成」，此处不再过滤
 	const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
-	const isReworkProgressCompleted = (item) => {
-		const raw = item[FIELD_REWORK_PROGRESS]
-		const p = raw == null ? '' : String(raw).trim()
-		return p === '已完成'
-	}
 	const filteredData = rawRows.filter(item => {
 		if (billTypeOptions[billTypeIndex.value] === '返工排产') {
-			return !isReworkProgressCompleted(item)
+			return true
 		}
 		const num = Number(item[FIELD_INCOMPLETE_PROCESS_QTY])
 		return !Number.isNaN(num) && num > 0

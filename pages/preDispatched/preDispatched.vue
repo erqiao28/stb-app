@@ -253,6 +253,12 @@
 								<view class="grid-order-bar-info">
 									<text class="grid-order-bar-no">{{ group.orderNo }}</text>
 									<text class="grid-order-bar-product">{{ group.productName }}</text>
+									<!-- 合并工序放在问题描述左侧，避免继续挤占下方竖排按钮列 -->
+									<view
+										v-if="dispatchTypeFilter === '返工' && group.reworkProgress !== '已完成'"
+										class="grid-order-bar-merge-btn"
+										@click.stop="openMergeProcessModal(group)"
+									>合并工序</view>
 									<!-- 问题描述：仅返工排产的产品有值，无值时不占位 -->
 									<text
 										v-if="group.problemDescription"
@@ -850,6 +856,14 @@
 			</view>
 		</view>
 	</view>
+
+	<!-- 合并工序：共用正式派工页弹窗，提交时由本页反查返工排产计划 rowid -->
+	<MergeProcessModal
+		v-model:visible="showMergeProcessModal"
+		:production-code="mergeProcessTarget?.productionCode || ''"
+		:workshop="loginWorkshop"
+		@confirm="confirmMergeProcess"
+	/>
 </view>
 </template>
 
@@ -861,7 +875,8 @@ import { buildDateEnumFilter } from '../../utils/dateFilter'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
-import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, PRE_DISPATCH_PROCESS_CONFIRM_URL, PRE_DISPATCH_PRODUCT_ADD_URL, ATTENDANCE_SUBMIT_URL, USE_NORMAL_PROCESS_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, OPERATE_PROCESS_SYNC_URL, POSITION_PROCESS_SELECT_URL, POSITION_PROCESS_DELETE_URL, SPRAY_PROCESS_EMPLOYEE_URL, getApiRequestBase } from '../../utils/api'
+import MergeProcessModal from '../../component/mergeProcessModal/mergeProcessModal.vue'
+import { PRE_DISPATCH_VOID_URL, PRE_DISPATCH_UPDATE_URL, PRE_DISPATCH_CONFIRM_URL, PRE_DISPATCH_PROCESS_CONFIRM_URL, PRE_DISPATCH_PRODUCT_ADD_URL, ATTENDANCE_SUBMIT_URL, USE_NORMAL_PROCESS_URL, REWORK_START_URL, DELETE_PROCESS_URL, OPERATE_PROCESS_URL, OPERATE_PROCESS_SYNC_URL, POSITION_PROCESS_SELECT_URL, POSITION_PROCESS_DELETE_URL, SPRAY_PROCESS_EMPLOYEE_URL, getApiRequestBase } from '../../utils/api'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -919,7 +934,9 @@ const PRE_DISPATCH_FIELD_MAP = {
 	productDeliveryDate: '6a1e7d2c27514927ff33e56b',
 	status: '6a1e49c427514927ff33ccf5',
 	// 派工类型：正常派工/返工派工（仅随数据获取，不参与渲染）
-	dispatchType: '6aacce023c1a1cdddc57324d'
+	dispatchType: '6aacce023c1a1cdddc57324d',
+	// 排产编号：HAP 侧新增的他表字段（源为排产计划），合并工序/使用正常工序直接依赖，无需反查
+	scheduleCode: '6adf273e812c34dbc6d0692b'
 }
 
 const DAILY_WAGE_WORKSHEET_ID = '692112b021066a9f124f5c9f'
@@ -1249,7 +1266,9 @@ const SCHEDULE_PLAN_FIELD_MAP = {
 	workshop: '67de26c9c5377d50a523c735',
 	scheduleType: '694a3954687045435008a7c3',
 	scheduleCode: '69cb5ea03b5e707f84ddefa0',
-	productionCode: '698438933b5e707f84cf51fd'
+	productionCode: '698438933b5e707f84cf51fd',
+	// 返工进度：工序排产明细上没有该字段，需从排产计划（他表）带出，用于控制合并工序按钮显隐
+	reworkProgress: '69ccb3e7665ab27f39105da2'
 }
 
 const EMPLOYEE_WORKSHEET_ID = 'yggs'
@@ -1884,7 +1903,10 @@ const mapPreDispatchRow = (item) => ({
 	materialSizeSpec: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.materialSizeSpec]),
 	productDeliveryDate: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.productDeliveryDate]) || '',
 	status: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.status]) || '',
-	dispatchType: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.dispatchType]) || ''
+	dispatchType: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.dispatchType]) || '',
+	scheduleCode: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.scheduleCode]) || '',
+	// 预派工记录上的排产编号（他表字段）优先，反查结果兜底
+	planScheduleCode: formatFieldValue(item[PRE_DISPATCH_FIELD_MAP.scheduleCode]) || ''
 })
 
 /** 加载工艺岗位字典（用于 craftPosition ID 转名称） */
@@ -2159,7 +2181,17 @@ const loadAddProductList = async () => {
 				dataType: 30,
 				spliceType: 1,
 				filterType: 8
-			}
+			},
+			// 返工排产：排除返工进度=已完成（与选择订单/选择产品、正式派工页同一口径）
+			...(scheduleTypeFilterValue.value === '返工排产'
+				? [{
+					controlId: '69ccb3e7665ab27f39105da2',
+					dataType: 30,
+					spliceType: 1,
+					filterType: 6,
+					values: ['已完成']
+				}]
+				: [])
 		]
 		// 未完成工序数量的判断口径：
 		//   工序排产明细不为空 → 要求 未完成工序数量 > 0（只取还有未完成工序的产品）
@@ -2646,8 +2678,8 @@ const refreshProcessList = async (productRowid) => {
 	uni.showToast({ title: '刷新成功', icon: 'success' })
 }
 
-// 由工序明细上的排产编号精确反查返工排产计划，返回接口需要的排产计划 rowid
-const getReworkSchedulePlanRowid = async (product, scheduleCode) => {
+// 由工序明细上的排产编号精确反查返工排产计划，返回整条计划行（调用方各自取 rowid/返工进度等字段）
+const getReworkSchedulePlanRow = async (product, scheduleCode) => {
 	if (!product?.productionCode) throw new Error('缺少生产编号，无法确定排产计划')
 	if (!loginWorkshop.value) throw new Error('登录车间不存在，无法确定排产计划')
 
@@ -2692,9 +2724,168 @@ const getReworkSchedulePlanRowid = async (product, scheduleCode) => {
 	if (rows.length === 0) throw new Error('未找到排产计划')
 	if (rows.length > 1) throw new Error('排产计划不唯一，禁止使用正常工序')
 
-	const billRowid = rows[0]?.rowid || ''
+	return rows[0]
+}
+
+// 使用正常工序 / 合并工序提交均需要排产计划 rowid，这里做一层薄封装保持调用方简洁
+const getReworkSchedulePlanRowid = async (product, scheduleCode) => {
+	const row = await getReworkSchedulePlanRow(product, scheduleCode)
+	const billRowid = row?.rowid || ''
 	if (!billRowid) throw new Error('排产计划缺少rowid')
 	return billRowid
+}
+
+// ---------- 合并工序：正式派工页同一个 hook，预派工侧由排产编号反查 billRowid ----------
+const showMergeProcessModal = ref(false)
+const mergeProcessTarget = ref(null)
+
+// 合并工序按钮显隐判断：返工模式下，返工进度=已完成的排产计划不允许再合并
+const isMergeProcessVisible = (group) => {
+	if (dispatchTypeFilter.value !== '返工') return false
+	return group?.reworkProgress !== '已完成'
+}
+
+// 返工模式下按排产编号批量反查排产计划的返工进度，回填到产品分组上（合并工序按钮显隐用）
+const fillProductsReworkProgress = async (scheduleCodes) => {
+	const codes = [...new Set((scheduleCodes || []).map(c => String(c || '').trim()).filter(Boolean))]
+	if (codes.length === 0 || !loginWorkshop.value) return
+	// 与上方预派工产品查询同口径：按登录车间 + 排产类型 + 排产编号过滤排产计划
+	const filters = [
+		{
+			controlId: SCHEDULE_PLAN_FIELD_MAP.workshop,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: [loginWorkshop.value]
+		},
+		{
+			controlId: SCHEDULE_PLAN_FIELD_MAP.scheduleType,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: ['返工排产']
+		},
+		{
+			controlId: SCHEDULE_PLAN_FIELD_MAP.scheduleCode,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: codes
+		}
+	]
+	try {
+		const res = await callWorkflowListAll({
+			worksheetId: SCHEDULE_PLAN_WORKSHEET_ID,
+			filters,
+			silent: true
+		}, 100)
+		const rows = Array.isArray(res?.data) ? res.data : []
+		// 排产编号 → 排产计划行（取返工进度/编号本身），供产品分组回填
+		const planRowMap = new Map()
+		rows.forEach(row => {
+			const code = formatFieldValue(row[SCHEDULE_PLAN_FIELD_MAP.scheduleCode])
+			if (code) planRowMap.set(code, row)
+		})
+		productList.value.forEach(product => {
+			// 工序行上排产编号为空（返工工序尚未排产）时，按「登录车间 + 排产类型=返工排产 + 生产编号」
+			// 反查排产计划兜底取编号；已带出的沿用原值
+			let planCode = ''
+			const ownProcesses = processList.value.filter(p => p.productRowid === product.uniqueKey)
+			for (const p of ownProcesses) {
+				const code = String(p.scheduleCode || '').trim()
+				if (code && planRowMap.has(code)) { planCode = code; break }
+			}
+			if (!planCode) {
+				const hit = planRowMap.size === 1
+					? [...planRowMap.values()][0]
+					: [...planRowMap.values()].find(row =>
+						formatFieldValue(row[SCHEDULE_PLAN_FIELD_MAP.productionCode]) === product.productionCode)
+				planCode = hit ? formatFieldValue(hit[SCHEDULE_PLAN_FIELD_MAP.scheduleCode]) : ''
+			}
+			if (planCode) {
+				product.planScheduleCode = planCode
+				const row = planRowMap.get(planCode)
+				product.reworkProgress = formatFieldValue(row?.[SCHEDULE_PLAN_FIELD_MAP.reworkProgress]) || ''
+			}
+		})
+	} catch (e) {
+		console.error('回填返工进度失败:', e)
+	}
+}
+
+const openMergeProcessModal = (group) => {
+	if (!isMergeProcessVisible(group)) return
+	mergeProcessTarget.value = group
+	showMergeProcessModal.value = true
+}
+
+const closeMergeProcessModal = () => {
+	showMergeProcessModal.value = false
+	mergeProcessTarget.value = null
+}
+
+const confirmMergeProcess = async (selectedProcess) => {
+	const group = mergeProcessTarget.value
+	if (!group) return
+
+	const product = productList.value.find(item => item.uniqueKey === group.productRowid)
+	if (!product) {
+		uni.showToast({ title: '未找到产品', icon: 'none' })
+		return
+	}
+
+	const scheduleCodes = [...new Set(
+		processList.value
+			.filter(item => item.productRowid === group.productRowid)
+			.map(item => String(item.scheduleCode || '').trim())
+			.filter(Boolean)
+	)]
+	// 返工工序可能一条都没排产（主管手动加明细），工序行没有排产编号，用分组上反查排产计划回填的编号兜底
+	const mergedCodes = [...new Set([...scheduleCodes, String(group.planScheduleCode || '').trim()].filter(Boolean))]
+	if (mergedCodes.length === 0) {
+		uni.showToast({ title: '缺少排产编号，无法合并工序', icon: 'none' })
+		return
+	}
+	if (mergedCodes.length > 1) {
+		uni.showToast({ title: '当前产品存在多个排产编号，无法确定排产计划', icon: 'none' })
+		return
+	}
+
+	let loadingVisible = true
+	const closeLoading = () => {
+		if (loadingVisible) {
+			uni.hideLoading()
+			loadingVisible = false
+		}
+	}
+
+	try {
+		uni.showLoading({ title: '提交中...', mask: true })
+		const billRowid = await getReworkSchedulePlanRowid(product, mergedCodes[0])
+		await http.post(REWORK_START_URL, {
+			billRowid,
+			orderCode: product.orderNo || '',
+			productionCode: product.productionCode || '',
+			workshop: loginWorkshop.value || '',
+			billType: '返工排产',
+			loginCode: userStore.loginCode || '',
+			mergeProcessRowid: selectedProcess.rowid,
+			mergeProcessName: selectedProcess.processName
+		})
+		closeLoading()
+
+		uni.showToast({ title: '提交成功' })
+		closeMergeProcessModal()
+		// 等待后端把返工与正常工序关系写入后，再刷新当前筛选下的产品与工序缓存
+		await new Promise(resolve => setTimeout(resolve, 1000))
+		await refreshProductsAndProcesses(false)
+	} catch (error) {
+		closeLoading()
+		console.error('合并工序提交失败:', error)
+		uni.showToast({ title: error.message || '提交失败：未知错误', icon: 'none' })
+	} finally {
+		closeLoading()
+	}
 }
 
 // 返工产品恢复正常工序：先锁定排产计划 rowid，再调用正式派工页同一个后端 hook
@@ -2721,11 +2912,13 @@ const useNormalProcess = async (group) => {
 				.filter(Boolean)
 		)]
 
-		if (scheduleCodes.length === 0) throw new Error('缺少排产编号，无法使用正常工序')
-		if (scheduleCodes.length > 1) throw new Error('当前产品存在多个排产编号，无法确定排产计划')
+		// 与合并工序同理：返工工序未排产时用分组上反查排产计划回填的编号兜底
+		const mergedCodes = [...new Set([...scheduleCodes, String(group.planScheduleCode || '').trim()].filter(Boolean))]
+		if (mergedCodes.length === 0) throw new Error('缺少排产编号，无法使用正常工序')
+		if (mergedCodes.length > 1) throw new Error('当前产品存在多个排产编号，无法确定排产计划')
 
 		uni.showLoading({ title: '处理中...', mask: true })
-		const billRowid = await getReworkSchedulePlanRowid(product, scheduleCodes[0])
+		const billRowid = await getReworkSchedulePlanRowid(product, mergedCodes[0])
 		// 明道云 hook 成功失败均返回 status:1，不能据此判断；HTTP 非 2xx 会进入 catch
 		await http.post(USE_NORMAL_PROCESS_URL, { billRowid })
 		closeLoading()
@@ -2958,7 +3151,8 @@ const doConfirmDispatch = async () => {
 	try {
 		uni.showLoading({ title: '确认中...' })
 		await http.post(PRE_DISPATCH_CONFIRM_URL, {
-			rowids: [...new Set(confirmDispatchRowids.value)]
+			rowids: [...new Set(confirmDispatchRowids.value)],
+			dispatchType: dispatchTypeFilterValue.value
 		})
 		uni.hideLoading()
 		uni.showToast({ title: '确认派工成功', icon: 'success' })
@@ -3088,7 +3282,7 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 			pageNum++
 		}
 
-		let mapped = raw.map(mapPreDispatchRow)
+		let mapped = raw.map(item => ({ ...mapPreDispatchRow(item), reworkProgress: '' }))
 
 		if (filterCraft.value.trim()) {
 			const keyword = filterCraft.value.trim().toLowerCase()
@@ -3169,6 +3363,19 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 		})
 		// 产品列表刷新后，清理列表中已不存在的选中项，避免标题计数异常（如列表为空仍显示 (2/0)）
 		selectedProductIds.value = selectedProductIds.value.filter(id => productList.value.some(p => p.uniqueKey === id))
+
+		// 返工模式：工序排产明细上没有返工进度字段，按钮显隐需要排产计划值，
+		// 这里按排产编号批量反查后回填到产品分组上，回填完成由响应式更新按钮显隐，不阻塞首屏
+		if (dispatchTypeFilter.value === '返工') {
+			const codes = [...new Set(
+				processList.value
+					.map(p => String(p.scheduleCode || '').trim())
+					.filter(Boolean)
+			)]
+			if (codes.length > 0) {
+			void fillProductsReworkProgress(codes)
+			}
+		}
 	} catch (e) {
 		if (seq !== loadProductsSeq) return
 		console.error('加载产品失败:', e)
@@ -3614,6 +3821,47 @@ const loadProductProcesses = async (product) => {
 	// 先标记为已加载，阻止并发请求；加载失败时会移除标记
 	loadedProductIds.value.push(product.uniqueKey)
 
+	// 返工模式：预派工记录上没有排产编号，先按「登录车间 + 排产类型=返工排产 + 生产编号」
+	// 反查该产品的返工排产计划编号集合，工序查询据此过滤——直接筛「派工类型=返工派工」
+	// 会漏掉新建返工计划后尚未派工的工序（派工类型仍为空），导致合并工序/使用正常工序报缺少排产编号
+	let reworkScheduleCodes = []
+	if (dispatchTypeFilter.value === '返工') {
+		try {
+			const planRes = await callWorkflowListAll({
+				worksheetId: SCHEDULE_PLAN_WORKSHEET_ID,
+				filters: [
+					{
+						controlId: SCHEDULE_PLAN_FIELD_MAP.workshop,
+						dataType: 30,
+						spliceType: 1,
+						filterType: 2,
+						values: [loginWorkshop.value]
+					},
+					{
+						controlId: SCHEDULE_PLAN_FIELD_MAP.scheduleType,
+						dataType: 30,
+						spliceType: 1,
+						filterType: 2,
+						values: ['返工排产']
+					},
+					{
+						controlId: SCHEDULE_PLAN_FIELD_MAP.productionCode,
+						dataType: 30,
+						spliceType: 1,
+						filterType: 2,
+						values: [productionCode]
+					}
+				],
+				silent: true
+			}, 100)
+			reworkScheduleCodes = (Array.isArray(planRes?.data) ? planRes.data : [])
+				.map(row => formatFieldValue(row[SCHEDULE_PLAN_FIELD_MAP.scheduleCode]))
+				.filter(Boolean)
+		} catch (e) {
+			console.error('查询返工排产计划编号失败:', e)
+		}
+	}
+
 	// 记录当前产品的旧工序 rowid，刷新后只清理该产品的选中状态，不影响其他产品
 	const oldProductProcessRowids = new Set(
 		processList.value.filter(p => p.productRowid === product.uniqueKey).map(p => p.rowid)
@@ -3640,14 +3888,26 @@ const loadProductProcesses = async (product) => {
 				values: [loginWorkshop.value]
 			})
 		}
-		// 派工类型筛选（正常派工/返工派工），与顶部正常/返工下拉联动
-		filters.push({
-			controlId: PROCESS_DETAIL_FIELD_MAP.dispatchType,
-			dataType: 30,
-			spliceType: 1,
-			filterType: 2,
-			values: [dispatchTypeFilterValue.value]
-		})
+		if (dispatchTypeFilter.value === '返工') {
+			// 返工模式：按上面反查出的返工排产计划编号过滤工序。
+			// 不用「派工类型=返工派工」筛选——返工工序在首次派工前派工类型仍为空会被漏掉
+			filters.push({
+				controlId: PROCESS_DETAIL_FIELD_MAP.scheduleCode,
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: reworkScheduleCodes
+			})
+		} else {
+			// 正常模式：与顶部正常/返工下拉联动，只取正常派工工序
+			filters.push({
+				controlId: PROCESS_DETAIL_FIELD_MAP.dispatchType,
+				dataType: 30,
+				spliceType: 1,
+				filterType: 2,
+				values: [dispatchTypeFilterValue.value]
+			})
+		}
 		const res = await callWorkflowListAll({
 			worksheetId: PROCESS_DETAIL_WORKSHEET_ID,
 			filters,
@@ -3669,6 +3929,7 @@ const loadProductProcesses = async (product) => {
 			return {
 				rowid: item.rowid || '',
 				productRowid: product.uniqueKey,
+				productionCode: product.productionCode || '',
 				productName: product.productNameNew || product.productName || '-',
 				sequence: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.sequence]),
 				processName: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.processName]),
@@ -3693,7 +3954,9 @@ const loadProductProcesses = async (product) => {
 				isNewProcess,
 				dispatchCount: associatedInfo.dispatchCount,
 				dispatchType: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.dispatchType]) || '',
-				scheduleCode: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.scheduleCode]) || '',
+				// 排产编号优先取工序行字段（主管已排产时带出），为空则由后续排产计划反查回填，
+				// 保证未排产的返工工序也能拿到编号去合并/使用正常工序
+				scheduleCode: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.scheduleCode]) || item.planScheduleCode || '',
 				// 问题描述：他表字段由排产计划带出，仅返工排产的行有值
 				problemDescription: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.problemDescription]) || ''
 			}
@@ -4268,9 +4531,13 @@ const groupedProcessList = computed(() => {
 		const problemDescProcess = processes.find(p => p.problemDescription)
 		groups.push({
 			productRowid: product.uniqueKey,
+			productionCode: product.productionCode || '',
 			productName: product.productNameNew || product.productName || '-',
 			orderNo: product.orderNo || '-',
 			problemDescription: problemDescProcess?.problemDescription || '',
+			// 返工进度跟随产品分组透传：工序明细无此字段，由下方按排产编号补齐排产计划值
+			reworkProgress: product.reworkProgress || '',
+			planScheduleCode: product.planScheduleCode || '',
 			processes
 		})
 	})
@@ -6726,7 +6993,7 @@ onShow(refreshPageOnShow)
 							min-width: 0;
 							display: flex;
 							align-items: center;
-							justify-content: center;
+							justify-content: flex-start;
 							gap: px2vw(24px);
 						}
 
@@ -6745,6 +7012,21 @@ onShow(refreshPageOnShow)
 							text-overflow: ellipsis;
 							white-space: nowrap;
 							vertical-align: bottom;
+						}
+
+						// 合并工序：放在标题信息流中、问题描述左侧，避免挤占下方按钮列
+						.grid-order-bar-merge-btn {
+							flex-shrink: 0;
+							padding: 0 px2vw(12px);
+							height: px2vw(30px);
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							border-radius: px2vw(6px);
+							background-color: #2e7d32;
+							color: #fff;
+							font-size: px2vw(22px);
+							font-weight: normal;
 						}
 
 						// 固定在标题栏右侧，避免挤占左侧竖排操作按钮区

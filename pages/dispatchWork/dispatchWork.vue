@@ -131,89 +131,13 @@
       </view>
     </view>
 
-    <!-- 返工完成 -->
-    <view class="rework-complete-modal" v-if="showReworkCompleteModal" @click.self="closeReworkCompleteModal">
-      <view class="rework-complete-content" @click.stop>
-        <view class="rework-complete-title">返工完成</view>
-        <view class="rework-complete-body">
-          <view class="rework-complete-row">
-            <text class="rework-complete-label">是否流转到下一个车间返工：</text>
-            <radio-group class="rework-complete-radio-group" @change="onReworkTransferRadioChange">
-              <label class="rework-complete-radio-label">
-                <radio value="yes" :checked="reworkTransferToNext" color="#5884f1" />是
-              </label>
-              <label class="rework-complete-radio-label">
-                <radio value="no" :checked="!reworkTransferToNext" color="#5884f1" />否
-              </label>
-            </radio-group>
-          </view>
-          <view class="rework-complete-row">
-            <text class="rework-complete-label">返工车间：</text>
-            <picker
-              mode="selector"
-              :range="workshopOptions"
-              :value="reworkCompleteWorkshopIndex"
-              :disabled="!reworkTransferToNext"
-              @change="onReworkCompleteWorkshopChange"
-            >
-              <view class="rework-complete-picker" :class="{ 'is-disabled': !reworkTransferToNext }">
-                {{ workshopOptions[reworkCompleteWorkshopIndex] || '请选择' }}
-              </view>
-            </picker>
-          </view>
-        </view>
-        <view class="rework-complete-footer">
-          <button class="btn-cancel" @click="closeReworkCompleteModal">取消</button>
-          <button class="btn-confirm" @click="confirmReworkComplete">确认</button>
-        </view>
-      </view>
-    </view>
-
-    <!-- 合并工序：按车间拉取工序字典（同添加工序页），多选后合并 -->
-    <view class="rework-start-modal" v-if="showReworkStartModal" @click.self="closeReworkStartModal">
-      <view class="rework-start-content" @click.stop>
-        <view class="rework-start-title">合并工序</view>
-        <view class="merge-process-search">
-          <input
-            class="merge-process-search-input"
-            type="text"
-            v-model="mergeProcessSearchValue"
-            placeholder="请输入工序名称"
-            @input="onMergeProcessSearchInput"
-          />
-        </view>
-        <!-- 列表区单独 flex 收缩，避免 scroll-view 盖住底部按钮 -->
-        <view class="merge-process-list-wrap">
-          <scroll-view
-            scroll-y
-            class="merge-process-scroll"
-            :lower-threshold="50"
-            @scrolltolower="loadMoreMergeProcess"
-          >
-            <view
-              v-for="p in mergeProcessTableData"
-              :key="p.rowid || p.processName"
-              class="merge-process-row"
-              :class="{ selected: isMergeProcessSelected(p.rowid) }"
-              @click="toggleMergeProcessSelect(p)"
-            >
-              <view class="merge-process-check">{{ isMergeProcessSelected(p.rowid) ? '✓' : '' }}</view>
-              <text class="merge-process-name">{{ p.processName || '-' }}</text>
-            </view>
-            <view v-if="mergeProcessLoading && mergeProcessTableData.length === 0" class="merge-process-tip">加载中...</view>
-            <view v-else-if="!mergeProcessLoading && mergeProcessTableData.length === 0" class="merge-process-tip">暂无工序</view>
-            <view v-if="mergeProcessLoading && mergeProcessTableData.length > 0" class="merge-process-tip">加载中...</view>
-            <view v-if="!mergeProcessHasMore && mergeProcessTableData.length > 0" class="merge-process-tip">没有更多了</view>
-          </scroll-view>
-        </view>
-        <view class="merge-process-footer-bar">
-          <view class="rework-start-footer">
-            <button class="btn-cancel" @click="closeReworkStartModal">取消</button>
-            <button class="btn-merge" @click="confirmReworkStart">合并</button>
-          </view>
-        </view>
-      </view>
-    </view>
+    <!-- 合并工序：共用弹窗负责查询/选择，本页只负责提交当前返工单据 -->
+    <MergeProcessModal
+      v-model:visible="showReworkStartModal"
+      :production-code="reworkStartItem?.productionCode || ''"
+      :workshop="workshop"
+      @confirm="confirmReworkStart"
+    />
 
     <!-- 一对多派工模态框（多工序，每工序独立派工数量） -->
     <view class="process-modal" v-if="showOneToManyModal" @click.self="closeOneToManyModal">
@@ -794,7 +718,7 @@
             <view class="buttons">
               <button
                 class="btn-first-check"
-                v-if="(workshop === '拉伸车间' || workshop === '组装车间') && item.billType === '正常排产' && isFirstCheckPending(item)"
+                v-if="FIRST_CHECK_REMIND_ENABLED && (workshop === '拉伸车间' || workshop === '组装车间') && item.billType === '正常排产' && isFirstCheckPending(item)"
                 @click="sendFirstCheckReminder(item)"
               >首检提醒</button>
               <block v-if="item.billType !== '返工排产'">
@@ -804,18 +728,12 @@
               </block>
               <view
                 class="rework-btns-wrap"
-                v-if="isReworkProgressPendingForCompleteBtn(item) || isReworkMergeProcessBtn(item)"
+                v-if="isReworkMergeProcessBtn(item)"
               >
                 <button
                   class="btn-rework-start"
-                  v-if="isReworkMergeProcessBtn(item)"
                   @click="openReworkStartModal(item)"
                 >合并工序</button>
-                <button
-                  class="btn-rework-complete"
-                  v-if="isReworkProgressPendingForCompleteBtn(item)"
-                  @click="openReworkCompleteModal(item)"
-                >返工完成</button>
               </view>
               <button class="btn-detail" :disabled="!canClickDispatch(item)" @click.stop="dispatchWork(item)">操作</button>
               <button class="btn-delete" @click="addProcess(item)">添加工序</button>
@@ -1039,7 +957,6 @@ import {
   API_BASE,
   DISPATCH_ONE_TO_MANY_URL,
   DISPATCH_PROCESS_URL,
-  REWORK_COMPLETE_URL,
   REWORK_START_URL,
   FIRST_CHECK_REMIND_URL,
   TERMINATE_PROCESS_URL,
@@ -1049,7 +966,7 @@ import {
   BATCH_DISPATCH_URL,
   PRE_DISPATCH_ADD_URL,
 } from '../../utils/api'
-import { callWorkflowListAPIPaged } from '../../utils/workflow'
+import { callWorkflowListAPIPaged, callWorkflowListAll } from '../../utils/workflow'
 import { buildDateEnumFilter } from '../../utils/dateFilter'
 import {
   getPositionKeywordsForDispatch,
@@ -1061,6 +978,7 @@ import { useStatusBar } from '../../composables/useStatusBar'
 import Radiobox from "../../component/radiobox/radiobox.vue"
 import MachineRadiobox from "../../component/machineRadiobox/machineRadiobox.vue"
 import AddWorkerRadiobox from "../../component/addWorkerRadiobox/addWorkerRadiobox.vue"
+import MergeProcessModal from "../../component/mergeProcessModal/mergeProcessModal.vue"
 
 // ==================== Store和Composables ====================
 const userStore = useUserStore()
@@ -1398,19 +1316,6 @@ const terminateReason = ref('')
 // ---------- 删除工序确认模态 ----------
 const showDeleteConfirmModal = ref(false)
 
-// ---------- 返工完成模态 ----------
-const showReworkCompleteModal = ref(false)
-const reworkCompleteItem = ref(null)
-const reworkTransferToNext = ref(true)
-const reworkCompleteWorkshopIndex = ref(0)
-
-/** 返工进度 69ccb3e7665ab27f39105da2 为「未完成」时显示返工完成按钮（正常/返工排产均适用） */
-const isReworkProgressPendingForCompleteBtn = (item) => {
-  const raw = item?.reworkProgress
-  const p = raw == null ? '' : String(raw).trim()
-  return p === '未完成'
-}
-
 /** 69ccaf64665ab27f39105bed 是否合并：为 0 且排产类型为返工排产时显示「合并工序」 */
 const isReworkMergeProcessBtn = (item) => {
   if (item?.billType !== '返工排产') return false
@@ -1421,116 +1326,21 @@ const isReworkMergeProcessBtn = (item) => {
   return Number.isFinite(n) && n === 0
 }
 
-// ---------- 合并工序模态（按车间拉工序字典，同添加工序页 getProcessList） ----------
+// ---------- 合并工序模态 ----------
 const showReworkStartModal = ref(false)
 const reworkStartItem = ref(null)
-const mergeProcessTableData = ref([])
-const mergeProcessLoading = ref(false)
-const mergeProcessPage = ref(1)
-const mergeProcessPageSize = ref(10)
-const mergeProcessHasMore = ref(true)
-const mergeProcessSearchValue = ref('')
-const selectedMergeRowids = ref([])
-
-const fetchMergeProcessList = async (pageNum, isRefresh = false) => {
-  if (mergeProcessLoading.value) return
-  const ws = workshop.value || ''
-  if (!ws) {
-    uni.showToast({ title: '未选择车间', icon: 'none' })
-    return
-  }
-  mergeProcessLoading.value = true
-  const baseFilters = [
-    { controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
-    { controlId: '66b07c4a965ba588586ec783', dataType: 30, spliceType: 1, filterType: 2, values: ['三级'] },
-    { controlId: '691e8522d50c894e2e798d03', dataType: 30, spliceType: 1, filterType: 2, values: [ws] },
-    { controlId: '6a324e7d6d70ffabc66cbe5f', dataType: 30, spliceType: 1, filterType: 2, values: ['1'] }
-  ]
-  let filters = [...baseFilters]
-  const nameSearch = mergeProcessSearchValue.value.trim()
-  if (nameSearch) {
-    filters.push({
-      controlId: '6614b6721103c1d5d3a08122',
-      dataType: 30,
-      spliceType: 1,
-      filterType: 1,
-      values: [nameSearch]
-    })
-  }
-  const params = {
-    worksheetId: 'shujuzidian',
-    filters,
-    silent: true
-  }
-  try {
-    const res = await callWorkflowListAPIPaged(params, mergeProcessPageSize.value, pageNum)
-    let mapped = (res.data || []).map((item) => ({
-      processName: item['Name'],
-      rowid: item['rowid'] || ''
-    }))
-    if (isRefresh) {
-      mergeProcessTableData.value = mapped
-    } else {
-      mergeProcessTableData.value = [...mergeProcessTableData.value, ...mapped]
-    }
-    mergeProcessPage.value = pageNum
-    mergeProcessHasMore.value =
-      mapped.length === mergeProcessPageSize.value && res.total > mergeProcessTableData.value.length
-  } catch (e) {
-    console.error('合并工序-加载工序列表失败:', e)
-    if (isRefresh) mergeProcessTableData.value = []
-    mergeProcessHasMore.value = false
-    uni.showToast({ title: '加载工序失败', icon: 'none' })
-  } finally {
-    mergeProcessLoading.value = false
-  }
-}
-
-const loadMoreMergeProcess = () => {
-  if (!mergeProcessHasMore.value || mergeProcessLoading.value) return
-  fetchMergeProcessList(mergeProcessPage.value + 1, false)
-}
-
-const onMergeProcessSearchInput = () => {
-  mergeProcessPage.value = 1
-  mergeProcessHasMore.value = true
-  fetchMergeProcessList(1, true)
-}
-
-const toggleMergeProcessSelect = (p) => {
-  const id = p.rowid
-  if (!id) return
-  const arr = [...selectedMergeRowids.value]
-  const i = arr.indexOf(id)
-  if (i >= 0) arr.splice(i, 1)
-  else arr.push(id)
-  selectedMergeRowids.value = arr
-}
-
-const isMergeProcessSelected = (rowid) => !!rowid && selectedMergeRowids.value.includes(rowid)
 
 const openReworkStartModal = (item) => {
   reworkStartItem.value = item
-  mergeProcessSearchValue.value = ''
-  selectedMergeRowids.value = []
-  mergeProcessPage.value = 1
-  mergeProcessHasMore.value = true
-  mergeProcessTableData.value = []
   showReworkStartModal.value = true
-  fetchMergeProcessList(1, true)
 }
 
 const closeReworkStartModal = () => {
   showReworkStartModal.value = false
   reworkStartItem.value = null
-  mergeProcessTableData.value = []
-  mergeProcessSearchValue.value = ''
-  selectedMergeRowids.value = []
-  mergeProcessPage.value = 1
-  mergeProcessHasMore.value = true
 }
 
-/** 返工完成 / 合并工序 成功后：带当前筛选条件整页重进派工页 */
+/** 合并工序成功后：带当前筛选条件整页重进派工页 */
 const reloadDispatchWorkPage = () => {
   const parts = []
   if (billTypeFilter.value) {
@@ -1551,16 +1361,9 @@ const reloadDispatchWorkPage = () => {
   }, 400)
 }
 
-const confirmReworkStart = async () => {
+const confirmReworkStart = async (selectedProcess) => {
   const item = reworkStartItem.value
   if (!item) return
-  if (selectedMergeRowids.value.length === 0) {
-    uni.showToast({ title: '请选择要合并的工序', icon: 'none' })
-    return
-  }
-  const mergeProcessNames = mergeProcessTableData.value
-    .filter((p) => selectedMergeRowids.value.includes(p.rowid))
-    .map((p) => p.processName)
   const payload = {
     billRowid: item.billRowid || '',
     orderCode: item.orderCode || '',
@@ -1568,8 +1371,8 @@ const confirmReworkStart = async () => {
     workshop: workshop.value || '',
     billType: item.billType || '',
     loginCode: userStore.loginCode || '',
-    mergeProcessRowids: [...selectedMergeRowids.value],
-    mergeProcessNames
+    mergeProcessRowid: selectedProcess.rowid,
+    mergeProcessName: selectedProcess.processName
   }
 
   try {
@@ -1584,69 +1387,6 @@ const confirmReworkStart = async () => {
     reloadDispatchWorkPage()
   } catch (error) {
     console.error('合并工序提交失败:', error)
-    uni.showToast({ title: '提交失败：' + (error.message || '未知错误'), icon: 'none' })
-  }
-}
-
-const openReworkCompleteModal = (item) => {
-  reworkCompleteItem.value = item
-  reworkTransferToNext.value = true
-  reworkCompleteWorkshopIndex.value = 0
-  showReworkCompleteModal.value = true
-}
-
-const closeReworkCompleteModal = () => {
-  showReworkCompleteModal.value = false
-  reworkCompleteItem.value = null
-}
-
-const onReworkTransferRadioChange = (e) => {
-  reworkTransferToNext.value = e.detail.value === 'yes'
-}
-
-const onReworkCompleteWorkshopChange = (e) => {
-  const idx = Number(e.detail.value)
-  reworkCompleteWorkshopIndex.value = Number.isFinite(idx) ? idx : 0
-}
-
-const confirmReworkComplete = async () => {
-  const item = reworkCompleteItem.value
-  if (!item) return
-  if (reworkTransferToNext.value) {
-    const name = workshopOptions.value[reworkCompleteWorkshopIndex.value]
-    if (!name) {
-      uni.showToast({ title: '请选择返工车间', icon: 'none' })
-      return
-    }
-  }
-
-  const targetWorkshop = reworkTransferToNext.value
-    ? (workshopOptions.value[reworkCompleteWorkshopIndex.value] || '')
-    : ''
-
-  const payload = {
-    billRowid: item.billRowid || '',
-    orderCode: item.orderCode || '',
-    productionCode: item.productionCode || '',
-    workshop: workshop.value || '',
-    billType: item.billType || '',
-    transferToNextWorkshop: reworkTransferToNext.value,
-    targetWorkshop,
-    loginCode: userStore.loginCode || ''
-  }
-
-  try {
-    const resp = await http.post(REWORK_COMPLETE_URL, payload)
-    if (resp.status === 1) {
-      uni.showToast({ title: resp.message || resp.msg || '提交失败', icon: 'none' })
-      return
-    }
-    uni.showToast({ title: '提交成功' })
-    closeReworkCompleteModal()
-    await search()
-    reloadDispatchWorkPage()
-  } catch (error) {
-    console.error('返工完成提交失败:', error)
     uni.showToast({ title: '提交失败：' + (error.message || '未知错误'), icon: 'none' })
   }
 }
@@ -1984,6 +1724,9 @@ const canClickOneToManyDispatch = (item) => {
   return count >= 2
 }
 
+// 首检提醒入口暂时全量隐藏；保留原业务条件，后续恢复时只需改回 true。
+const FIRST_CHECK_REMIND_ENABLED = false
+
 // 是否首检为 0 时，才允许显示首检提醒按钮
 const isFirstCheckPending = (item) => {
   const raw = item?.isFirstCheck
@@ -2281,6 +2024,17 @@ const billPairKeyFromPaiChanRow = (row) => {
 const getBillsListRaw = async () => {
   const filters = []
 
+  // 返工排产：接口层排除返工进度=已完成，代替原先前端过滤
+  if (billTypeFilter.value === '返工排产') {
+    filters.push({
+      controlId: '69ccb3e7665ab27f39105da2',
+      dataType: 30,
+      spliceType: 1,
+      filterType: 6,
+      values: ['已完成']
+    })
+  }
+
   if (!craftProductMode.value) {
     filters.push({
       controlId: '67de26c9c5377d50a523c735',
@@ -2449,67 +2203,8 @@ const search = async () => {
 
   dbgDispatchProductList('单据接口原始条数', billsRes.data.length)
 
-  // 固定过滤：
-  // 1. 正常排产：69a8e4563b5e707f84d33c0c（未完成工序数量）需大于 0
-  // 2. 返工排产：不用数量>0；按 69ccb3e7665ab27f39105da2 返工进度排除「已完成」
-  const FIELD_REWORK_PROGRESS = '69ccb3e7665ab27f39105da2'
-  const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
-  const isReworkProgressCompleted = (row) => {
-    const raw = row[FIELD_REWORK_PROGRESS]
-    const p = raw == null ? '' : String(raw).trim()
-    return p === '已完成'
-  }
-  const filteredBillsData = billsRes.data.filter(item => {
-    if (billTypeFilter.value === '返工排产') {
-      return !isReworkProgressCompleted(item)
-    }
-    const num = Number(item[FIELD_INCOMPLETE_PROCESS_QTY])
-    return !Number.isNaN(num) && num > 0
-  })
-  console.log('[派工] 固定过滤后', {
-    before: billsRes.data.length,
-    after: filteredBillsData.length,
-    billType: billTypeFilter.value,
-  })
-
-  if (dispatchMode.value === 'product') {
-    const dropped = []
-    for (const item of billsRes.data) {
-      let reason = ''
-      if (billTypeFilter.value === '返工排产') {
-        if (isReworkProgressCompleted(item)) reason = '返工进度已完成'
-      } else {
-        const num = Number(item[FIELD_INCOMPLETE_PROCESS_QTY])
-        if (Number.isNaN(num) || num <= 0) {
-          reason = `未完成工序数量无效或≤0 raw=${item[FIELD_INCOMPLETE_PROCESS_QTY]}`
-        }
-      }
-      if (reason) {
-        dropped.push({
-          orderCode: item['655e1cbbbd2094b316347f92'],
-          productionCode: item['698438933b5e707f84cf51fd'],
-          billRowid: item['rowid'],
-          reason
-        })
-      }
-    }
-    dbgDispatchProductList(
-      '固定过滤后条数',
-      filteredBillsData.length,
-      '被过滤掉的行(含原因,仅便于对照)',
-      dropped
-    )
-  }
-
-  if (!filteredBillsData.length) {
-    dbgDispatchProductList('固定过滤后无单据，清空列表')
-    billsList.value = []
-    processList.value = []
-    return
-  }
-
   // 先做基础映射（不带工序）
-  let baseBills = filteredBillsData.map(item => {
+  let baseBills = billsRes.data.map(item => {
     const orderGoods = item['691c47ee1c02c451c72a81c5']
     const orderCode = item['655e1cbbbd2094b316347f92']
     const productionCode = item['698438933b5e707f84cf51fd']
@@ -2548,7 +2243,6 @@ const search = async () => {
       problemDescription: item['694ba108dc025d98887fd782'] || '',
       billRowid: item['rowid'],
       billType,
-      reworkProgress: item['69ccb3e7665ab27f39105da2'],
       reworkMergeFlag: item['69ccaf64665ab27f39105bed'],
       isFirstCheck: item['69e080b4665ab27f3915d89d'],
       '6a475a896d70ffabc6766a22': item['6a475a896d70ffabc6766a22'],
@@ -2604,16 +2298,11 @@ const search = async () => {
   }
 
   // 获取当前单据类型对应的工序列表
-  // 订单派工：车间 + 工序类型 + 当前选中订单/生产单（接口过滤）
-  // 产品派工：按每条单据的订单号+生产单分别请求后合并，避免分页只返回一页导致其它单据无工序
-  let processRowsRaw = []
-  if (dispatchMode.value === 'product' && baseBills.length > 0) {
-    processRowsRaw = await loadProcessesForProductBills(baseBills, billTypeFilter.value)
-    dbgDispatchProductList('产品派工-合并后工序行数 processRowsRaw.length', processRowsRaw.length)
-  } else {
-    const processRes = await getProcessRaw(billTypeFilter.value)
-    processRowsRaw = processRes.data || []
-  }
+  // 订单派工 / 产品派工：均拉当前车间 + 派工类型的整批工序排产明细，再按单据本地匹配
+  // 产品派工早期版本按单据逐单串行请求，单据多时请求次数等于单据对数，导致进入页面明显变慢
+  const processRes = await getProcessRaw(billTypeFilter.value)
+  const processRowsRaw = processRes.data || []
+  dbgDispatchProductList('整批工序行数 processRowsRaw.length', processRowsRaw.length)
 
   if (!processRowsRaw.length) {
     dbgDispatchProductList('工序数据为空 processList 将清空')
@@ -2621,9 +2310,6 @@ const search = async () => {
   } else {
     const allProcesses = processRowsRaw.map(item => ({
       processName: item['656ffd1bba5ef3863bf3ec1e'],
-      needCount: item['690dc19f8d797ee211e7fc60'], // 需派工数量
-      finishCount: item['697c8b023b5e707f84ce02cc'], // 完成总数量
-      allcount: item['68099ac75d6fc47331574e82'], // 需完成数量
       dispatchedCount: item['69840b633b5e707f84cf341e'], // 已派工数量
       processOrder: item['6593b07ae97eb866a50eeba1'],
       productcode: item['691d6160535b29cbd5c6c0a9'],
@@ -2780,33 +2466,6 @@ const extractSidsFromRelation = (v) => {
   }
   if (typeof v === 'object') {
     return [v.sid || v.value || v.id || ''].filter(Boolean)
-  }
-  return []
-}
-
-// 提取关联记录的 name 数组
-const extractNamesFromRelation = (v) => {
-  if (!v) return []
-  if (typeof v === 'string') {
-    const t = v.trim()
-    if (t.startsWith('[')) {
-      try {
-        const p = JSON.parse(t)
-        return extractNamesFromRelation(p)
-      } catch {
-        return []
-      }
-    }
-    return []
-  }
-  if (Array.isArray(v)) {
-    return v
-      .filter(item => item && typeof item === 'object')
-      .map(item => item.name || item.text || item.title || '')
-      .filter(Boolean)
-  }
-  if (typeof v === 'object') {
-    return [v.name || v.text || v.title || ''].filter(Boolean)
   }
   return []
 }
@@ -5840,11 +5499,6 @@ onUnload(() => {
                 background: linear-gradient(135deg, #ff9800 0%, #ffb74d 100%);
               }
 
-              &.btn-rework-complete {
-                width: px2vw(180px);
-                background: linear-gradient(135deg, #ff7043 0%, #ff8a65 100%);
-              }
-
               &.btn-rework-start {
                 width: px2vw(180px);
                 background: linear-gradient(135deg, #26a69a 0%, #4db6ac 100%);
@@ -6501,282 +6155,6 @@ onUnload(() => {
           opacity: 0.6;
         }
       }
-    }
-  }
-}
-
-/* 返工完成模态框 */
-.rework-complete-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 200;
-  padding: px2vw(20px);
-  box-sizing: border-box;
-
-  .rework-complete-content {
-    background: white;
-    border-radius: px2vw(18px);
-    width: 90%;
-    max-width: px2vw(900px);
-    box-shadow: 0 px2vw(5px) px2vw(15px) rgba(0, 0, 0, 0.3);
-    overflow: hidden;
-  }
-
-  .rework-complete-title {
-    padding: px2vw(28px) px2vw(30px) px2vw(12px);
-    font-size: px2vw(34px);
-    font-weight: bold;
-    color: #333;
-    text-align: center;
-  }
-
-  .rework-complete-body {
-    padding: px2vw(10px) px2vw(30px) px2vw(24px);
-    display: flex;
-    flex-direction: column;
-    gap: px2vw(28px);
-  }
-
-  .rework-complete-row {
-    display: flex;
-    flex-direction: column;
-    gap: px2vw(16px);
-  }
-
-  .rework-complete-label {
-    font-size: px2vw(28px);
-    color: #333;
-    font-weight: bold;
-  }
-
-  .rework-complete-radio-group {
-    display: flex;
-    flex-direction: row;
-    gap: px2vw(40px);
-    align-items: center;
-  }
-
-  .rework-complete-radio-label {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: px2vw(10px);
-    font-size: px2vw(28px);
-    color: #333;
-  }
-
-  .rework-complete-picker {
-    min-height: px2vw(72px);
-    padding: px2vw(16px) px2vw(20px);
-    border: px2vw(2px) solid #ddd;
-    border-radius: px2vw(12px);
-    font-size: px2vw(28px);
-    color: #333;
-    background: #fafafa;
-
-    &.is-disabled {
-      opacity: 0.5;
-      pointer-events: none;
-    }
-  }
-
-  .rework-complete-footer {
-    display: flex;
-    justify-content: center;
-    gap: px2vw(20px);
-    padding: px2vw(20px) px2vw(30px) px2vw(28px);
-    border-top: px2vw(1px) solid #eee;
-
-    .btn-cancel,
-    .btn-confirm {
-      flex: 1;
-      max-width: px2vw(280px);
-      height: px2vw(72px);
-      border-radius: px2vw(18px);
-      font-size: px2vw(30px);
-      border: none;
-    }
-
-    .btn-cancel {
-      background: #f5f5f5;
-      color: #666;
-    }
-
-    .btn-confirm {
-      background: #5884f1;
-      color: #fff;
-    }
-  }
-}
-
-/* 合并工序模态框 */
-.rework-start-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 200;
-  padding: px2vw(20px);
-  box-sizing: border-box;
-
-  .rework-start-content {
-    background: white;
-    border-radius: px2vw(18px);
-    width: 90%;
-    max-width: px2vw(900px);
-    /* 固定高度，flex 子项才能分到中间区域；仅 max-height 时容器随内容增高，列表区高度为 0，scroll-view 无法滚动 */
-    height: 75vh;
-    max-height: 82vh;
-    box-shadow: 0 px2vw(5px) px2vw(15px) rgba(0, 0, 0, 0.3);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .rework-start-title {
-    padding: px2vw(28px) px2vw(30px) px2vw(12px);
-    font-size: px2vw(34px);
-    font-weight: bold;
-    color: #333;
-    text-align: center;
-    flex-shrink: 0;
-  }
-
-  .merge-process-search {
-    padding: 0 px2vw(24px) px2vw(16px);
-    flex-shrink: 0;
-  }
-
-  .merge-process-search-input {
-    width: 100%;
-    height: px2vw(72px);
-    padding: 0 px2vw(20px);
-    font-size: px2vw(28px);
-    border: px2vw(1px) solid #e0e0e0;
-    border-radius: px2vw(12px);
-    box-sizing: border-box;
-  }
-
-  /* 占满标题与底部条之间的剩余高度；内部 scroll-view 绝对铺满，满足 uni-app 对 scroll-view 固定高度的要求 */
-  .merge-process-list-wrap {
-    flex: 1;
-    min-height: 0;
-    position: relative;
-    z-index: 1;
-    overflow: hidden;
-  }
-
-  .merge-process-scroll {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    width: 100%;
-    height: 100%;
-    padding: px2vw(8px) px2vw(24px) px2vw(12px);
-    box-sizing: border-box;
-    background: #f5f6f8;
-    border-radius: px2vw(12px);
-  }
-
-  /* 叠在列表之上，避免工序列表盖住按钮 */
-  .merge-process-footer-bar {
-    flex-shrink: 0;
-    position: relative;
-    z-index: 20;
-    width: 100%;
-    background: #ffffff;
-    box-sizing: border-box;
-    padding: px2vw(16px) px2vw(24px) px2vw(24px);
-    border-top: px2vw(1px) solid #e8e8e8;
-    box-shadow: 0 px2vw(-6px) px2vw(20px) rgba(0, 0, 0, 0.08);
-  }
-
-  .merge-process-row {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: px2vw(16px);
-    padding: px2vw(20px) px2vw(16px);
-    margin-bottom: px2vw(12px);
-    border-radius: px2vw(12px);
-    border: px2vw(1px) solid #eee;
-    background: #fafafa;
-  }
-
-  .merge-process-row.selected {
-    border-color: #5884f1;
-    background: #eef3ff;
-  }
-
-  .merge-process-check {
-    width: px2vw(40px);
-    height: px2vw(40px);
-    line-height: px2vw(40px);
-    text-align: center;
-    font-size: px2vw(28px);
-    color: #5884f1;
-    font-weight: bold;
-  }
-
-  .merge-process-name {
-    flex: 1;
-    font-size: px2vw(28px);
-    color: #333;
-  }
-
-  .merge-process-tip {
-    text-align: center;
-    font-size: px2vw(24px);
-    color: #999;
-    padding: px2vw(16px) 0;
-  }
-
-  .rework-start-footer {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: px2vw(20px);
-    padding: 0;
-    border-top: none;
-
-    .btn-cancel,
-    .btn-confirm,
-    .btn-merge {
-      flex: 1;
-      max-width: px2vw(280px);
-      height: px2vw(72px);
-      border-radius: px2vw(18px);
-      font-size: px2vw(30px);
-      border: none;
-    }
-
-    .btn-cancel {
-      background: #f5f5f5;
-      color: #666;
-    }
-
-    .btn-confirm {
-      background: #5884f1;
-      color: #fff;
-    }
-
-    .btn-merge {
-      background: #2e7d32;
-      color: #fff;
     }
   }
 }
