@@ -557,6 +557,11 @@
 									<view class="product-info">
 										<text class="product-name">{{ product.name || '-' }}</text>
 										<text class="product-order-count" v-if="product.orderCount">订单数: {{ product.orderCount }}</text>
+										<!-- 返工模式：返工数量直接取排产计划的生产数量，供选择产品时确认 -->
+										<text
+											class="product-rework-count"
+											v-if="dispatchTypeFilter === '返工'"
+										>返工数量: {{ product.reworkQty }}</text>
 										<text class="product-delivery">交货: {{ product.deliveryDate || '-' }}</text>
 										<view class="product-spec-btn" @click.stop="toggleProductSpecExpand(product)">
 											<text>{{ expandedProductSpecs.includes(product.productionCode) ? '收起' : '规格' }}</text>
@@ -2234,6 +2239,8 @@ const loadAddProductList = async () => {
 			name: item['6937d255ff2b019b3cb34be3'] || '',
 			models: item['6937d255ff2b019b3cb34be4'] || '',
 			orderCount: item['69e33354665ab27f3916f758'] || '',
+			// 返工数量：排产计划的生产数量
+			reworkQty: formatFieldValue(item['67de8eb5c5377d50a523ef9b']) || 0,
 			productionCode: item['698438933b5e707f84cf51fd'] || '',
 			productCode: item['691d6336535b29cbd5c6c0ca'] || '',
 			deliveryDate: formatFieldValue(item['69ad33ee3b5e707f84d43b09']) || ''
@@ -7726,7 +7733,7 @@ onShow(refreshPageOnShow)
 	}
 
 	.add-product-content {
-		width: px2vw(800px);
+		width: px2vw(900px);
 		height: px2vw(800px);
 		background-color: #fff;
 		border-radius: px2vw(16px);
@@ -7967,27 +7974,40 @@ onShow(refreshPageOnShow)
 			display: flex;
 			align-items: center;
 			justify-content: space-between;
+			// 统一 gap 作为最小间距；剩余空间由 space-between 均分，保证各元素间距一致
+			gap: px2vw(16px);
 
 			.product-name {
 				font-size: px2vw(26px);
 				color: #333;
 				font-weight: bold;
-				flex-shrink: 0;
+				// 产品名允许收缩，数量与操作按钮保持完整展示
+				flex: 0 1 auto;
+				min-width: 0;
+				overflow: hidden;
+				text-overflow: ellipsis;
+				white-space: nowrap;
 			}
 
 			.product-order-count {
 				font-size: px2vw(26px);
 				color: #666;
-				flex: 1;
-				text-align: center;
+				flex-shrink: 0;
+				white-space: nowrap;
+			}
+
+			.product-rework-count {
+				font-size: px2vw(26px);
+				color: #e6a23c; // 返工-黄
+				flex-shrink: 0;
 				white-space: nowrap;
 			}
 
 			.product-delivery {
 				font-size: px2vw(26px);
 				color: #e67e22;
-				flex: 1;
-				text-align: center;
+				flex-shrink: 0;
+				white-space: nowrap;
 			}
 
 			.product-spec-btn {
@@ -7999,6 +8019,7 @@ onShow(refreshPageOnShow)
 				color: #2755f1;
 				flex-shrink: 0;
 			}
+
 		}
 
 		.product-spec-container {
