@@ -265,6 +265,13 @@
 										@click.stop="openMergeProcessModal(group)"
 									>合并工序</view>
 								</view>
+								<!-- 正常产品存在可用返工排产时提供快捷入口，避免用户先手动切换模式再添加产品 -->
+								<view
+									v-if="hasNormalReworkPlans(group.productionCode)"
+									class="grid-order-bar-rework-btn"
+									:class="{ loading: reworkShortcutLoading && reworkShortcutLoadingCode === group.productionCode }"
+									@click.stop="openReworkShortcutFromGroup(group)"
+									>{{ reworkShortcutLoading && reworkShortcutLoadingCode === group.productionCode ? '处理中' : '返工' }}</view>
 								<!-- 返工产品可恢复为正常工序；接口需要排产计划 rowid，点击后先由排产编号反查 -->
 								<view
 									v-if="dispatchTypeFilter === '返工'"
@@ -566,6 +573,12 @@
 										<view class="product-spec-btn" @click.stop="toggleProductSpecExpand(product)">
 											<text>{{ expandedProductSpecs.includes(product.productionCode) ? '收起' : '规格' }}</text>
 										</view>
+										<view
+											v-if="hasNormalReworkPlans(product.productionCode)"
+											class="product-rework-entry-btn"
+											:class="{ loading: reworkShortcutLoading && reworkShortcutLoadingCode === product.productionCode }"
+											@click.stop="openReworkShortcutFromProduct(product)"
+										>{{ reworkShortcutLoading && reworkShortcutLoadingCode === product.productionCode ? '处理中' : '返工' }}</view>
 									</view>
 								</view>
 								<view class="product-spec-container" v-if="expandedProductSpecs.includes(product.productionCode)">
@@ -614,6 +627,46 @@
 		</view>
 	</view>
 
+	<!-- 多条返工排产计划选择：必须人工选择一条，禁止自动全部添加 -->
+	<view class="rework-plan-modal" v-if="showReworkPlanSelector" @click.self="closeReworkPlanSelector">
+		<view class="rework-plan-content">
+			<view class="rework-plan-header">
+				<text class="rework-plan-title">选择返工排产计划</text>
+				<view class="rework-plan-close" @click="closeReworkPlanSelector">×</view>
+			</view>
+			<scroll-view class="rework-plan-list" scroll-x>
+				<view class="rework-plan-table">
+					<view class="rework-plan-row rework-plan-head">
+						<text class="rework-plan-cell order">订单编号</text>
+						<text class="rework-plan-cell product">产品名称</text>
+						<text class="rework-plan-cell qty">返工数量</text>
+						<text class="rework-plan-cell problem">问题描述</text>
+						<text class="rework-plan-cell progress">返工进度</text>
+						<text class="rework-plan-cell merge">是否合并</text>
+					</view>
+					<view
+						v-for="plan in reworkPlanSelectorList"
+						:key="plan.rowid"
+						class="rework-plan-row"
+						@click="confirmReworkPlanSelection(plan)"
+					>
+						<text class="rework-plan-cell order">{{ plan.orderCode }}</text>
+						<text class="rework-plan-cell product">{{ plan.productName }}</text>
+						<text class="rework-plan-cell qty">{{ plan.reworkQty }}</text>
+						<text class="rework-plan-cell problem">{{ plan.problemDescription }}</text>
+						<text class="rework-plan-cell progress">{{ plan.reworkProgress }}</text>
+						<text class="rework-plan-cell merge">{{ plan.reworkMergeFlag }}</text>
+					</view>
+				</view>
+			</scroll-view>
+			<view class="rework-plan-footer">
+				<text class="rework-plan-tip">点击一条计划进入返工派工</text>
+				<view class="rework-plan-cancel" @click="closeReworkPlanSelector">取消</view>
+			</view>
+		</view>
+	</view>
+
+	<!-- 员工选择弹窗 -->
 	<view class="employee-modal" :class="{ show: showEmployeeSelector }" @click.self="closeEmployeeSelector">
 		<view class="employee-modal-content" @click.stop :style="{ paddingTop: statusBarHeight + 'px' }">
 			<view class="employee-modal-header" @click="showWorkshopDropdown = false">
@@ -1272,7 +1325,21 @@ const SCHEDULE_PLAN_FIELD_MAP = {
 	scheduleType: '694a3954687045435008a7c3',
 	scheduleCode: '69cb5ea03b5e707f84ddefa0',
 	productionCode: '698438933b5e707f84cf51fd',
-	// 返工进度：工序排产明细上没有该字段，需从排产计划（他表）带出，用于控制合并工序按钮显隐
+	orderCode: '655e1cbbbd2094b316347f92',
+	productName: '6937d255ff2b019b3cb34be3',
+	// 返工数量：排产计划生产数量
+	productionCount: '67de8eb5c5377d50a523ef9b',
+	// 排产计划上的问题描述；工序明细上的 6aaf... 是由该字段带出的他表字段
+	problemDescription: '694ba108dc025d98887fd782',
+	// 是否合并：0=未合并，1=已合并
+	reworkMergeFlag: '69ccaf64665ab27f39105bed',
+	scheduleStatus: '655b875ffc44a9469a3aa225',
+	deliveryType: '69db0017665ab27f3913c455',
+	// 添加产品口径中的基础限制字段（filterType 8）
+	addProductScope: '66974cda2503723eec1af600',
+	// 工序排产明细关联字段：与未完成数量分支共同还原添加产品可用口径
+	processDetail: '688c366082289045da815f97',
+	// 返工进度：正常模式提醒与返工按钮均需排除“已完成”
 	reworkProgress: '69ccb3e7665ab27f39105da2'
 }
 
@@ -1340,6 +1407,15 @@ const multiSelectProductKeys = ref([]) // 多选的产品
 const expandedProductSpecs = ref([]) // 展开规格的产品
 const addProductLoading = ref(false)
 const addProductRefresherTriggered = ref(false)
+// 正常模式返工提醒缓存：productionCode -> 可用返工排产计划数组
+const normalReworkPlanMap = ref({})
+const showReworkPlanSelector = ref(false)
+const reworkPlanSelectorList = ref([])
+const reworkShortcutLoading = ref(false)
+const reworkShortcutLoadingCode = ref('')
+// 一键进入后仅聚焦选中的返工排产编号，避免同生产编号多条计划混入同一工序列表
+const focusedReworkProductKey = ref('')
+const focusedReworkScheduleCode = ref('')
 
 const showEmployeeSelector = ref(false)
 // 员工选择框打开模式：edit-依附预派工调整弹窗；process-从工序员工栏独立打开
@@ -2078,6 +2154,10 @@ const onDispatchTypeChange = (e) => {
 	const newType = DISPATCH_TYPE_OPTIONS[e.detail.value]
 	if (!newType || newType === dispatchTypeFilter.value) return
 	dispatchTypeFilter.value = newType
+	normalReworkPlanMap.value = {}
+	showReworkPlanSelector.value = false
+	focusedReworkProductKey.value = ''
+	focusedReworkScheduleCode.value = ''
 	// 切换类型视同整页刷新：清空工序缓存并重拉产品列表，选中产品的工序由 refreshProductsAndProcesses 重载
 	refreshProductsAndProcesses(false)
 }
@@ -2120,25 +2200,162 @@ const handleAddProduct = () => {
  * @param {Array} filters 扁平筛选条件数组（组内逻辑由首项 spliceType 决定）
  * @returns {Promise<Array>} 全部命中的原始行
  */
-const fetchProductionPlanRows = async (filters) => {
+const fetchProductionPlanRows = async (filters, options = {}) => {
 	const pageSize = 100
 	const MAX_PAGES = 500
 	const rows = []
 	for (let pageNum = 1; pageNum <= MAX_PAGES; pageNum++) {
-		const res = await callWorkflowListAPIPaged({
+		const queryParams = {
 			worksheetId: 'paichanjihua',
 			filters,
 			pageSize,
-			pageNum,
-			// 生产类型（正常派工/返工派工）：随顶部单选传递，后端按此口径返回
-			productionType: dispatchTypeFilterValue.value
-		})
+			pageNum
+		}
+		if (!options.skipProductionType) {
+			queryParams.productionType = dispatchTypeFilterValue.value
+		}
+		const res = await callWorkflowListAPIPaged(queryParams)
 		const pageRows = Array.isArray(res?.data) ? res.data : []
 		if (pageRows.length === 0) break
 		rows.push(...pageRows)
 		if (pageRows.length < pageSize) break
 	}
 	return rows
+}
+
+const formatReworkMergeFlag = (v) => {
+	if (v === 0 || v === '0') return '否'
+	if (v === 1 || v === '1') return '是'
+	return formatFieldValue(v) || '-'
+}
+
+const mapNormalReworkPlanRows = (rows = []) => {
+	const planMap = {}
+	rows.forEach((item) => {
+		const productionCode = formatFieldValue(item[SCHEDULE_PLAN_FIELD_MAP.productionCode])
+		const reworkProgress = formatFieldValue(item[SCHEDULE_PLAN_FIELD_MAP.reworkProgress])
+		if (!item.rowid || !productionCode || reworkProgress === '已完成') return
+		if (!Array.isArray(planMap[productionCode])) planMap[productionCode] = []
+		planMap[productionCode].push({
+			rowid: item.rowid,
+			scheduleCode: formatFieldValue(item[SCHEDULE_PLAN_FIELD_MAP.scheduleCode]) || '',
+			orderCode: formatFieldValue(item[SCHEDULE_PLAN_FIELD_MAP.orderCode]) || '-',
+			productName: formatFieldValue(item[SCHEDULE_PLAN_FIELD_MAP.productName]) || '-',
+			productionCode,
+			reworkQty: formatFieldValue(item[SCHEDULE_PLAN_FIELD_MAP.productionCount]) || '0',
+			problemDescription: formatFieldValue(item[SCHEDULE_PLAN_FIELD_MAP.problemDescription]) || '-',
+			reworkProgress: reworkProgress || '-',
+			reworkMergeFlag: formatReworkMergeFlag(item[SCHEDULE_PLAN_FIELD_MAP.reworkMergeFlag])
+		})
+	})
+	return planMap
+}
+
+/**
+ * 正常模式返工提醒缓存。
+ * 查询键为“生产编号 + 车间 + 返工排产”；可用口径与添加产品一致：
+ * 已排产/部分排产、准时交货，以及“未完成工序数量>0 或 工序明细为空”。
+ */
+const loadNormalReworkPlanMap = async (productionCodes = []) => {
+	if (dispatchTypeFilter.value !== '正常') {
+		normalReworkPlanMap.value = {}
+		return normalReworkPlanMap.value
+	}
+	const codes = [...new Set((productionCodes || []).map(code => String(code || '').trim()).filter(Boolean))]
+	if (codes.length === 0 || !loginWorkshop.value) {
+		normalReworkPlanMap.value = {}
+		return normalReworkPlanMap.value
+	}
+
+	const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
+	const baseFilters = [
+		{
+			controlId: SCHEDULE_PLAN_FIELD_MAP.workshop,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: [loginWorkshop.value]
+		},
+		{
+			controlId: SCHEDULE_PLAN_FIELD_MAP.scheduleType,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: ['返工排产']
+		},
+		{
+			controlId: SCHEDULE_PLAN_FIELD_MAP.productionCode,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: codes
+		},
+		{
+			controlId: SCHEDULE_PLAN_FIELD_MAP.scheduleStatus,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 2,
+			values: ['已排产', '部分排产']
+		},
+		{
+			controlId: SCHEDULE_PLAN_FIELD_MAP.deliveryType,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 6,
+			values: ['准时交货']
+		},
+		{
+			controlId: SCHEDULE_PLAN_FIELD_MAP.addProductScope,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 8
+		},
+		{
+			controlId: SCHEDULE_PLAN_FIELD_MAP.reworkProgress,
+			dataType: 30,
+			spliceType: 1,
+			filterType: 6,
+			values: ['已完成']
+		}
+	]
+	const fetchReworkRows = (extraFilter) => fetchProductionPlanRows(baseFilters.concat(extraFilter), {
+		skipProductionType: true
+	})
+
+	try {
+		const [rowsWithQty, rowsWithEmptyDetail] = await Promise.all([
+			fetchReworkRows({
+				controlId: FIELD_INCOMPLETE_PROCESS_QTY,
+				dataType: 30,
+				spliceType: 1,
+				filterType: 13,
+				minValue: '0',
+				values: []
+			}),
+			fetchReworkRows({
+				controlId: SCHEDULE_PLAN_FIELD_MAP.processDetail,
+				dataType: 30,
+				spliceType: 1,
+				filterType: 7,
+				values: []
+			})
+		])
+		const rowMap = new Map()
+		rowsWithQty.concat(rowsWithEmptyDetail).forEach(row => {
+			if (row?.rowid) rowMap.set(row.rowid, row)
+		})
+		normalReworkPlanMap.value = mapNormalReworkPlanRows([...rowMap.values()])
+	} catch (e) {
+		console.error('加载正常产品返工提醒失败:', e)
+		normalReworkPlanMap.value = {}
+		uni.showToast({ title: '返工提醒加载失败', icon: 'none' })
+	}
+	return normalReworkPlanMap.value
+}
+
+const hasNormalReworkPlans = (productionCode) => {
+	if (dispatchTypeFilter.value !== '正常') return false
+	return (normalReworkPlanMap.value[String(productionCode || '').trim()] || []).length > 0
 }
 
 // 加载订单产品列表（使用原产品接口，按订单分组）
@@ -2263,6 +2480,12 @@ const loadAddProductList = async () => {
 		const orderGroups = Object.values(orderGroupMap)
 		addProductList.value = orderGroups
 		filteredAddProductList.value = [...orderGroups]
+		// 打开添加产品弹窗时同步加载返工提醒；查询失败只影响按钮显示，不阻断正常产品选择
+		if (dispatchTypeFilter.value === '正常') {
+			await loadNormalReworkPlanMap(products.map(product => product.productionCode))
+		} else {
+			normalReworkPlanMap.value = {}
+		}
 
 		// 不自动展开订单，让用户手动点击展开
 		expandedOrderKeys.value = []
@@ -2404,7 +2627,7 @@ const closeAddProductModal = () => {
 
 // 根据 rowid 数组添加产品到预派工
 // rowids：选中的预派工记录 rowid；productionCodes：选中的生产编号（用于轮询判断产品是否已写入）
-const addProductsByRowids = async (rowids, productionCodes = []) => {
+const addProductsByRowids = async (rowids, productionCodes = [], options = {}) => {
 	if (rowids.length === 0) return
 
 	uni.showLoading({ title: '添加中...', mask: true })
@@ -2446,6 +2669,11 @@ const addProductsByRowids = async (rowids, productionCodes = []) => {
 			uni.showToast({ title: '添加成功', icon: 'success' })
 		}
 
+		// 快捷入口需要在添加完成后立即选中并加载该返工计划的工序列表
+		if (options.plan) {
+			await selectReworkProductAfterAdded(options.plan)
+		}
+
 		// 同步刷新员工相关数据
 		loadEmployeeDispatchSummary()
 		loadWorkshopEmployees()
@@ -2453,6 +2681,77 @@ const addProductsByRowids = async (rowids, productionCodes = []) => {
 		uni.hideLoading()
 		console.error('添加预派工失败:', e)
 		uni.showToast({ title: '添加失败', icon: 'none' })
+	}
+}
+
+// 按订单编号 + 生产编号定位快捷入口生成的返工预派工；无法精确匹配时回退生产编号
+const selectReworkProductAfterAdded = async (plan) => {
+	if (!plan?.productionCode) return
+	let target = productList.value.find(product =>
+		product.productionCode === plan.productionCode && product.orderNo === plan.orderCode
+	)
+	if (!target) {
+		target = productList.value.find(product => product.productionCode === plan.productionCode)
+	}
+	if (!target) return
+
+	// 快捷入口必须绕过已加载缓存重取工序，否则刷新阶段可能已按“全部返工计划”加载过同编号产品
+	loadedProductIds.value = loadedProductIds.value.filter(id => id !== target.uniqueKey)
+	processList.value = processList.value.filter(process => process.productRowid !== target.uniqueKey)
+
+	// 只聚焦本次选中的排产编号，同生产编号的其他返工计划不混入工序列表
+	focusedReworkProductKey.value = target.uniqueKey
+	focusedReworkScheduleCode.value = plan.scheduleCode
+	selectedProductIds.value = [target.uniqueKey]
+	await loadProductProcesses(target)
+}
+
+const closeReworkPlanSelector = () => {
+	showReworkPlanSelector.value = false
+	reworkPlanSelectorList.value = []
+}
+
+const openReworkShortcut = (plans) => {
+	if (!Array.isArray(plans) || plans.length === 0) return
+	// 只有一条可用计划时直接进入；多条计划必须人工选择，避免误把所有返工单都加入预派工
+	if (plans.length === 1) {
+		startReworkShortcut(plans[0])
+		return
+	}
+	reworkPlanSelectorList.value = plans
+	showReworkPlanSelector.value = true
+}
+
+const openReworkShortcutFromProduct = (product) => {
+	if (reworkShortcutLoading.value) return
+	openReworkShortcut(normalReworkPlanMap.value[product.productionCode] || [])
+}
+
+const openReworkShortcutFromGroup = (group) => {
+	if (reworkShortcutLoading.value) return
+	openReworkShortcut(normalReworkPlanMap.value[group.productionCode] || [])
+}
+
+const confirmReworkPlanSelection = (plan) => {
+	if (reworkShortcutLoading.value || !plan?.rowid) return
+	startReworkShortcut(plan)
+}
+
+const startReworkShortcut = async (plan) => {
+	if (reworkShortcutLoading.value || !plan?.rowid) return
+	reworkShortcutLoading.value = true
+	reworkShortcutLoadingCode.value = plan.productionCode
+	showAddProductModal.value = false
+	showReworkPlanSelector.value = false
+	try {
+		// 先切换并等待返工模式数据刷新完成，再调用添加接口，避免类型刷新与添加轮询互相竞争
+		dispatchTypeFilter.value = '返工'
+		normalReworkPlanMap.value = {}
+		await refreshProductsAndProcesses(false)
+		await addProductsByRowids([plan.rowid], [plan.productionCode], { plan })
+	} finally {
+		reworkShortcutLoading.value = false
+		reworkShortcutLoadingCode.value = ''
 	}
 }
 
@@ -3406,6 +3705,15 @@ const handleProductClick = (product) => {
 		selectedProductIds.value.splice(idx, 1)
 	} else {
 		selectedProductIds.value.push(product.uniqueKey)
+		// 正常模式点击产品打开工序列表时同步刷新返工提醒
+		if (dispatchTypeFilter.value === '正常') {
+			loadNormalReworkPlanMap([product.productionCode])
+		}
+		// 手动点击非快捷入口产品时恢复默认返工工序口径
+		if (focusedReworkProductKey.value && focusedReworkProductKey.value !== product.uniqueKey) {
+			focusedReworkProductKey.value = ''
+			focusedReworkScheduleCode.value = ''
+		}
 		loadProductProcesses(product)
 	}
 }
@@ -3837,7 +4145,9 @@ const loadProductProcesses = async (product) => {
 	let reworkScheduleCodes = [
 		...new Set([String(product.planScheduleCode || '').trim()].filter(Boolean))
 	]
-	if (dispatchTypeFilter.value === '返工') {
+	if (dispatchTypeFilter.value === '返工' && focusedReworkProductKey.value === product.uniqueKey && focusedReworkScheduleCode.value) {
+		reworkScheduleCodes = [focusedReworkScheduleCode.value]
+	} else if (dispatchTypeFilter.value === '返工') {
 		try {
 			const planRes = await callWorkflowListAll({
 				worksheetId: SCHEDULE_PLAN_WORKSHEET_ID,
@@ -7042,6 +7352,26 @@ onShow(refreshPageOnShow)
 							font-weight: normal;
 						}
 
+						// 正常模式返工提醒：与返工模式操作按钮同样固定在标题栏右侧
+						.grid-order-bar-rework-btn {
+							flex-shrink: 0;
+							margin-left: px2vw(12px);
+							padding: 0 px2vw(12px);
+							height: px2vw(30px);
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							border-radius: px2vw(6px);
+							background-color: #e6a23c;
+							color: #fff;
+							font-size: px2vw(22px);
+							font-weight: normal;
+
+							&.loading {
+								background-color: #c0c4cc;
+							}
+						}
+
 						// 固定在标题栏右侧，避免挤占左侧竖排操作按钮区
 						.grid-order-bar-normal-btn {
 							flex-shrink: 0;
@@ -8020,6 +8350,19 @@ onShow(refreshPageOnShow)
 				flex-shrink: 0;
 			}
 
+			.product-rework-entry-btn {
+				padding: px2vw(4px) px2vw(12px);
+				background-color: #e6a23c;
+				border-radius: px2vw(4px);
+				font-size: px2vw(20px);
+				color: #fff;
+				flex-shrink: 0;
+
+				&.loading {
+					background-color: #c0c4cc;
+				}
+			}
+
 		}
 
 		.product-spec-container {
@@ -8090,6 +8433,134 @@ onShow(refreshPageOnShow)
 		.add-product-btn-cancel {
 			background-color: #f5f7fa;
 			color: #666;
+		}
+	}
+}
+
+.rework-plan-modal {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1002;
+
+	.rework-plan-content {
+		width: px2vw(1040px);
+		max-width: 96vw;
+		background-color: #fff;
+		border-radius: px2vw(16px);
+		overflow: hidden;
+	}
+
+	.rework-plan-header {
+		height: px2vw(80px);
+		padding: 0 px2vw(24px);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		border-bottom: 1px solid #e5e5e5;
+
+		.rework-plan-title {
+			font-size: px2vw(30px);
+			font-weight: bold;
+			color: #333;
+		}
+
+		.rework-plan-close {
+			font-size: px2vw(40px);
+			color: #999;
+			line-height: 1;
+			padding: px2vw(8px);
+		}
+	}
+
+	.rework-plan-list {
+		width: 100%;
+		height: px2vw(520px);
+		background-color: #f7f8fa;
+	}
+
+	.rework-plan-table {
+		min-width: px2vw(1000px);
+	}
+
+	.rework-plan-row {
+		display: flex;
+		align-items: stretch;
+		background-color: #fff;
+		border-bottom: 1px solid #e5e5e5;
+
+		&.rework-plan-head {
+			background-color: #f2f6fc;
+			color: #333;
+			font-weight: bold;
+		}
+
+		.rework-plan-cell {
+			padding: px2vw(16px) px2vw(12px);
+			font-size: px2vw(22px);
+			color: #333;
+			word-break: break-all;
+			display: flex;
+			align-items: center;
+
+			&.order {
+				width: px2vw(150px);
+				flex-shrink: 0;
+			}
+
+			&.product {
+				width: px2vw(180px);
+				flex-shrink: 0;
+			}
+
+			&.qty {
+				width: px2vw(110px);
+				flex-shrink: 0;
+				justify-content: flex-end;
+			}
+
+			&.problem {
+				width: px2vw(310px);
+				flex: 1;
+			}
+
+			&.progress {
+				width: px2vw(110px);
+				flex-shrink: 0;
+			}
+
+			&.merge {
+				width: px2vw(100px);
+				flex-shrink: 0;
+				justify-content: center;
+			}
+		}
+	}
+
+	.rework-plan-footer {
+		padding: px2vw(20px) px2vw(24px);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		border-top: 1px solid #e5e5e5;
+
+		.rework-plan-tip {
+			font-size: px2vw(22px);
+			color: #888;
+		}
+
+		.rework-plan-cancel {
+			padding: px2vw(10px) px2vw(28px);
+			border-radius: px2vw(8px);
+			background-color: #f5f7fa;
+			color: #666;
+			font-size: px2vw(24px);
 		}
 	}
 }
