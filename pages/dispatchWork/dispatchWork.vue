@@ -1922,9 +1922,12 @@ const getProcessRaw = async (billTypeValue = '') => {
     })
   }
 
-  const res = await callWorkflowListAPIPaged({
+  // 产品派工在前端按勾选单据匹配，接口层不收窄订单，必须翻页取完当前车间全量工序，
+  // 否则超过第一页（100 条）后，后续单据会显示为无工序。
+  const res = await callWorkflowListAll({
     worksheetId: 'paigongdan',
-    filters
+    filters,
+    silent: true
   })
 
   return res
@@ -2023,6 +2026,17 @@ const billPairKeyFromPaiChanRow = (row) => {
 // 根据当前车间和单据类型获取单据列表
 const getBillsListRaw = async () => {
   const filters = []
+
+  // 正常排产：接口层只保留未完成工序数量 > 0 的单据，防止已完成单据重新进入派工列表
+  if (billTypeFilter.value !== '返工排产') {
+    filters.push({
+      controlId: '69a8e4563b5e707f84d33c0c',
+      dataType: 30,
+      spliceType: 1,
+      filterType: 13, // Gt：数值大于 values[0]
+      values: [0]
+    })
+  }
 
   // 返工排产：接口层排除返工进度=已完成，代替原先前端过滤
   if (billTypeFilter.value === '返工排产') {
@@ -2310,6 +2324,9 @@ const search = async () => {
   } else {
     const allProcesses = processRowsRaw.map(item => ({
       processName: item['656ffd1bba5ef3863bf3ec1e'],
+      needCount: item['690dc19f8d797ee211e7fc60'], // 需派工数量（圆环进度兜底/派工弹窗使用）
+      finishCount: item['697c8b023b5e707f84ce02cc'], // 完成总数量（圆圈右下）
+      allcount: item['68099ac75d6fc47331574e82'], // 需完成数量（圆圈左下/圆环进度总数）
       dispatchedCount: item['69840b633b5e707f84cf341e'], // 已派工数量
       processOrder: item['6593b07ae97eb866a50eeba1'],
       productcode: item['691d6160535b29cbd5c6c0a9'],

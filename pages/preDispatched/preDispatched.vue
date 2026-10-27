@@ -253,17 +253,17 @@
 								<view class="grid-order-bar-info">
 									<text class="grid-order-bar-no">{{ group.orderNo }}</text>
 									<text class="grid-order-bar-product">{{ group.productName }}</text>
-									<!-- 合并工序放在问题描述左侧，避免继续挤占下方竖排按钮列 -->
-									<view
-										v-if="dispatchTypeFilter === '返工' && group.reworkProgress !== '已完成'"
-										class="grid-order-bar-merge-btn"
-										@click.stop="openMergeProcessModal(group)"
-									>合并工序</view>
 									<!-- 问题描述：仅返工排产的产品有值，无值时不占位 -->
 									<text
 										v-if="group.problemDescription"
 										class="grid-order-bar-problem"
 									>问题描述：{{ group.problemDescription }}</text>
+									<!-- 合并工序放在问题描述与正常工序之间，保持返工操作顺序与业务叙述一致 -->
+									<view
+										v-if="dispatchTypeFilter === '返工' && group.reworkProgress !== '已完成'"
+										class="grid-order-bar-merge-btn"
+										@click.stop="openMergeProcessModal(group)"
+									>合并工序</view>
 								</view>
 								<!-- 返工产品可恢复为正常工序；接口需要排产计划 rowid，点击后先由排产编号反查 -->
 								<view
@@ -2796,10 +2796,9 @@ const fillProductsReworkProgress = async (scheduleCodes) => {
 				if (code && planRowMap.has(code)) { planCode = code; break }
 			}
 			if (!planCode) {
-				const hit = planRowMap.size === 1
-					? [...planRowMap.values()][0]
-					: [...planRowMap.values()].find(row =>
-						formatFieldValue(row[SCHEDULE_PLAN_FIELD_MAP.productionCode]) === product.productionCode)
+				// 即使查询结果只有一条，也必须校验生产编号；否则唯一结果会被误套到其他产品。
+				const hit = [...planRowMap.values()].find(row =>
+					formatFieldValue(row[SCHEDULE_PLAN_FIELD_MAP.productionCode]) === product.productionCode)
 				planCode = hit ? formatFieldValue(hit[SCHEDULE_PLAN_FIELD_MAP.scheduleCode]) : ''
 			}
 			if (planCode) {
@@ -3367,13 +3366,17 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 		// 返工模式：工序排产明细上没有返工进度字段，按钮显隐需要排产计划值，
 		// 这里按排产编号批量反查后回填到产品分组上，回填完成由响应式更新按钮显隐，不阻塞首屏
 		if (dispatchTypeFilter.value === '返工') {
-			const codes = [...new Set(
-				processList.value
-					.map(p => String(p.scheduleCode || '').trim())
-					.filter(Boolean)
-			)]
+			// 工序可能尚未加载或尚未带出排产编号，因此同时收集预派工记录上的编号，
+			// 确保产品分组能尽快回填返工进度并控制合并工序按钮显隐。
+			const processScheduleCodes = processList.value
+				.map(p => String(p.scheduleCode || '').trim())
+				.filter(Boolean)
+			const productScheduleCodes = productList.value
+				.map(p => String(p.planScheduleCode || '').trim())
+				.filter(Boolean)
+			const codes = [...new Set([...processScheduleCodes, ...productScheduleCodes])]
 			if (codes.length > 0) {
-			void fillProductsReworkProgress(codes)
+				void fillProductsReworkProgress(codes)
 			}
 		}
 	} catch (e) {
@@ -3821,10 +3824,12 @@ const loadProductProcesses = async (product) => {
 	// 先标记为已加载，阻止并发请求；加载失败时会移除标记
 	loadedProductIds.value.push(product.uniqueKey)
 
-	// 返工模式：预派工记录上没有排产编号，先按「登录车间 + 排产类型=返工排产 + 生产编号」
-	// 反查该产品的返工排产计划编号集合，工序查询据此过滤——直接筛「派工类型=返工派工」
-	// 会漏掉新建返工计划后尚未派工的工序（派工类型仍为空），导致合并工序/使用正常工序报缺少排产编号
-	let reworkScheduleCodes = []
+	// 返工模式不能直接筛「派工类型=返工派工」：新建返工计划后尚未派工的工序，
+	// 派工类型仍为空会被漏掉。这里优先使用预派工记录上的排产编号，
+	// 再按「登录车间 + 排产类型=返工排产 + 生产编号」反查，覆盖同一生产编号的多个返工计划。
+	let reworkScheduleCodes = [
+		...new Set([String(product.planScheduleCode || '').trim()].filter(Boolean))
+	]
 	if (dispatchTypeFilter.value === '返工') {
 		try {
 			const planRes = await callWorkflowListAll({
@@ -3854,9 +3859,10 @@ const loadProductProcesses = async (product) => {
 				],
 				silent: true
 			}, 100)
-			reworkScheduleCodes = (Array.isArray(planRes?.data) ? planRes.data : [])
+			const planCodes = (Array.isArray(planRes?.data) ? planRes.data : [])
 				.map(row => formatFieldValue(row[SCHEDULE_PLAN_FIELD_MAP.scheduleCode]))
 				.filter(Boolean)
+			reworkScheduleCodes = [...new Set([...reworkScheduleCodes, ...planCodes])]
 		} catch (e) {
 			console.error('查询返工排产计划编号失败:', e)
 		}
@@ -3954,9 +3960,9 @@ const loadProductProcesses = async (product) => {
 				isNewProcess,
 				dispatchCount: associatedInfo.dispatchCount,
 				dispatchType: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.dispatchType]) || '',
-				// 排产编号优先取工序行字段（主管已排产时带出），为空则由后续排产计划反查回填，
-				// 保证未排产的返工工序也能拿到编号去合并/使用正常工序
-				scheduleCode: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.scheduleCode]) || item.planScheduleCode || '',
+				// 排产编号优先取工序行字段（主管已排产时带出）；
+				// 为空时回退到当前预派工记录上的编号，保证未排产返工工序仍可发起合并/使用正常工序
+				scheduleCode: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.scheduleCode]) || product.planScheduleCode || '',
 				// 问题描述：他表字段由排产计划带出，仅返工排产的行有值
 				problemDescription: formatFieldValue(item[PROCESS_DETAIL_FIELD_MAP.problemDescription]) || ''
 			}
@@ -7014,7 +7020,7 @@ onShow(refreshPageOnShow)
 							vertical-align: bottom;
 						}
 
-						// 合并工序：放在标题信息流中、问题描述左侧，避免挤占下方按钮列
+						// 合并工序：放在标题信息流中、问题描述与正常工序之间，避免挤占下方按钮列
 						.grid-order-bar-merge-btn {
 							flex-shrink: 0;
 							padding: 0 px2vw(12px);
