@@ -260,7 +260,7 @@
 									>问题描述：{{ group.problemDescription }}</text>
 									<!-- 合并工序放在问题描述与正常工序之间，保持返工操作顺序与业务叙述一致 -->
 									<view
-										v-if="dispatchTypeFilter === '返工' && group.reworkProgress !== '已完成'"
+										v-if="dispatchTypeFilter === '返工' && isReworkProgressOperable(group.reworkProgress)"
 										class="grid-order-bar-merge-btn"
 										@click.stop="openMergeProcessModal(group)"
 									>合并工序</view>
@@ -864,6 +864,10 @@
 			</view>
 			<view class="process-action-body">
 				<view class="process-action-filter">
+					<view v-if="dispatchTypeFilter === '返工'" class="process-action-source-switch" @click.stop>
+						<text>从正常工序中挑选</text>
+						<switch :checked="processActionSourceNormal" color="#5884f1" @change="onProcessActionSourceChange" />
+					</view>
 					<view class="process-action-search">
 						<input type="text" placeholder="请输入工序名称" v-model="processActionSearch" @input="handleProcessActionSearch" />
 					</view>
@@ -930,6 +934,7 @@ import { ref, onMounted, computed, getCurrentInstance, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { callWorkflowListAPIPaged, callWorkflowListAll } from '../../utils/workflow'
 import { buildDateEnumFilter } from '../../utils/dateFilter'
+import { fetchNormalProcessDetails } from '../../utils/normalProcess'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
@@ -1339,9 +1344,13 @@ const SCHEDULE_PLAN_FIELD_MAP = {
 	addProductScope: '66974cda2503723eec1af600',
 	// 工序排产明细关联字段：与未完成数量分支共同还原添加产品可用口径
 	processDetail: '688c366082289045da815f97',
-	// 返工进度：正常模式提醒与返工按钮均需排除“已完成”
+	// 返工进度：正常模式提醒、返工按钮与合并工序均需排除“已完成/不可返工”
 	reworkProgress: '69ccb3e7665ab27f39105da2'
 }
+
+// 返工进度禁用状态：接口过滤与前端按钮显隐必须保持同一口径
+const BLOCKED_REWORK_PROGRESS = ['已完成', '不可返工']
+const isReworkProgressOperable = (progress) => !BLOCKED_REWORK_PROGRESS.includes(String(progress || '').trim())
 
 const EMPLOYEE_WORKSHEET_ID = 'yggs'
 const EMPLOYEE_FIELD_MAP = {
@@ -1491,6 +1500,11 @@ const processActionModeIndex = ref(0)
 const processActionModeOptions = ['添加', '替换', '删除']
 const processActionLoading = ref(false)
 const processActionSequence = ref('')
+// 返工模式下可切换工艺调整的数据来源：false=工序字典，true=当前产品的正常工序排产明细
+const processActionSourceNormal = ref(false)
+const processActionNormalAllList = ref([])
+// 防止快速切换来源后，前一个慢请求回写新列表
+const processActionLoadToken = ref(0)
 
 const showAttendancePanel = ref(false)
 const showProcessPanel = ref(false)
@@ -2154,6 +2168,8 @@ const onDispatchTypeChange = (e) => {
 	const newType = DISPATCH_TYPE_OPTIONS[e.detail.value]
 	if (!newType || newType === dispatchTypeFilter.value) return
 	dispatchTypeFilter.value = newType
+	// 顶部类型决定“从正常工序中挑选”的显隐；类型变化时关闭弹窗，避免旧来源继续提交
+	if (showProcessActionModal.value) closeProcessActionModal()
 	normalReworkPlanMap.value = {}
 	showReworkPlanSelector.value = false
 	focusedReworkProductKey.value = ''
@@ -2234,7 +2250,7 @@ const mapNormalReworkPlanRows = (rows = []) => {
 	rows.forEach((item) => {
 		const productionCode = formatFieldValue(item[SCHEDULE_PLAN_FIELD_MAP.productionCode])
 		const reworkProgress = formatFieldValue(item[SCHEDULE_PLAN_FIELD_MAP.reworkProgress])
-		if (!item.rowid || !productionCode || reworkProgress === '已完成') return
+		if (!item.rowid || !productionCode || !isReworkProgressOperable(reworkProgress)) return
 		if (!Array.isArray(planMap[productionCode])) planMap[productionCode] = []
 		planMap[productionCode].push({
 			rowid: item.rowid,
@@ -2315,7 +2331,7 @@ const loadNormalReworkPlanMap = async (productionCodes = []) => {
 			dataType: 30,
 			spliceType: 1,
 			filterType: 6,
-			values: ['已完成']
+			values: BLOCKED_REWORK_PROGRESS
 		}
 	]
 	const fetchReworkRows = (extraFilter) => fetchProductionPlanRows(baseFilters.concat(extraFilter), {
@@ -2404,14 +2420,14 @@ const loadAddProductList = async () => {
 				spliceType: 1,
 				filterType: 8
 			},
-			// 返工排产：排除返工进度=已完成（与选择订单/选择产品、正式派工页同一口径）
+			// 返工排产：排除返工进度=已完成/不可返工（与选择订单/选择产品、正式派工页同一口径）
 			...(scheduleTypeFilterValue.value === '返工排产'
 				? [{
 					controlId: '69ccb3e7665ab27f39105da2',
 					dataType: 30,
 					spliceType: 1,
 					filterType: 6,
-					values: ['已完成']
+					values: BLOCKED_REWORK_PROGRESS
 				}]
 				: [])
 		]
@@ -3045,10 +3061,10 @@ const getReworkSchedulePlanRowid = async (product, scheduleCode) => {
 const showMergeProcessModal = ref(false)
 const mergeProcessTarget = ref(null)
 
-// 合并工序按钮显隐判断：返工模式下，返工进度=已完成的排产计划不允许再合并
+// 合并工序按钮显隐判断：返工模式下，已完成/不可返工的排产计划不允许再合并
 const isMergeProcessVisible = (group) => {
 	if (dispatchTypeFilter.value !== '返工') return false
-	return group?.reworkProgress !== '已完成'
+	return isReworkProgressOperable(group?.reworkProgress)
 }
 
 // 返工模式下按排产编号批量反查排产计划的返工进度，回填到产品分组上（合并工序按钮显隐用）
@@ -4987,6 +5003,8 @@ const openProcessActionModal = (product) => {
 	processActionSelected.value = null
 	processActionModeIndex.value = 0
 	processActionList.value = []
+	processActionSourceNormal.value = false
+	processActionNormalAllList.value = []
 	showProcessActionModal.value = true
 	loadProcessActionList()
 }
@@ -5042,6 +5060,8 @@ const closeProcessActionModal = () => {
 	processActionModeIndex.value = 0
 	processActionList.value = []
 	processActionSequence.value = ''
+	processActionSourceNormal.value = false
+	processActionNormalAllList.value = []
 }
 
 // 失焦规整生产顺序：空值或非法值（非数字、小于 0.01）清空，由确定时的非空校验拦截；合法值统一为两位小数
@@ -5103,9 +5123,46 @@ const handleProcessActionSearch = () => {
 	loadProcessActionList()
 }
 
+const filterProcessActionNormalList = () => {
+	const keyword = processActionSearch.value.trim()
+	const rows = keyword
+		? processActionNormalAllList.value.filter(item => item.processName.includes(keyword))
+		: processActionNormalAllList.value
+	processActionList.value = rows.map(item => ({ ...item }))
+}
+
+const onProcessActionSourceChange = (e) => {
+	const checked = !!e?.detail?.value
+	// 开关仅属于返工模式；异常触发时强制回到默认工序字典来源
+	processActionSourceNormal.value = dispatchTypeFilter.value === '返工' && checked
+	processActionSearch.value = ''
+	processActionSelected.value = null
+	processActionList.value = []
+	processActionNormalAllList.value = []
+	loadProcessActionList()
+}
+
 const loadProcessActionList = async () => {
+	const loadToken = ++processActionLoadToken.value
 	try {
 		processActionLoading.value = true
+
+		if (processActionSourceNormal.value) {
+			// 正常工序全量数据只需拉一次，后续搜索与合并工序一样在本地按工序名称过滤
+			if (processActionNormalAllList.value.length > 0) {
+				filterProcessActionNormalList()
+				return
+			}
+			const rows = await fetchNormalProcessDetails({
+				productionCode: processActionProduct.value?.productionCode || '',
+				workshop: loginWorkshop.value
+			})
+			if (loadToken !== processActionLoadToken.value) return
+			processActionNormalAllList.value = rows
+			filterProcessActionNormalList()
+			return
+		}
+
 		const ws = loginWorkshop.value
 		const filters = [
 			{ controlId: '6614d7ed1f7f1264f3a332c3', dataType: 30, spliceType: 1, filterType: 2, values: ['工序'] },
@@ -5133,6 +5190,7 @@ const loadProcessActionList = async () => {
 				filters,
 				silent: true
 			}, pageSize, pageNum)
+			if (loadToken !== processActionLoadToken.value) return
 			const rows = Array.isArray(res?.data) ? res.data : []
 			allRows.push(...rows)
 			if (rows.length < pageSize) break
@@ -5143,10 +5201,14 @@ const loadProcessActionList = async () => {
 			processName: item['Name'] || '-'
 		}))
 	} catch (e) {
+		if (loadToken !== processActionLoadToken.value) return
 		console.error('加载工序列表失败:', e)
 		processActionList.value = []
+		if (processActionSourceNormal.value) {
+			uni.showToast({ title: e?.message || '加载正常工序失败', icon: 'none' })
+		}
 	} finally {
-		processActionLoading.value = false
+		if (loadToken === processActionLoadToken.value) processActionLoading.value = false
 	}
 }
 
@@ -5269,9 +5331,17 @@ const confirmProcessAction = async () => {
 			uni.showToast({ title: '请输入生产顺序', icon: 'none' })
 			return
 		}
+		// 从正常工序挑选时，selected.rowid 是工序排产明细 ID；接口需要名称关联字段里的工序字典 ID
+		const selectedProcessRowid = processActionSourceNormal.value
+			? (selected.processDictRowid || '')
+			: (selected.rowid || '')
+		if (!selectedProcessRowid) {
+			uni.showToast({ title: '正常工序缺少工序字典ID，无法提交', icon: 'none' })
+			return
+		}
 		const params = {
 			processName: selected.processName || '',
-			processRowid: selected.rowid || '',
+			processRowid: selectedProcessRowid,
 			sequence: parseFloat(processActionSequence.value),
 			modifyMode: mode,
 			// 无工序产品新增首道工序时没有目标工序，此时传空字符串（后端要求该字段必须存在）
@@ -8968,10 +9038,23 @@ onShow(refreshPageOnShow)
 
 		.process-action-filter {
 			display: flex;
-			align-items: center;
+			flex-direction: column;
 			gap: px2vw(12px);
 			margin-bottom: px2vw(12px);
 			flex-shrink: 0;
+
+			.process-action-source-switch {
+				display: flex;
+				align-items: center;
+				gap: px2vw(10px);
+				font-size: px2vw(26px);
+				color: #333;
+
+				switch {
+					transform: scale(0.8);
+					transform-origin: left center;
+				}
+			}
 
 			.process-action-search {
 				flex: 1;

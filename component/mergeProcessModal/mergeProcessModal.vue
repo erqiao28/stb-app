@@ -54,7 +54,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { callWorkflowListAll } from '../../utils/workflow'
+import { fetchNormalProcessDetails } from '../../utils/normalProcess'
 
 const props = defineProps({
   visible: {
@@ -74,15 +74,6 @@ const props = defineProps({
 
 const emit = defineEmits(['update:visible', 'confirm'])
 
-// 工序排产明细表与字段 ID：与预派工、正式派工两页的既有查询口径保持一致
-const WORKSHEET_ID = 'paigongdan'
-const FIELD = {
-  productionCode: '691d6160535b29cbd5c6c0a9',
-  workshop: '669a6cae2503723eec1b49bb',
-  dispatchType: '6954ad997a59e0522d85df35',
-  sequence: '693a62040f64427fac25ae80',
-  processName: '656ffd1bba5ef3863bf3ec1e'
-}
 const PAGE_SIZE = 10
 
 const loading = ref(false)
@@ -99,78 +90,22 @@ const filteredData = computed(() => {
 const tableData = computed(() => filteredData.value.slice(0, page.value * PAGE_SIZE))
 const hasMore = computed(() => tableData.value.length < filteredData.value.length)
 
-/** 关联字段可能返回 JSON 字符串、数组或对象，这里统一提取展示名称 */
-const extractRelationNames = (value) => {
-  if (!value) return []
-  if (typeof value === 'string') {
-    const text = value.trim()
-    if (text.startsWith('[')) {
-      try {
-        return extractRelationNames(JSON.parse(text))
-      } catch {
-        return []
-      }
-    }
-    return []
-  }
-  if (Array.isArray(value)) {
-    return value
-      .filter((item) => item && typeof item === 'object')
-      .map((item) => item.name || item.text || item.title || '')
-      .filter(Boolean)
-  }
-  if (typeof value === 'object') {
-    return [value.name || value.text || value.title || ''].filter(Boolean)
-  }
-  return []
-}
-
-const formatProcessName = (raw) => {
-  const names = extractRelationNames(raw)
-  return names.length > 0 ? names.join('、') : String(raw ?? '').trim()
-}
-
 const fetchProcessList = async () => {
   if (loading.value) return
-  const productionCode = props.productionCode.trim()
-  if (!props.workshop) {
-    uni.showToast({ title: '未选择车间', icon: 'none' })
-    return
-  }
-  if (!productionCode) {
-    uni.showToast({ title: '缺少生产编号', icon: 'none' })
-    return
-  }
 
   loading.value = true
-  // 固定读取正常派工明细：返工合并的来源是产品正常工序，不受页面当前正常/返工筛选影响
-  const filters = [
-    {
-      controlId: FIELD.productionCode,
-      dataType: 30,
-      spliceType: 1,
-      filterType: 2,
-      values: [productionCode]
-    },
-    { controlId: FIELD.workshop, dataType: 30, spliceType: 1, filterType: 2, values: [props.workshop] },
-    { controlId: FIELD.dispatchType, dataType: 30, spliceType: 1, filterType: 2, values: ['正常派工'] }
-  ]
-
   try {
-    // 列表接口没有稳定的服务端排序参数，先全量拉取，再统一按生产顺序升序排序
-    const res = await callWorkflowListAll({ worksheetId: WORKSHEET_ID, filters, silent: true }, 100)
-    const rows = (res?.data || []).map((item) => ({
-      sequence: String(item[FIELD.sequence] ?? '').trim(),
-      processName: formatProcessName(item[FIELD.processName]),
-      rowid: item.rowid || ''
-    }))
-    rows.sort((a, b) => (parseFloat(a.sequence) || 0) - (parseFloat(b.sequence) || 0))
+    // 固定读取正常派工明细：返工合并的来源是产品正常工序，不受页面当前正常/返工筛选影响
+    const rows = await fetchNormalProcessDetails({
+      productionCode: props.productionCode,
+      workshop: props.workshop
+    })
     allData.value = rows
     page.value = 1
   } catch (error) {
     console.error('[合并工序] 加载工序排产明细失败:', error)
     allData.value = []
-    uni.showToast({ title: '加载工序失败', icon: 'none' })
+    uni.showToast({ title: error?.message || '加载工序失败', icon: 'none' })
   } finally {
     loading.value = false
   }

@@ -2038,14 +2038,14 @@ const getBillsListRaw = async () => {
     })
   }
 
-  // 返工排产：接口层排除返工进度=已完成，代替原先前端过滤
+  // 返工排产：接口层排除返工进度=已完成/不可返工，代替原先前端过滤
   if (billTypeFilter.value === '返工排产') {
     filters.push({
       controlId: '69ccb3e7665ab27f39105da2',
       dataType: 30,
       spliceType: 1,
       filterType: 6,
-      values: ['已完成']
+      values: ['已完成', '不可返工']
     })
   }
 
