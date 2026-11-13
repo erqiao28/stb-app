@@ -860,14 +860,15 @@
 		<view class="process-action-content" @click.stop>
 			<view class="process-action-header">
 				<text class="process-action-title">工艺调整</text>
+				<!-- 正常工序来源仅返工模式可用：用于把返工工艺调整为正常工序 -->
+				<view v-if="dispatchTypeFilter === '返工'" class="process-action-source-switch" @click.stop>
+					<text>从正常工序中挑选</text>
+					<switch :checked="processActionSourceNormal" color="#5884f1" @change="onProcessActionSourceChange" />
+				</view>
 				<view class="process-action-close" @click="closeProcessActionModal">&times;</view>
 			</view>
 			<view class="process-action-body">
 				<view class="process-action-filter">
-					<view v-if="dispatchTypeFilter === '返工'" class="process-action-source-switch" @click.stop>
-						<text>从正常工序中挑选</text>
-						<switch :checked="processActionSourceNormal" color="#5884f1" @change="onProcessActionSourceChange" />
-					</view>
 					<view class="process-action-search">
 						<input type="text" placeholder="请输入工序名称" v-model="processActionSearch" @input="handleProcessActionSearch" />
 					</view>
@@ -9006,6 +9007,7 @@ onShow(refreshPageOnShow)
 	}
 
 	.process-action-header {
+		position: relative;
 		height: px2vw(84px);
 		display: flex;
 		align-items: center;
@@ -9018,6 +9020,26 @@ onShow(refreshPageOnShow)
 			font-size: px2vw(30px);
 			color: #fff;
 			font-weight: bold;
+		}
+
+		.process-action-source-switch {
+			position: absolute;
+			left: 50%;
+			top: 50%;
+			transform: translate(-50%, -50%);
+			display: flex;
+			align-items: center;
+			gap: px2vw(10px);
+			padding: px2vw(8px) px2vw(14px);
+			border-radius: px2vw(999px);
+			background-color: rgba(255, 255, 255, 0.18);
+			font-size: px2vw(28px);
+			color: #fff;
+
+			switch {
+				transform: scale(1.1);
+				transform-origin: right center;
+			}
 		}
 
 		.process-action-close {
@@ -9043,18 +9065,6 @@ onShow(refreshPageOnShow)
 			margin-bottom: px2vw(12px);
 			flex-shrink: 0;
 
-			.process-action-source-switch {
-				display: flex;
-				align-items: center;
-				gap: px2vw(10px);
-				font-size: px2vw(26px);
-				color: #333;
-
-				switch {
-					transform: scale(0.8);
-					transform-origin: left center;
-				}
-			}
 
 			.process-action-search {
 				flex: 1;

@@ -72,6 +72,12 @@
 						</view>
 					</picker>
 				</view>
+
+				<!-- 仅返工单据可从正常工序排产明细挑选工序名称 -->
+				<view v-if="orderData.billType === '返工排产'" class="input-group source-group" @click.stop>
+					<view class="input-label">从正常工序中挑选</view>
+					<switch :checked="useNormalProcess" color="#5884f1" @change="onUseNormalProcessChange" />
+				</view>
 				<button class="add-button" :disabled="isSubmitting" @click="addProcess">添加工序</button>
 			</view>
 		</view> 
@@ -85,6 +91,7 @@ import {
 	onPullDownRefresh
 } from '@dcloudio/uni-app'
 import { callWorkflowListAPIPaged } from '../../utils/workflow';
+import { fetchNormalProcessDetails } from '../../utils/normalProcess';
 import http from '../../utils/request.js'
 import { showToast } from '../../utils/request.js'
 import { ADD_PROCESS_URL } from '../../utils/api'
@@ -135,6 +142,12 @@ const plannedProductionDate = ref('')
 
 // 搜索输入值
 const searchValue = ref('')
+
+// 返工单据的工序来源开关：false=工序字典，true=当前产品 + 当前车间的正常工序排产明细
+const useNormalProcess = ref(false)
+// 正常工序一次全量拉取后本地搜索；记录车间避免切换后误用旧缓存
+const normalProcessCache = ref([])
+const normalProcessCacheWorkshop = ref('')
 
 // 搜索防抖定时器与请求序号（防止慢的旧响应覆盖新结果）
 let searchTimer = null
@@ -195,12 +208,18 @@ const onWorkshopChange = (e) => {
 	selectedWorkshopIndex.value = Number(e.detail.value) || 0
 	const newWorkshop = workshopOptions.value[selectedWorkshopIndex.value]
 	orderData.value.workshop = newWorkshop
-	// 切换车间后重新加载工序列表
+	// 切换车间后重新加载工序列表；正常工序必须清空旧车间缓存与选中项
 	searchValue.value = ''
+	normalProcessCache.value = []
+	normalProcessCacheWorkshop.value = ''
+	if (useNormalProcess.value) selectedProcess.value = null
 	getProcessList(1, true)
 }
 
 onPullDownRefresh(async () => {
+	// 下拉刷新时强制重拉正常工序，不使用页面内缓存
+	normalProcessCache.value = []
+	normalProcessCacheWorkshop.value = ''
 	await getProcessList(1, true)
 	uni.stopPullDownRefresh()
 })
@@ -211,12 +230,68 @@ const loadMore = () => {
 	getProcessList(currentPage.value + 1, false)
 }
 
+// 切换工序来源：清空选中与搜索条件，避免旧来源的选项被带入提交
+const onUseNormalProcessChange = (e) => {
+	useNormalProcess.value = !!e?.detail?.value
+	selectedProcess.value = null
+	searchValue.value = ''
+	normalProcessCache.value = []
+	normalProcessCacheWorkshop.value = ''
+	tableData.value = []
+	currentPage.value = 1
+	hasMore.value = true
+	getProcessList(1, true)
+}
+
+// 正常工序已全量缓存，搜索与合并工序、预派工工艺调整保持同一口径：本地按名称过滤
+const filterNormalProcessCache = () => {
+	const keyword = searchValue.value.trim()
+	const rows = keyword
+		? normalProcessCache.value.filter(item => item.processName.includes(keyword))
+		: normalProcessCache.value
+	tableData.value = rows.map(item => ({
+		rowid: item.rowid,
+		processName: item.processName
+	}))
+	currentPage.value = 1
+	hasMore.value = false
+}
+
 // 获取工序列表
 const getProcessList = async (pageNum, isRefresh = false) => {
 	// 加载更多时若已有请求在进行则跳过；刷新类请求（搜索/下拉/初始化）允许插队，过期响应通过序号丢弃
 	if (loading.value && !isRefresh) return;
 	const seq = ++requestSeq
 	loading.value = true;
+
+	if (useNormalProcess.value) {
+		try {
+			if (normalProcessCacheWorkshop.value === orderData.value.workshop) {
+				filterNormalProcessCache()
+				return
+			}
+
+			const rows = await fetchNormalProcessDetails({
+				productionCode: orderData.value.productcode,
+				workshop: orderData.value.workshop
+			})
+			if (seq !== requestSeq) return
+			normalProcessCache.value = rows
+			normalProcessCacheWorkshop.value = orderData.value.workshop
+			filterNormalProcessCache()
+		} catch (e) {
+			console.error('加载正常工序失败:', e)
+			if (seq === requestSeq) {
+				showToast(e?.message || '加载正常工序失败，请重试')
+				tableData.value = []
+				hasMore.value = false
+			}
+		} finally {
+			if (seq === requestSeq) loading.value = false
+		}
+		return
+	}
+
 	const baseFilters = [
 		{
 			controlId: '6614d7ed1f7f1264f3a332c3',
@@ -521,6 +596,25 @@ const quit = () => {
 	align-items: center;
 	gap: px2vw(8px);
 	margin-bottom: px2vw(2px);
+}
+
+.source-group {
+	justify-content: space-between;
+	/* 用浅蓝色区分“从正常工序中挑选”这一数据源切换区域 */
+	background-color: #e8eefc;
+	border: 1px solid #c9d8f8;
+	border-radius: px2vw(12px);
+	padding: px2vw(12px) px2vw(16px);
+
+	.input-label {
+		width: auto;
+		font-size: px2vw(32px);
+	}
+
+	switch {
+		transform: scale(1.15);
+		transform-origin: right center;
+	}
 }
 
 .input-label {
