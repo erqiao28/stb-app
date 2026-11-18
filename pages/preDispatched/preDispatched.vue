@@ -7,7 +7,7 @@
 				<view class="header-type-display">
 					<text class="header-type-text">{{ dispatchTypeFilter }}</text>
 					<text class="header-type-icon">▼</text>
-					<text v-if="reworkPlanCount > 0" class="header-type-badge">返工 {{ reworkPlanCountText }}</text>
+					<text v-if="dispatchTypeFilter !== '返工' && reworkPlanCount > 0" class="header-type-badge">返工 {{ reworkPlanCountText }}</text>
 				</view>
 			</picker>
 			<picker class="header-date-picker" mode="date" :value="filterDate" :end="tomorrowDate" @change="onDateChange">
