@@ -936,6 +936,13 @@ import { onShow } from '@dcloudio/uni-app'
 import { callWorkflowListAPIPaged, callWorkflowListAll } from '../../utils/workflow'
 import { buildDateEnumFilter } from '../../utils/dateFilter'
 import { fetchNormalProcessDetails } from '../../utils/normalProcess'
+import {
+	SCHEDULE_PLAN_WORKSHEET_ID,
+	SCHEDULE_PLAN_FIELD_MAP,
+	BLOCKED_REWORK_PROGRESS,
+	isReworkProgressOperable,
+	fetchAvailableReworkPlans
+} from '../../utils/reworkPlan'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import http from '../../utils/request'
@@ -1323,35 +1330,6 @@ const PROCESS_DETAIL_FIELD_MAP = {
 	// 排产编号：用于反查排产计划 rowid（使用正常工序接口需要 billRowid）
 	scheduleCode: '69cb73ee3b5e707f84de06f6',
 }
-
-// 排产计划表：使用正常工序接口的 billRowid 即该表记录 rowid
-const SCHEDULE_PLAN_WORKSHEET_ID = 'paichanjihua'
-const SCHEDULE_PLAN_FIELD_MAP = {
-	workshop: '67de26c9c5377d50a523c735',
-	scheduleType: '694a3954687045435008a7c3',
-	scheduleCode: '69cb5ea03b5e707f84ddefa0',
-	productionCode: '698438933b5e707f84cf51fd',
-	orderCode: '655e1cbbbd2094b316347f92',
-	productName: '6937d255ff2b019b3cb34be3',
-	// 返工数量：排产计划生产数量
-	productionCount: '67de8eb5c5377d50a523ef9b',
-	// 排产计划上的问题描述；工序明细上的 6aaf... 是由该字段带出的他表字段
-	problemDescription: '694ba108dc025d98887fd782',
-	// 是否合并：0=未合并，1=已合并
-	reworkMergeFlag: '69ccaf64665ab27f39105bed',
-	scheduleStatus: '655b875ffc44a9469a3aa225',
-	deliveryType: '69db0017665ab27f3913c455',
-	// 添加产品口径中的基础限制字段（filterType 8）
-	addProductScope: '66974cda2503723eec1af600',
-	// 工序排产明细关联字段：与未完成数量分支共同还原添加产品可用口径
-	processDetail: '688c366082289045da815f97',
-	// 返工进度：正常模式提醒、返工按钮与合并工序均需排除“已完成/不可返工”
-	reworkProgress: '69ccb3e7665ab27f39105da2'
-}
-
-// 返工进度禁用状态：接口过滤与前端按钮显隐必须保持同一口径
-const BLOCKED_REWORK_PROGRESS = ['已完成', '不可返工']
-const isReworkProgressOperable = (progress) => !BLOCKED_REWORK_PROGRESS.includes(String(progress || '').trim())
 
 const EMPLOYEE_WORKSHEET_ID = 'yggs'
 const EMPLOYEE_FIELD_MAP = {
@@ -2223,7 +2201,7 @@ const fetchProductionPlanRows = async (filters, options = {}) => {
 	const rows = []
 	for (let pageNum = 1; pageNum <= MAX_PAGES; pageNum++) {
 		const queryParams = {
-			worksheetId: 'paichanjihua',
+			worksheetId: SCHEDULE_PLAN_WORKSHEET_ID,
 			filters,
 			pageSize,
 			pageNum
@@ -2240,128 +2218,20 @@ const fetchProductionPlanRows = async (filters, options = {}) => {
 	return rows
 }
 
-const formatReworkMergeFlag = (v) => {
-	if (v === 0 || v === '0') return '否'
-	if (v === 1 || v === '1') return '是'
-	return formatFieldValue(v) || '-'
-}
-
-const mapNormalReworkPlanRows = (rows = []) => {
-	const planMap = {}
-	rows.forEach((item) => {
-		const productionCode = formatFieldValue(item[SCHEDULE_PLAN_FIELD_MAP.productionCode])
-		const reworkProgress = formatFieldValue(item[SCHEDULE_PLAN_FIELD_MAP.reworkProgress])
-		if (!item.rowid || !productionCode || !isReworkProgressOperable(reworkProgress)) return
-		if (!Array.isArray(planMap[productionCode])) planMap[productionCode] = []
-		planMap[productionCode].push({
-			rowid: item.rowid,
-			scheduleCode: formatFieldValue(item[SCHEDULE_PLAN_FIELD_MAP.scheduleCode]) || '',
-			orderCode: formatFieldValue(item[SCHEDULE_PLAN_FIELD_MAP.orderCode]) || '-',
-			productName: formatFieldValue(item[SCHEDULE_PLAN_FIELD_MAP.productName]) || '-',
-			productionCode,
-			reworkQty: formatFieldValue(item[SCHEDULE_PLAN_FIELD_MAP.productionCount]) || '0',
-			problemDescription: formatFieldValue(item[SCHEDULE_PLAN_FIELD_MAP.problemDescription]) || '-',
-			reworkProgress: reworkProgress || '-',
-			reworkMergeFlag: formatReworkMergeFlag(item[SCHEDULE_PLAN_FIELD_MAP.reworkMergeFlag])
-		})
-	})
-	return planMap
-}
-
 /**
- * 正常模式返工提醒缓存。
- * 查询键为“生产编号 + 车间 + 返工排产”；可用口径与添加产品一致：
- * 已排产/部分排产、准时交货，以及“未完成工序数量>0 或 工序明细为空”。
+ * 正常模式返工提醒缓存：共享工具保证与正式派工页快捷入口完全同口径。
  */
 const loadNormalReworkPlanMap = async (productionCodes = []) => {
 	if (dispatchTypeFilter.value !== '正常') {
 		normalReworkPlanMap.value = {}
 		return normalReworkPlanMap.value
 	}
-	const codes = [...new Set((productionCodes || []).map(code => String(code || '').trim()).filter(Boolean))]
-	if (codes.length === 0 || !loginWorkshop.value) {
-		normalReworkPlanMap.value = {}
-		return normalReworkPlanMap.value
-	}
-
-	const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
-	const baseFilters = [
-		{
-			controlId: SCHEDULE_PLAN_FIELD_MAP.workshop,
-			dataType: 30,
-			spliceType: 1,
-			filterType: 2,
-			values: [loginWorkshop.value]
-		},
-		{
-			controlId: SCHEDULE_PLAN_FIELD_MAP.scheduleType,
-			dataType: 30,
-			spliceType: 1,
-			filterType: 2,
-			values: ['返工排产']
-		},
-		{
-			controlId: SCHEDULE_PLAN_FIELD_MAP.productionCode,
-			dataType: 30,
-			spliceType: 1,
-			filterType: 2,
-			values: codes
-		},
-		{
-			controlId: SCHEDULE_PLAN_FIELD_MAP.scheduleStatus,
-			dataType: 30,
-			spliceType: 1,
-			filterType: 2,
-			values: ['已排产', '部分排产']
-		},
-		{
-			controlId: SCHEDULE_PLAN_FIELD_MAP.deliveryType,
-			dataType: 30,
-			spliceType: 1,
-			filterType: 6,
-			values: ['准时交货']
-		},
-		{
-			controlId: SCHEDULE_PLAN_FIELD_MAP.addProductScope,
-			dataType: 30,
-			spliceType: 1,
-			filterType: 8
-		},
-		{
-			controlId: SCHEDULE_PLAN_FIELD_MAP.reworkProgress,
-			dataType: 30,
-			spliceType: 1,
-			filterType: 6,
-			values: BLOCKED_REWORK_PROGRESS
-		}
-	]
-	const fetchReworkRows = (extraFilter) => fetchProductionPlanRows(baseFilters.concat(extraFilter), {
-		skipProductionType: true
-	})
 
 	try {
-		const [rowsWithQty, rowsWithEmptyDetail] = await Promise.all([
-			fetchReworkRows({
-				controlId: FIELD_INCOMPLETE_PROCESS_QTY,
-				dataType: 30,
-				spliceType: 1,
-				filterType: 13,
-				minValue: '0',
-				values: []
-			}),
-			fetchReworkRows({
-				controlId: SCHEDULE_PLAN_FIELD_MAP.processDetail,
-				dataType: 30,
-				spliceType: 1,
-				filterType: 7,
-				values: []
-			})
-		])
-		const rowMap = new Map()
-		rowsWithQty.concat(rowsWithEmptyDetail).forEach(row => {
-			if (row?.rowid) rowMap.set(row.rowid, row)
+		normalReworkPlanMap.value = await fetchAvailableReworkPlans({
+			productionCodes,
+			workshop: loginWorkshop.value
 		})
-		normalReworkPlanMap.value = mapNormalReworkPlanRows([...rowMap.values()])
 	} catch (e) {
 		console.error('加载正常产品返工提醒失败:', e)
 		normalReworkPlanMap.value = {}
@@ -2381,9 +2251,9 @@ const loadAddProductList = async () => {
 	try {
 		uni.showLoading({ title: '加载中...' })
 		// 未完成工序数量：他表字段，由「工序排产明细」汇总而来
-		const FIELD_INCOMPLETE_PROCESS_QTY = '69a8e4563b5e707f84d33c0c'
+		const FIELD_INCOMPLETE_PROCESS_QTY = SCHEDULE_PLAN_FIELD_MAP.incompleteProcessQty
 		// 工序排产明细：关联字段
-		const FIELD_PROCESS_DETAIL = '688c366082289045da815f97'
+		const FIELD_PROCESS_DETAIL = SCHEDULE_PLAN_FIELD_MAP.processDetail
 		// 两支分支共用的基础筛选
 		const baseFilters = [
 			{
