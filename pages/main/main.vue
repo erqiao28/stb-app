@@ -227,21 +227,22 @@ const goPreDispatched = () => {
 
 				.rework-count-badge {
 					position: absolute;
-					top: px2vw(-16px);
-					right: px2vw(-12px);
-					min-width: px2vw(40px);
-					height: px2vw(40px);
-					padding: 0 px2vw(10px);
-					border: px2vw(4px) solid #fff;
+					top: px2vw(-14px);
+					right: px2vw(-14px);
+					min-width: px2vw(48px);
+					height: px2vw(48px);
+					padding: 0 px2vw(8px);
+					border: px2vw(3px) solid #fff;
 					border-radius: px2vw(24px);
 					background-color: #f56c6c;
 					color: #fff;
 					font-size: px2vw(22px);
 					font-weight: bold;
+					line-height: 1;
 					display: flex;
 					align-items: center;
 					justify-content: center;
-					box-sizing: content-box;
+					box-sizing: border-box;
 				}
 			}
 
