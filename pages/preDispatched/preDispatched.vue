@@ -7,7 +7,7 @@
 				<view class="header-type-display">
 					<text class="header-type-text">{{ dispatchTypeFilter }}</text>
 					<text class="header-type-icon">▼</text>
-					<text v-if="dispatchTypeFilter !== '返工' && reworkPlanCount > 0" class="header-type-badge">返工 {{ reworkPlanCountText }}</text>
+					<text v-if="reworkPlanCount > 0" class="header-type-badge">{{ reworkPlanCountText }}</text>
 				</view>
 			</picker>
 			<picker class="header-date-picker" mode="date" :value="filterDate" :end="tomorrowDate" @change="onDateChange">
@@ -5938,6 +5938,7 @@ onShow(refreshPageOnShow)
 			flex-shrink: 0;
 
 			.header-type-display {
+				position: relative;
 				display: flex;
 				align-items: center;
 				gap: px2vw(8px);
@@ -5947,15 +5948,18 @@ onShow(refreshPageOnShow)
 				border-radius: px2vw(8px);
 
 				.header-type-badge {
-					min-width: px2vw(52px);
-					height: px2vw(32px);
-					padding: 0 px2vw(10px);
-					border-radius: px2vw(16px);
+					position: absolute;
+					top: px2vw(-8px);
+					right: px2vw(-8px);
+					min-width: px2vw(36px);
+					height: px2vw(36px);
+					padding: 0 px2vw(8px);
+					border-radius: px2vw(18px);
 					background-color: #f56c6c;
 					color: #fff;
 					font-size: px2vw(20px);
 					font-weight: bold;
-					line-height: px2vw(32px);
+					line-height: 1;
 					display: flex;
 					align-items: center;
 					justify-content: center;
