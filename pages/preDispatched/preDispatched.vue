@@ -5938,23 +5938,21 @@ onShow(refreshPageOnShow)
 			flex-shrink: 0;
 
 			.header-type-display {
-				position: relative;
 				display: flex;
 				align-items: center;
 				gap: px2vw(8px);
-				padding: px2vw(8px) px2vw(16px);
+				min-width: px2vw(160px);
+				box-sizing: border-box;
+				padding: px2vw(8px) px2vw(20px);
 				background-color: rgba(255, 255, 255, 0.2);
 				border: 1px solid rgba(255, 255, 255, 0.3);
 				border-radius: px2vw(8px);
 
 				.header-type-badge {
-					position: absolute;
-					top: px2vw(-8px);
-					right: px2vw(-8px);
 					min-width: px2vw(36px);
-					height: px2vw(36px);
+					height: px2vw(32px);
 					padding: 0 px2vw(8px);
-					border-radius: px2vw(18px);
+					border-radius: px2vw(16px);
 					background-color: #f56c6c;
 					color: #fff;
 					font-size: px2vw(20px);
