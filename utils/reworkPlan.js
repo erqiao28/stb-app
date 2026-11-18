@@ -121,15 +121,15 @@ const fetchReworkPlanRows = async (filters) => {
  * 可用口径与预派工“添加产品”一致：已排产/部分排产、准时交货、允许添加范围，
  * 且“未完成工序数量 > 0”或“工序排产明细为空”二者满足其一。
  */
-export const fetchAvailableReworkPlans = async ({ productionCodes = [], workshop = '' }) => {
+export const buildAvailableReworkPlanFilterGroups = ({ productionCodes = [], workshop = '' }) => {
+  const room = String(workshop || '').trim()
+  if (!room) return []
+
   const codes = [...new Set(
     (productionCodes || [])
       .map(code => String(code || '').trim())
       .filter(Boolean)
   )]
-  const room = String(workshop || '').trim()
-  if (codes.length === 0 || !room) return {}
-
   const baseFilters = [
     {
       controlId: SCHEDULE_PLAN_FIELD_MAP.workshop,
@@ -144,14 +144,18 @@ export const fetchAvailableReworkPlans = async ({ productionCodes = [], workshop
       spliceType: 1,
       filterType: 2,
       values: ['返工排产']
-    },
-    {
+    }
+  ]
+  if (codes.length > 0) {
+    baseFilters.push({
       controlId: SCHEDULE_PLAN_FIELD_MAP.productionCode,
       dataType: 30,
       spliceType: 1,
       filterType: 2,
       values: codes
-    },
+    })
+  }
+  baseFilters.push(
     {
       controlId: SCHEDULE_PLAN_FIELD_MAP.scheduleStatus,
       dataType: 30,
@@ -179,28 +183,40 @@ export const fetchAvailableReworkPlans = async ({ productionCodes = [], workshop
       filterType: 6,
       values: BLOCKED_REWORK_PROGRESS
     }
-  ]
+  )
 
-  const [rowsWithQty, rowsWithEmptyDetail] = await Promise.all([
-    fetchReworkPlanRows(baseFilters.concat({
+  return [
+    baseFilters.concat({
       controlId: SCHEDULE_PLAN_FIELD_MAP.incompleteProcessQty,
       dataType: 30,
       spliceType: 1,
       filterType: 13,
       minValue: '0',
       values: []
-    })),
-    fetchReworkPlanRows(baseFilters.concat({
+    }),
+    baseFilters.concat({
       controlId: SCHEDULE_PLAN_FIELD_MAP.processDetail,
       dataType: 30,
       spliceType: 1,
       filterType: 7,
       values: []
-    }))
-  ])
+    })
+  ]
+}
 
+/**
+ * 查询当前车间下可进入返工派工的排产计划。
+ *
+ * productionCodes 为空时查询当前车间全部计划，供主页面数量角标使用；
+ * 传入生产编号时保持派工页/预派工页的原有精确范围。
+ */
+export const fetchAvailableReworkPlans = async ({ productionCodes = [], workshop = '' }) => {
+  const filterGroups = buildAvailableReworkPlanFilterGroups({ productionCodes, workshop })
+  if (filterGroups.length === 0) return {}
+
+  const rowGroups = await Promise.all(filterGroups.map(filters => fetchReworkPlanRows(filters)))
   const rowMap = new Map()
-  rowsWithQty.concat(rowsWithEmptyDetail).forEach(row => {
+  rowGroups.flat().forEach(row => {
     if (row?.rowid) rowMap.set(row.rowid, row)
   })
   return mapAvailableReworkPlans([...rowMap.values()])

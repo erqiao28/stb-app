@@ -8,7 +8,10 @@
 		<view class="btn-box">
 			<button v-if="showDispatchEntryButtons" class="btn-order" @click="goSelectBills">订单派工</button>
 			<button v-if="showDispatchEntryButtons" class="btn-product" @click="goSelectProductDispatch">产品派工</button>
-			<button v-if="showDispatchEntryButtons" class="btn-rework" @click="goReworkDispatch">返工派工</button>
+			<button v-if="showDispatchEntryButtons" class="btn-rework" @click="goReworkDispatch">
+				返工派工
+				<text v-if="reworkPlanCount > 0" class="rework-count-badge">{{ reworkPlanCountText }}</text>
+			</button>
 			<button class="btn-time" @click="goTimeWork">记时派工</button>
 			<button class="btn-query" @click="goDispatchInquiry">派工查询</button>
 			<button
@@ -24,10 +27,12 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import { computed, ref } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import { defaultWorkshopFromLoginLimits } from '../../utils/workshop'
+import { fetchAvailableReworkPlans } from '../../utils/reworkPlan'
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
 
@@ -40,6 +45,41 @@ const showDispatchEntryButtons = computed(() => !isGongyiLimits.value)
 
 /** 全账号显示「多对多派工查询」（已放开车间限制） */
 const showDispatchInquiryMore = computed(() => true)
+
+/** 当前登录权限对应车间；非车间权限由入口显隐逻辑阻止统计 */
+const currentWorkshop = computed(() => defaultWorkshopFromLoginLimits(loginLimitsTrim.value))
+
+// 返工派工按钮角标：当前车间仍可进入返工派工的计划数量
+const reworkPlanCount = ref(0)
+const reworkPlanCountText = computed(() => (
+  reworkPlanCount.value >= 100 ? '99+' : String(reworkPlanCount.value)
+))
+let reworkPlanCountQuerySequence = 0
+
+/**
+ * 每次主页面可见时刷新返工数量。
+ * 角标是附加提醒，查询失败不打断首页，只清空数量并保留原入口可用。
+ */
+const loadReworkPlanCount = async () => {
+  const sequence = ++reworkPlanCountQuerySequence
+  reworkPlanCount.value = 0
+  const workshop = currentWorkshop.value
+  if (!showDispatchEntryButtons.value || !workshop) return
+
+  try {
+    const planMap = await fetchAvailableReworkPlans({ workshop })
+    if (sequence !== reworkPlanCountQuerySequence || !showDispatchEntryButtons.value || currentWorkshop.value !== workshop) return
+    reworkPlanCount.value = Object.values(planMap).reduce(
+      (total, plans) => total + (Array.isArray(plans) ? plans.length : 0),
+      0
+    )
+  } catch (error) {
+    console.error('加载返工派工数量失败:', error)
+    if (sequence === reworkPlanCountQuerySequence) reworkPlanCount.value = 0
+  }
+}
+
+onShow(loadReworkPlanCount)
 
 /** 车间权限显示「预派工」（工艺等非车间账号隐藏） */
 const showPreDispatched = computed(() => {
@@ -182,7 +222,27 @@ const goPreDispatched = () => {
 			}
 
 			&.btn-rework {
+				position: relative;
 				background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+
+				.rework-count-badge {
+					position: absolute;
+					top: px2vw(-16px);
+					right: px2vw(-12px);
+					min-width: px2vw(40px);
+					height: px2vw(40px);
+					padding: 0 px2vw(10px);
+					border: px2vw(4px) solid #fff;
+					border-radius: px2vw(24px);
+					background-color: #f56c6c;
+					color: #fff;
+					font-size: px2vw(22px);
+					font-weight: bold;
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					box-sizing: content-box;
+				}
 			}
 
 			&.btn-time {
