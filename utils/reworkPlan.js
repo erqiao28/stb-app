@@ -93,6 +93,22 @@ export const mapAvailableReworkPlans = (rows = []) => {
   return planMap
 }
 
+/**
+ * 汇总各生产编号下的可用返工计划总数，供首页/预派工页数量角标使用。
+ */
+export const countAvailableReworkPlans = (planMap = {}) => Object.values(planMap).reduce(
+  (total, plans) => total + (Array.isArray(plans) ? plans.length : 0),
+  0
+)
+
+/**
+ * 数量角标展示规则：0 不展示，超过两位数用 99+ 收敛宽度。
+ */
+export const formatReworkPlanCountText = (count) => {
+  const value = Number(count) || 0
+  if (value <= 0) return ''
+  return value >= 100 ? '99+' : String(value)
+}
 /** 按筛选条件分页拉取排产计划，最多 500 页防止接口异常导致死循环 */
 const fetchReworkPlanRows = async (filters) => {
   const pageSize = 100

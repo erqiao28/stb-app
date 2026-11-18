@@ -32,7 +32,11 @@ import { computed, ref } from 'vue'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
 import { defaultWorkshopFromLoginLimits } from '../../utils/workshop'
-import { fetchAvailableReworkPlans } from '../../utils/reworkPlan'
+import {
+	countAvailableReworkPlans,
+	fetchAvailableReworkPlans,
+	formatReworkPlanCountText
+} from '../../utils/reworkPlan'
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
 
@@ -51,9 +55,7 @@ const currentWorkshop = computed(() => defaultWorkshopFromLoginLimits(loginLimit
 
 // 返工派工按钮角标：当前车间仍可进入返工派工的计划数量
 const reworkPlanCount = ref(0)
-const reworkPlanCountText = computed(() => (
-  reworkPlanCount.value >= 100 ? '99+' : String(reworkPlanCount.value)
-))
+const reworkPlanCountText = computed(() => formatReworkPlanCountText(reworkPlanCount.value))
 let reworkPlanCountQuerySequence = 0
 
 /**
@@ -69,10 +71,7 @@ const loadReworkPlanCount = async () => {
   try {
     const planMap = await fetchAvailableReworkPlans({ workshop })
     if (sequence !== reworkPlanCountQuerySequence || !showDispatchEntryButtons.value || currentWorkshop.value !== workshop) return
-    reworkPlanCount.value = Object.values(planMap).reduce(
-      (total, plans) => total + (Array.isArray(plans) ? plans.length : 0),
-      0
-    )
+    reworkPlanCount.value = countAvailableReworkPlans(planMap)
   } catch (error) {
     console.error('加载返工派工数量失败:', error)
     if (sequence === reworkPlanCountQuerySequence) reworkPlanCount.value = 0

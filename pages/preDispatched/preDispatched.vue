@@ -7,6 +7,7 @@
 				<view class="header-type-display">
 					<text class="header-type-text">{{ dispatchTypeFilter }}</text>
 					<text class="header-type-icon">▼</text>
+					<text v-if="reworkPlanCount > 0" class="header-type-badge">返工 {{ reworkPlanCountText }}</text>
 				</view>
 			</picker>
 			<picker class="header-date-picker" mode="date" :value="filterDate" :end="tomorrowDate" @change="onDateChange">
@@ -941,7 +942,9 @@ import {
 	SCHEDULE_PLAN_FIELD_MAP,
 	BLOCKED_REWORK_PROGRESS,
 	isReworkProgressOperable,
-	fetchAvailableReworkPlans
+	countAvailableReworkPlans,
+	fetchAvailableReworkPlans,
+	formatReworkPlanCountText
 } from '../../utils/reworkPlan'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useUserStore } from '../../store/user.store'
@@ -1401,6 +1404,40 @@ const showReworkPlanSelector = ref(false)
 const reworkPlanSelectorList = ref([])
 const reworkShortcutLoading = ref(false)
 const reworkShortcutLoadingCode = ref('')
+// 顶部模式切换旁的可用返工数量：与首页/派工页查询口径保持一致
+const reworkPlanCount = ref(0)
+const reworkPlanCountText = computed(() => formatReworkPlanCountText(reworkPlanCount.value))
+let reworkPlanCountQuerySequence = 0
+let reworkPlanCountRefreshTimer = null
+
+const loadReworkPlanCount = async () => {
+	const sequence = ++reworkPlanCountQuerySequence
+	reworkPlanCount.value = 0
+	const workshop = loginWorkshop.value
+	if (!workshop) return
+
+	try {
+		const planMap = await fetchAvailableReworkPlans({ workshop })
+		if (sequence === reworkPlanCountQuerySequence && loginWorkshop.value === workshop) {
+			reworkPlanCount.value = countAvailableReworkPlans(planMap)
+		}
+	} catch (e) {
+		console.error('加载预派工返工数量失败:', e)
+		if (sequence === reworkPlanCountQuerySequence) reworkPlanCount.value = 0
+	}
+}
+
+/**
+ * 产品列表轮询会高频触发刷新；延迟合并后只查最后一次，
+ * 保证操作完成、数量及时更新，同时不放大接口请求量。
+ */
+const scheduleReworkPlanCountRefresh = () => {
+	if (reworkPlanCountRefreshTimer) clearTimeout(reworkPlanCountRefreshTimer)
+	reworkPlanCountRefreshTimer = setTimeout(() => {
+		reworkPlanCountRefreshTimer = null
+		loadReworkPlanCount()
+	}, 800)
+}
 // 一键进入后仅聚焦选中的返工排产编号，避免同生产编号多条计划混入同一工序列表
 const focusedReworkProductKey = ref('')
 const focusedReworkScheduleCode = ref('')
@@ -3579,8 +3616,11 @@ const loadProducts = async (reset = true, forceSilent = false) => {
 	} finally {
 		// 只有最新一次加载才负责复位 loading，避免旧请求晚返回提前关掉新请求的 loading。
 		// 静默刷新不接管 loading 状态，防止轮询期间外层 loading 被人为关掉。
-		if (seq === loadProductsSeq && !forceSilent) {
-			loadingProducts.value = false
+		if (seq === loadProductsSeq) {
+			scheduleReworkPlanCountRefresh()
+			if (!forceSilent) {
+				loadingProducts.value = false
+			}
 		}
 	}
 }
@@ -5905,6 +5945,23 @@ onShow(refreshPageOnShow)
 				background-color: rgba(255, 255, 255, 0.2);
 				border: 1px solid rgba(255, 255, 255, 0.3);
 				border-radius: px2vw(8px);
+
+				.header-type-badge {
+					min-width: px2vw(52px);
+					height: px2vw(32px);
+					padding: 0 px2vw(10px);
+					border-radius: px2vw(16px);
+					background-color: #f56c6c;
+					color: #fff;
+					font-size: px2vw(20px);
+					font-weight: bold;
+					line-height: px2vw(32px);
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					box-sizing: border-box;
+					white-space: nowrap;
+				}
 			}
 
 			.header-type-text {
